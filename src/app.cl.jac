@@ -38,6 +38,7 @@ def MainApp() -> any {
     [isPTTActive, setIsPTTActive] = useState(False);
     [isPTTUserSpeaking, setIsPTTUserSpeaking] = useState(False);
     [isAudioPlaybackEnabled, setIsAudioPlaybackEnabled] = useState(True);
+    [isMicMuted, setIsMicMuted] = useState(False);
     
     # Message state
     [userText, setUserText] = useState("");
@@ -423,7 +424,27 @@ def MainApp() -> any {
             connectToRealtime();
         }
     }
-    
+
+    # Toggle mic mute
+    def toggleMicMute() -> None {
+        setIsMicMuted(lambda prev: bool -> bool { return not prev; });
+    }
+
+    # Effect to handle mic mute/unmute
+    useEffect(
+        lambda -> None {
+            if sessionRef.current {
+                try {
+                    console.log("Setting mic mute state to:", isMicMuted);
+                    sessionRef.current.mute(isMicMuted);
+                } except Exception as e {
+                    console.error("Error toggling mic:", e);
+                }
+            }
+        },
+        [isMicMuted, sessionStatus]
+    );
+
     # Send text message (text-only chat, no voice)
     async def handleSendTextMessage() -> None {
         message = userText.trim();
@@ -652,6 +673,8 @@ def MainApp() -> any {
             onTalkUp={handleTalkButtonUp}
             isAudioPlaybackEnabled={isAudioPlaybackEnabled}
             setIsAudioPlaybackEnabled={setIsAudioPlaybackEnabled}
+            isMicMuted={isMicMuted}
+            onToggleMicMute={toggleMicMute}
             onSaveAndRestart={handleSaveAndRestart}
         />
     </div>;
