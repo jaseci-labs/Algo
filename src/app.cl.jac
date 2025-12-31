@@ -1,5 +1,14 @@
 import from react { useState, useEffect, useRef }
 import from "@openai/agents/realtime" { RealtimeAgent, RealtimeSession, tool }
+import from "@jac-client/utils" {
+    Router,
+    Routes,
+    Route,
+    Navigate,
+    jacIsLoggedIn,
+    jacLogout,
+    useNavigate
+}
 
 # Import components
 import from .components.TranscriptItem { TranscriptItem }
@@ -8,11 +17,17 @@ import from .components.MessageInput { MessageInput }
 import from .components.ControlBar { ControlBar }
 import from .components.GraphViewer { GraphViewer }
 
+# Import pages
+import from .pages.LoginPage { LoginPage }
+import from .pages.RegisterPage { RegisterPage }
+
 # Import constants
 import from .constants { CHAT_AGENT_INSTRUCTIONS }
     
-# Main App Component
-def app() -> any {
+# Main Application Component (Voice Agent Interface)
+def MainApp() -> any {
+    navigate = useNavigate();
+    
     # Connection state
     [sessionStatus, setSessionStatus] = useState("DISCONNECTED");
     sessionRef = useRef(None);
@@ -640,4 +655,39 @@ def app() -> any {
             onSaveAndRestart={handleSaveAndRestart}
         />
     </div>;
+}
+
+# Protected Route Component
+def ProtectedRoute(props: any) -> any {
+    if not jacIsLoggedIn() {
+        return <Navigate to="/login" />;
+    }
+    return props.children;
+}
+
+# Home Route - Redirect based on auth status
+def HomePage() -> any {
+    if jacIsLoggedIn() {
+        return <Navigate to="/app" />;
+    }
+    return <Navigate to="/login" />;
+}
+
+# Main App with Router
+def app() -> any {
+    return <Router>
+        <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route
+                path="/app"
+                element={
+                    <ProtectedRoute>
+                        <MainApp />
+                    </ProtectedRoute>
+                }
+            />
+        </Routes>
+    </Router>;
 }

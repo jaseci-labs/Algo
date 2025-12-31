@@ -235,7 +235,7 @@ glob SUPERVISOR_TOOLS = [
     {
         "type": "function",
         "name": "getGitHubIssues",
-        "description": "Look up GitHub issues, pull requests, or repository activity.",
+        "description": "Look up GitHub issues, pull requests, or repository activity.", 
         "parameters": {
             "type": "object",
             "properties": {
