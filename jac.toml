@@ -1,0 +1,13 @@
+[project]
+name = "voice-rag-jac"
+version = "1.0.0"
+description = "Voice RAG Application built with Jac and OpenAI Realtime API"
+entry-point = "src/app.jac"
+author = "Jaseci Team"
+
+[plugins.client]
+
+[dependencies.npm]
+"@openai/agents" = "latest"
+zod = "3"
+"@hpcc-js/wasm" = "latest"
