@@ -5,7 +5,7 @@
 1. **Clone the repository**
    ```bash
    git clone https://github.com/jaseci-labs/Agentic-AI.git
-   cd Agentic-AI/smart-learning-companion
+   cd Algo
    ```
 
 2. **Set up your API key**
