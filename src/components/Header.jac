@@ -1,10 +1,33 @@
 # Header Component
-# Application header with title and architecture info
+# Application header with title and username display
 
+cl import from react { useState, useEffect }
 cl import from "@jac-client/utils" { jacLogout, useNavigate }
 
 cl def:pub Header() -> any {
     navigate = useNavigate();
+    [username, setUsername] = useState("User");
+    
+    # Extract username from JWT token on mount
+    useEffect(
+        lambda -> None {
+            token = localStorage.getItem("jac_token");
+            if token {
+                try {
+                    parts = token.split(".");
+                    if parts.length > 1 {
+                        payload = JSON.parse(atob(parts[1]));
+                        if payload.username {
+                            setUsername(payload.username);
+                        }
+                    }
+                } except Exception as decode_error {
+                    console.error("Failed to decode token:", decode_error);
+                }
+            }
+        },
+        []
+    );
     
     def handleLogout(e: any) -> None {
         e.preventDefault();
@@ -25,8 +48,8 @@ cl def:pub Header() -> any {
             <span>{"🎙️ Algo - Your Personal AI Assistant"}</span>
         </div>
         <div style={{"display": "flex", "alignItems": "center", "gap": "1.5rem"}}>
-            <span style={{"fontSize": "0.875rem", "color": "#6b7280"}}>
-                {"Voice Agent → Backend Intelligence → Tools"}
+            <span style={{"fontSize": "0.875rem", "color": "#6b7280", "fontWeight": "500"}}>
+                {f"👤 {username}"}
             </span>
             <button
                 onClick={handleLogout}
