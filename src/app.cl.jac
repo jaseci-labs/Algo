@@ -181,44 +181,84 @@ def:pub MainApp() -> any {
     async def executeSupervisorTool(input: any, details: any) -> any {
         context = input.relevantContextFromLastUserMessage or "";
         history = details.context.history or [];
-        
+
         # Filter to just messages
         filteredHistory = history.filter(lambda  log: any  -> bool{ return log.type == "message"; });
-        
+
         console.log("Calling supervisor with context:", context);
         
-        # Call backend walker
+        # Get username from localStorage
+        token = localStorage.getItem("jac_token");
+        username = "anonymous";
+        if token {
+            # Try to decode JWT to get username (simple parse, not cryptographic verification)
+            try {
+                parts = token.split(".");
+                if parts.length > 1 {
+                    payload = JSON.parse(atob(parts[1]));
+                    username = payload.username or "anonymous";
+                }
+            } except Exception as decode_error {
+                console.error("Failed to decode token:", decode_error);
+            }
+        }
+        console.log("Using username:", username);
+
+        # Call backend walker with username
         result = root spawn call_supervisor(
             conversation_history=filteredHistory,
-            context_from_user=context
+            context_from_user=context,
+            username=username
         );
-        
-        response_data = result.reports[0] if result.reports else {};
-        
+
+        # Get the LAST report (call_supervisor's report) not the first (spawned walker's report)
+        response_data = result.reports[result.reports.length - 1] if result.reports && result.reports.length > 0 else {};
+        console.log("Supervisor response_data:", response_data);
+        console.log("All reports:", result.reports);
+
         if response_data && "error" in response_data {
             console.error("Supervisor error:", response_data);
             return {"error": "Something went wrong."};
         }
-        
-        # Update graph if we got new DOT code
-        dotCodeValue = response_data["dotCode"] if response_data else "";
-        if dotCodeValue {
-            console.log("Updating graph with DOT code:", dotCodeValue);
-            setGraphDotCode(dotCodeValue);
+
+        # Fetch updated graph state after supervisor completes
+        try {
+            graph_response = root spawn get_task_graph(username=username);
+            console.log("Fetched updated graph:", graph_response);
+
+            if graph_response && graph_response.reports && graph_response.reports.length > 0 {
+                graph_data = graph_response.reports[0];
+
+                # Update graph visualization
+                if graph_data.dotCode {
+                    console.log("Updating graph with DOT code");
+                    setGraphDotCode(graph_data.dotCode);
+                }
+                if graph_data.edges && graph_data.edges.length > 0 {
+                    console.log("Updating graph edges:", graph_data.edges);
+                    setGraphEdges(graph_data.edges);
+                }
+                if graph_data.lastTask {
+                    setLastTask(graph_data.lastTask);
+                }
+            }
+        } except Exception as graph_error {
+            console.error("Failed to fetch updated graph:", graph_error);
+            # Don't fail the whole response if graph fetch fails
         }
-        
-        # Update graph edges directly - no parsing needed!
-        edgesData = response_data["graphEdges"] if response_data else [];
-        if edgesData and edgesData.length > 0 {
-            console.log("Updating graph edges:", edgesData);
-            setGraphEdges(edgesData);
+
+        # Extract response - check both ways to access the property
+        next_resp = "";
+        if "response" in response_data {
+            next_resp = response_data["response"];
+            console.log("Got response via bracket notation:", next_resp);
+        } else {
+            console.log("No 'response' key found in response_data!");
+            next_resp = "I apologize, I couldn't get a response.";
         }
-        
-        # Track the last task for chaining
-        graphNodes = response_data["graphNodes"] if response_data else [];
-        # Do not force setLastTask here; let LLM/tool decide correct parent for branching.
-        
-        return {"nextResponse": response_data.response or "I apologize, I couldn't get a response."};
+
+        console.log("Returning nextResponse:", next_resp);
+        return {"nextResponse": next_resp};
     }
     
     # Create the getNextResponseFromSupervisor tool
@@ -429,7 +469,49 @@ def:pub MainApp() -> any {
             console.log("Successfully connected to OpenAI Realtime API with multi-agent setup!");
             sessionRef.current = session;
             setSessionStatus("CONNECTED");
-            
+
+            # Load user's existing graph when they connect
+            try {
+                # Get username from localStorage
+                token = localStorage.getItem("jac_token");
+                username = "anonymous";
+                if token {
+                    try {
+                        parts = token.split(".");
+                        if parts.length > 1 {
+                            payload = JSON.parse(atob(parts[1]));
+                            username = payload.username or "anonymous";
+                        }
+                    } except Exception as decode_error {
+                        console.error("Failed to decode token:", decode_error);
+                    }
+                }
+                console.log("Loading graph for username:", username);
+                
+                graph_response = root spawn get_task_graph(username=username);
+                console.log("Loaded user's graph:", graph_response);
+
+                if graph_response && graph_response.reports && graph_response.reports.length > 0 {
+                    graph_data = graph_response.reports[0];
+
+                    # Update graph visualization if user has existing data
+                    if graph_data.dotCode {
+                        console.log("Setting initial DOT code:", graph_data.dotCode);
+                        setGraphDotCode(graph_data.dotCode);
+                    }
+                    if graph_data.edges && graph_data.edges.length > 0 {
+                        console.log("Setting initial edges:", graph_data.edges);
+                        setGraphEdges(graph_data.edges);
+                    }
+                    if graph_data.lastTask {
+                        setLastTask(graph_data.lastTask);
+                    }
+                }
+            } except Exception as graph_load_error {
+                console.error("Failed to load user's graph:", graph_load_error);
+                # Don't fail connection if graph loading fails
+            }
+
             addMessage("system", "Connected! Algo is ready. Say 'hi' to start!");
             
         } except Exception as e {

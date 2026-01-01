@@ -8,131 +8,29 @@ import from urllib.error { URLError, HTTPError }
 import from json { loads, dumps }
 import from dotenv { load_dotenv }
 
+# Import data models - define nodes directly in this file for now
+# import from .models { user_graph_data, user_routines }
+
+# Container node to hold a user's task graph state
+# NOTE: With jac-scale authentication, each user automatically gets their own root node (root_id)
+# Walkers called with auth token run on that user's root, providing automatic isolation
+# TEMP: Added username field for manual isolation with jac serve (remove when using jac scale)
+node user_graph_data {
+    has username: str = "anonymous";  # User identifier
+    has nodes: list = ["Start"];
+    has edges: list = [];
+    has last_task: str = "Start";
+}
+
+# Container for saved routines
+node user_routines {
+    has routines: dict = {};
+}
+
 # Load .env from project root (auto-discovers .env in cwd or parent dirs)
 with entry {
     load_dotenv();
 }
-# ============================================
-# Sample Data (Personal Assistant - Calendar, Emails, GitHub)
-# ============================================
-
-glob SAMPLE_CALENDAR_EVENTS = [
-    {
-        "id": "evt-001",
-        "title": "Team Standup",
-        "date": "2025-12-30",
-        "time": "09:00 AM",
-        "duration": "30 minutes",
-        "location": "Zoom",
-        "attendees": ["John", "Sarah", "Mike"]
-    },
-    {
-        "id": "evt-002",
-        "title": "Product Review Meeting",
-        "date": "2025-12-30",
-        "time": "02:00 PM",
-        "duration": "1 hour",
-        "location": "Conference Room A",
-        "attendees": ["Product Team", "Engineering"]
-    },
-    {
-        "id": "evt-003",
-        "title": "1:1 with Manager",
-        "date": "2025-12-31",
-        "time": "10:00 AM",
-        "duration": "30 minutes",
-        "location": "Google Meet",
-        "attendees": ["Alex (Manager)"]
-    },
-    {
-        "id": "evt-004",
-        "title": "New Year's Eve Party",
-        "date": "2025-12-31",
-        "time": "07:00 PM",
-        "duration": "4 hours",
-        "location": "Office Rooftop",
-        "attendees": ["Entire Company"]
-    }
-];
-
-glob SAMPLE_EMAILS = [
-    {
-        "id": "mail-001",
-        "from": "alex.manager@company.com",
-        "subject": "Q1 Planning - Action Items",
-        "preview": "Hi, please review the attached Q1 roadmap and add your team's priorities by Friday...",
-        "date": "2025-12-30",
-        "unread": True,
-        "important": True
-    },
-    {
-        "id": "mail-002",
-        "from": "github@notifications.github.com",
-        "subject": "[jaseci/jac] PR #1234 merged",
-        "preview": "Your pull request 'Add voice agent support' has been merged into main...",
-        "date": "2025-12-30",
-        "unread": True,
-        "important": False
-    },
-    {
-        "id": "mail-003",
-        "from": "sarah@company.com",
-        "subject": "Re: Design Review Feedback",
-        "preview": "Thanks for the feedback! I've updated the mockups based on your suggestions...",
-        "date": "2025-12-29",
-        "unread": False,
-        "important": False
-    },
-    {
-        "id": "mail-004",
-        "from": "newsletter@techweekly.com",
-        "subject": "This Week in AI: Top Stories",
-        "preview": "OpenAI announces new reasoning models, Google releases Gemini 2.0...",
-        "date": "2025-12-29",
-        "unread": False,
-        "important": False
-    }
-];
-
-glob SAMPLE_GITHUB_ISSUES = [
-    {
-        "id": "issue-101",
-        "repo": "jaseci/jac",
-        "number": 456,
-        "title": "Voice agent connection timeout on slow networks",
-        "state": "open",
-        "author": "udithishanka",
-        "assignee": "me",
-        "labels": ["bug", "voice-agent"],
-        "created": "2025-12-28",
-        "comments": 3
-    },
-    {
-        "id": "issue-102",
-        "repo": "jaseci/jac",
-        "number": 455,
-        "title": "Add support for custom wake words",
-        "state": "open",
-        "author": "contributor42",
-        "assignee": None,
-        "labels": ["enhancement", "voice-agent"],
-        "created": "2025-12-27",
-        "comments": 7
-    },
-    {
-        "id": "pr-201",
-        "repo": "jaseci/jac",
-        "number": 1234,
-        "title": "Add voice agent support",
-        "state": "merged",
-        "type": "pr",
-        "author": "me",
-        "reviewers": ["alex", "sarah"],
-        "created": "2025-12-25",
-        "merged": "2025-12-30"
-    }
-];
-
 
 # ============================================
 # Supervisor Agent Instructions
@@ -296,6 +194,18 @@ glob CHAT_AGENT_INSTRUCTIONS = """You are Algo, a friendly and capable personal 
 
 
 # ============================================
+# Helper Functions for User Isolation
+# ============================================
+
+# Helper function to get the current authenticated user's ID
+# For now, this returns "anonymous" - will be enhanced to get real user ID from context
+def get_user_id() -> str {
+    # TODO: Access user ID from jac-scale authentication context
+    # This needs to be implemented based on jac-scale's auth system
+    return "anonymous";
+}
+
+# ============================================
 # Backend Walkers
 # ============================================
 
@@ -350,128 +260,345 @@ walker get_session_token {
 
 
 
-# Global graph state for task tracking
-glob TASK_GRAPH_NODES: list = [];
-glob TASK_GRAPH_EDGES: list = [];
-
-# Saved routines (persistent memory of past behavior)
-glob SAVED_ROUTINES: dict = {};
+# REMOVED: Global graph state - now stored per-user in nodes
+# Users have isolated graph data attached to their root node
 
 
 # Helper function to generate DOT code from graph state
-def generate_dot_code() -> str {
-    if len(TASK_GRAPH_NODES) == 0 {
+def generate_dot_code(node_list: list, edge_list: list) -> str {
+    list_size = 0;
+    for _ in node_list {
+        list_size = list_size + 1;
+    }
+    if list_size == 0 {
         return "";
     }
-    
+
     lines = ["digraph TaskGraph {"];
     lines.append("  rankdir=TB;");
     lines.append("  node [shape=box, style=rounded, fontname=\"Arial\"];");
     lines.append("  edge [fontname=\"Arial\", fontsize=10];");
     lines.append("");
-    
+
     # Add nodes with styling
-    for node in TASK_GRAPH_NODES {
-        if node == "Start" {
-            lines.append("  " + node + " [shape=circle, style=filled, fillcolor=\"#22c55e\", fontcolor=white];");
+    for task_node in node_list {
+        if task_node == "Start" {
+            lines.append("  " + task_node + " [shape=circle, style=filled, fillcolor=\"#22c55e\", fontcolor=white];");
         } else {
-            lines.append("  " + node + " [style=\"rounded,filled\", fillcolor=\"#3b82f6\", fontcolor=white];");
+            lines.append("  " + task_node + " [style=\"rounded,filled\", fillcolor=\"#3b82f6\", fontcolor=white];");
         }
     }
-    
+
     lines.append("");
-    
+
     # Add edges
-    for edge in TASK_GRAPH_EDGES {
-        from_node = edge.get("from", "");
-        to_node = edge.get("to", "");
-        label = edge.get("label", "");
-        if label {
-            lines.append("  " + from_node + " -> " + to_node + " [label=\"" + label + "\"];");
+    for conn in edge_list {
+        from_task = conn.get("from", "");
+        to_task = conn.get("to", "");
+        conn_label = conn.get("label", "");
+        if conn_label {
+            lines.append("  " + from_task + " -> " + to_task + " [label=\"" + conn_label + "\"];");
         } else {
-            lines.append("  " + from_node + " -> " + to_node + ";");
+            lines.append("  " + from_task + " -> " + to_task + ";");
         }
     }
-    
+
     lines.append("}");
     return "\n".join(lines);
 }
 
 
-# Helper function to execute a tool locally
-def execute_local_tool(tool_name: str, tool_args: any) -> any {
-    if tool_name == "updateTaskGraph" {
-        # Add task to graph
-        task_name = tool_args.get("taskName", "");
-        previous_task = tool_args.get("previousTask", "Start");
-        edge_label = tool_args.get("edgeLabel", "");
-        
-        # Add Start node if this is the first task
-        if previous_task == "Start" and "Start" not in TASK_GRAPH_NODES {
-            TASK_GRAPH_NODES.append("Start");
+# ============================================
+# Per-User Graph Walkers
+# ============================================
+
+# Walker to initialize user's graph container
+# When called with authentication token, runs on user's root node
+walker init_user_graph {
+    can initialize with `root entry;
+}
+
+impl init_user_graph.initialize with `root entry {
+    visit [-->](`?user_graph_data) else {
+        graph_cont = here ++> user_graph_data();
+    }
+    visit [-->](`?user_routines) else {
+        routine_cont = here ++> user_routines();
+    }
+}
+
+# Walker to update user's task graph
+# When called with authentication token, automatically runs on user's root node
+walker update_task_graph {
+    has task_name: str;
+    has previous_task: str = "Start";
+    has edge_label: str = "";
+    has username: str = "anonymous";  # Username for isolation
+
+    can navigate_to_graph with `root entry;
+    can update_graph with user_graph_data entry;
+}
+
+impl update_task_graph.navigate_to_graph with `root entry {
+    # Find or create user-specific graph based on username
+    print(f"DEBUG UPDATE_TASK_GRAPH: Looking for graph for user: {self.username}");
+    
+    # Find all user_graph_data nodes
+    all_graphs = [-->](`?user_graph_data);
+    
+    user_graph = None;
+    for graph in all_graphs {
+        if hasattr(graph, 'username') and graph.username == self.username {
+            user_graph = graph;
+            print(f"DEBUG UPDATE_TASK_GRAPH: Found existing graph for {self.username}");
+            break;
         }
-        
-        # Add the new task node if not already present
-        if task_name and task_name not in TASK_GRAPH_NODES {
-            TASK_GRAPH_NODES.append(task_name);
-        }
-        
-        # Add edge from previous to current (check for duplicates first)
-        if task_name and previous_task {
-            # Check if this edge already exists
-            edge_exists = False;
-            for existing_edge in TASK_GRAPH_EDGES {
-                if existing_edge.get("from") == previous_task and existing_edge.get("to") == task_name {
-                    edge_exists = True;
-                    break;
-                }
+    }
+    
+    if user_graph == None {
+        # Create new graph for this user
+        print(f"DEBUG UPDATE_TASK_GRAPH: Creating new graph for {self.username}");
+        user_graph = here ++> user_graph_data(username=self.username);
+    }
+    
+    visit user_graph;
+}
+
+impl update_task_graph.update_graph with user_graph_data entry {
+    # Add Start task if this is the first task
+    if self.previous_task == "Start" and "Start" not in here.nodes {
+        here.nodes = here.nodes + ["Start"];
+    }
+
+    # Add the new task if not already present
+    if self.task_name and self.task_name not in here.nodes {
+        here.nodes = here.nodes + [self.task_name];
+    }
+
+    # Add connection from previous to current (check for duplicates first)
+    if self.task_name and self.previous_task {
+        connection_exists = False;
+        for existing_conn in here.edges {
+            from_val = existing_conn["from"] if "from" in existing_conn else "";
+            to_val = existing_conn["to"] if "to" in existing_conn else "";
+            if from_val == self.previous_task and to_val == self.task_name {
+                connection_exists = True;
+                break;
             }
-            
-            # Only add if edge doesn't exist
-            if not edge_exists {
-                new_edge = {"from": previous_task, "to": task_name};
-                if edge_label {
-                    new_edge["label"] = edge_label;
-                }
-                TASK_GRAPH_EDGES.append(new_edge);
-            }
         }
-        
-        # Generate updated DOT code
-        dot_code = generate_dot_code();
-        
-        return {
-            "success": True,
-            "message": f"Added task '{task_name}' connected from '{previous_task}'",
-            "dotCode": dot_code,
-            "nodes": TASK_GRAPH_NODES,
-            "edges": TASK_GRAPH_EDGES
+
+        # Only add if connection doesn't exist
+        if not connection_exists {
+            new_conn = {"from": self.previous_task, "to": self.task_name};
+            if self.edge_label {
+                new_conn["label"] = self.edge_label;
+            }
+            here.edges = here.edges + [new_conn];
+        }
+    }
+
+    # Update last task
+    here.last_task = self.task_name;
+
+    # Generate updated DOT code
+    dot_code = generate_dot_code(here.nodes, here.edges);
+
+    report {
+        "success": True,
+        "message": f"Added task '{self.task_name}' connected from '{self.previous_task}'",
+        "dotCode": dot_code,
+        "nodes": here.nodes,
+        "edges": here.edges
+    };
+}
+
+# Walker to get user's current graph state
+# When called with authentication token, runs on user's root node
+walker get_task_graph {
+    has username: str = "anonymous";  # Username for isolation
+
+    can navigate_to_graph with `root entry;
+    can get_graph with user_graph_data entry;
+}
+
+impl get_task_graph.navigate_to_graph with `root entry {
+    # Find user-specific graph based on username
+    print(f"DEBUG GET_TASK_GRAPH: Looking for graph for user: {self.username}");
+    
+    # Find all user_graph_data nodes
+    all_graphs = [-->](`?user_graph_data);
+    
+    user_graph = None;
+    for graph in all_graphs {
+        if hasattr(graph, 'username') and graph.username == self.username {
+            user_graph = graph;
+            print(f"DEBUG GET_TASK_GRAPH: Found graph for {self.username}");
+            break;
+        }
+    }
+    
+    if user_graph == None {
+        # No graph yet, return empty
+        print(f"DEBUG GET_TASK_GRAPH: No graph found for {self.username}, returning empty");
+        report {
+            "nodes": [],
+            "edges": [],
+            "dotCode": "",
+            "lastTask": "Start"
         };
-    } elif tool_name == "getCalendarEvents" {
+        disengage;
+    }
+    
+    visit user_graph;
+}
+
+impl get_task_graph.get_graph with user_graph_data entry {
+    # Generate DOT code
+    dot_code = generate_dot_code(here.nodes, here.edges);
+
+    report {
+        "nodes": here.nodes,
+        "edges": here.edges,
+        "dotCode": dot_code,
+        "lastTask": here.last_task
+    };
+}
+
+# Walker to save the current graph as a learned routine
+walker save_routine {
+    has routine_name: str = "daily_routine";
+
+    can navigate_to_containers with `root entry;
+    can save_routine_data with user_graph_data entry;
+}
+
+impl save_routine.navigate_to_containers with `root entry {
+    visit [-->](`?user_graph_data) else {
+        report {"error": "No graph to save", "success": False};
+        disengage;
+    }
+}
+
+impl save_routine.save_routine_data with user_graph_data entry {
+    # Get the routines container
+    routines_containers = [<--](`?user_routines);
+
+    if len(routines_containers) > 0 {
+        routines_container = routines_containers[0];
+
+        # Save routine to container's dict
+        routines_container.routines[self.routine_name] = {
+            "nodes": here.nodes.copy(),
+            "edges": here.edges.copy(),
+            "saved_at": str(__import__('datetime').datetime.now())
+        };
+
+        # Count nodes manually
+        node_count = 0;
+        for _ in here.nodes {
+            node_count = node_count + 1;
+        }
+
+        report {
+            "success": True,
+            "message": f"Saved routine '{self.routine_name}' with {node_count} tasks",
+            "routine": routines_container.routines[self.routine_name]
+        };
+    } else {
+        report {"error": "Routines container not found", "success": False};
+    }
+}
+
+# Walker to load past routines for context
+walker load_past_routines {
+    can navigate_to_routines with `root entry;
+    can load_routines with user_routines entry;
+}
+
+impl load_past_routines.navigate_to_routines with `root entry {
+    visit [-->](`?user_routines) else {
+        # No routines yet
+        report {"routines": {}, "count": 0, "message": "No past routines saved yet"};
+        disengage;
+    }
+}
+
+impl load_past_routines.load_routines with user_routines entry {
+    # Count routines manually
+    routine_count = 0;
+    for _ in here.routines {
+        routine_count = routine_count + 1;
+    }
+
+    if routine_count == 0 {
+        report {"routines": {}, "count": 0, "message": "No past routines saved yet"};
+    } else {
+        report {
+            "routines": here.routines,
+            "count": routine_count,
+            "message": f"Loaded {routine_count} saved routine(s)"
+        };
+    }
+}
+
+# Walker to reset the current session graph
+walker reset_session {
+    can navigate_to_graph with `root entry;
+    can reset_graph with user_graph_data entry;
+}
+
+impl reset_session.navigate_to_graph with `root entry {
+    visit [-->](`?user_graph_data) else {
+        report {
+            "success": True,
+            "message": "Session already empty."
+        };
+        disengage;
+    }
+}
+
+impl reset_session.reset_graph with user_graph_data entry {
+    # Clear graph but keep saved routines
+    here.nodes = [];
+    here.edges = [];
+    here.last_task = "Start";
+
+    report {
+        "success": True,
+        "message": "Session reset. Ready for a new conversation."
+    };
+}
+
+# NOTE: This function is no longer used for updateTaskGraph
+# Graph operations now use per-user walkers that are called directly
+# from the supervisor walker (see call_supervisor walker below)
+# This function only handles non-graph tools (calendar, emails, GitHub)
+def execute_local_tool(tool_name: str, tool_args: object) -> dict {
+    if tool_name == "getCalendarEvents" {
         # Filter by date if provided
-        date_filter = tool_args.get("date", "today");
+        date_filter = tool_args["date"] if "date" in tool_args else "today";
         # For demo, return all events (in real app, would filter by date)
         return {"events": SAMPLE_CALENDAR_EVENTS, "query": date_filter};
     } elif tool_name == "getEmails" {
         # Filter emails based on parameters
-        filter_type = tool_args.get("filter", "all");
-        count = tool_args.get("count", 5);
+        filter_type = tool_args["filter"] if "filter" in tool_args else "all";
+        count = tool_args["count"] if "count" in tool_args else 5;
         emails = SAMPLE_EMAILS[:count];
         if filter_type == "unread" {
-            emails = [e for e in SAMPLE_EMAILS if e.get("unread")][:count];
+            emails = [e for e in SAMPLE_EMAILS if "unread" in e and e["unread"]][:count];
         } elif filter_type == "important" {
-            emails = [e for e in SAMPLE_EMAILS if e.get("important")][:count];
+            emails = [e for e in SAMPLE_EMAILS if "important" in e and e["important"]][:count];
         }
         return {"emails": emails, "filter": filter_type};
     } elif tool_name == "getGitHubIssues" {
         # Filter GitHub issues
-        filter_type = tool_args.get("filter", "all");
-        issue_type = tool_args.get("type", "all");
+        filter_type = tool_args["filter"] if "filter" in tool_args else "all";
+        issue_type = tool_args["type"] if "type" in tool_args else "all";
         issues = SAMPLE_GITHUB_ISSUES;
         if filter_type == "open" {
-            issues = [i for i in issues if i.get("state") == "open"];
+            issues = [i for i in issues if "state" in i and i["state"] == "open"];
         } elif filter_type == "assigned" {
-            issues = [i for i in issues if i.get("assignee") == "me"];
+            issues = [i for i in issues if "assignee" in i and i["assignee"] == "me"];
         }
         return {"issues": issues, "filter": filter_type};
     } else {
@@ -483,11 +610,14 @@ def execute_local_tool(tool_name: str, tool_args: any) -> any {
 def extract_response_text(output_items: list) -> str {
     final_text = "";
     for item in output_items {
-        if item.get("type") == "message" {
-            content_arr = item.get("content", []);
+        item_type = item["type"] if "type" in item else "";
+        if item_type == "message" {
+            content_arr = item["content"] if "content" in item else [];
             for c in content_arr {
-                if c.get("type") == "output_text" {
-                    final_text = final_text + c.get("text", "");
+                c_type = c["type"] if "type" in c else "";
+                if c_type == "output_text" {
+                    text_val = c["text"] if "text" in c else "";
+                    final_text = final_text + text_val;
                 }
             }
         }
@@ -496,7 +626,7 @@ def extract_response_text(output_items: list) -> str {
 }
 
 # Helper function to make OpenAI Responses API call
-def make_responses_api_call(request_body: dict, api_key: any) -> any {
+def make_responses_api_call(request_body: dict, api_key: object) {
     url = "https://api.openai.com/v1/responses";
     req = Request(
         url,
@@ -508,13 +638,16 @@ def make_responses_api_call(request_body: dict, api_key: any) -> any {
         method="POST"
     );
     response = urlopen(req);
-    return loads(response.read().decode('utf-8'));
+    result = loads(response.read().decode('utf-8'));
+    return result;
 }
 
 # Walker to call the Supervisor Agent (gpt-4.1 via Responses API)
+# When called with authentication token, runs on user's root node
 walker call_supervisor {
     has conversation_history: list;
     has context_from_user: str;
+    has username: str = "anonymous";  # Username for isolation
     
     can call with `root entry {
         try {
@@ -525,18 +658,17 @@ walker call_supervisor {
                 return;
             }
             
-            # Load past routines for context
+            # Load user's past routines for context
             past_routines_context = "";
-            if len(SAVED_ROUTINES) > 0 {
-                past_routines_context = f"""
-                
-==== Past Learned Routines ====
-{dumps(SAVED_ROUTINES, indent=2)}
+            # Note: Skipping routines for now due to walker spawn issues
+            # TODO: Fix walker result handling
 
-Use this information to make intelligent suggestions based on the user's past behavior.
-""";
-            }
-            
+            # Load user's current graph state
+            # Note: Skipping graph load for now
+            # TODO: Fix walker result handling
+            current_nodes = [];
+            current_edges = [];
+
             # Build the request body for OpenAI Responses API
             request_body = {
                 "model": "gpt-4.1",
@@ -554,12 +686,12 @@ Use this information to make intelligent suggestions based on the user's past be
 
                         ==== Relevant Context From Last User Message ====
                         {self.context_from_user}
-                        
+
                         ==== Current Task Graph ====
-                        Existing Nodes: {dumps(TASK_GRAPH_NODES)}
-                        Existing Edges: {dumps(TASK_GRAPH_EDGES)}
+                        Existing Nodes: {dumps(current_nodes)}
+                        Existing Edges: {dumps(current_edges)}
                         {past_routines_context}
-                        
+
                         IMPORTANT: When adding a new task, use the EXACT node name from the existing nodes as previousTask if the user mentions connecting to an existing task.
                         """
                     }
@@ -570,7 +702,7 @@ Use this information to make intelligent suggestions based on the user's past be
             
             # Make initial API call
             data = make_responses_api_call(request_body, api_key);
-            output_items = data.get("output", []);
+            output_items = data["output"] if "output" in data else [];
             
             # Process tool calls iteratively (up to 5 rounds)
             max_iterations = 5;
@@ -580,56 +712,85 @@ Use this information to make intelligent suggestions based on the user's past be
                 # Check for function calls
                 function_calls = [];
                 for item in output_items {
-                    if item.get("type") == "function_call" {
-                        function_calls.append(item);
+                    item_type = item["type"] if "type" in item else "";
+                    if item_type == "function_call" {
+                        function_calls = function_calls + [item];
                     }
                 }
-                
-                if len(function_calls) == 0 {
+
+                # Count function calls
+                fc_count = 0;
+                for _ in function_calls {
+                    fc_count = fc_count + 1;
+                }
+
+                if fc_count == 0 {
                     # No more function calls - extract final response
                     break;
                 }
                 
                 # Execute function calls
                 for tool_call in function_calls {
-                    f_name = tool_call.get("name");
-                    f_args_str = tool_call.get("arguments", "{}");
+                    f_name = tool_call["name"] if "name" in tool_call else "";
+                    f_args_str = tool_call["arguments"] if "arguments" in tool_call else "{}";
                     f_args = loads(f_args_str);
-                    
-                    # Execute the tool locally
-                    tool_output = execute_local_tool(f_name, f_args);
-                    
+
+                    # Execute the tool - use per-user walker for updateTaskGraph
+                    tool_output = {};
+                    if f_name == "updateTaskGraph" {
+                        # Use per-user walker to update the graph
+                        task_name = f_args["taskName"] if "taskName" in f_args else "";
+                        previous_task = f_args["previousTask"] if "previousTask" in f_args else "Start";
+                        edge_label = f_args["edgeLabel"] if "edgeLabel" in f_args else "";
+
+                        # Spawn walker - pass username for isolation
+                        here spawn update_task_graph(
+                            task_name=task_name,
+                            previous_task=previous_task,
+                            edge_label=edge_label,
+                            username=self.username
+                        );
+                        # Return success - the walker handles the actual update
+                        tool_output = {
+                            "success": True,
+                            "message": f"Updated graph with task: {task_name}"
+                        };
+                    } else {
+                        # Use existing function for other tools
+                        tool_output = execute_local_tool(f_name, f_args);
+                    }
+
                     # Add function call and result to the request body
-                    request_body["input"].append({
+                    call_id = tool_call["call_id"] if "call_id" in tool_call else "";
+                    request_body["input"] = request_body["input"] + [{
                         "type": "function_call",
-                        "call_id": tool_call.get("call_id"),
+                        "call_id": call_id,
                         "name": f_name,
                         "arguments": f_args_str
-                    });
-                    request_body["input"].append({
+                    }];
+                    request_body["input"] = request_body["input"] + [{
                         "type": "function_call_output",
-                        "call_id": tool_call.get("call_id"),
+                        "call_id": call_id,
                         "output": dumps(tool_output)
-                    });
+                    }];
                 }
                 
                 # Make follow-up request
                 data = make_responses_api_call(request_body, api_key);
-                output_items = data.get("output", []);
+                output_items = data["output"] if "output" in data else [];
                 iteration = iteration + 1;
             }
             
             # Extract final text
             final_response = extract_response_text(output_items);
-            
-            # Get current graph state
-            current_dot_code = generate_dot_code();
-            
+
+            # TODO: Get updated graph state - fix walker spawn result handling
+            # For now, return empty graph data since updates happen in update_task_graph walker
             report {
                 "response": final_response,
-                "dotCode": current_dot_code,
-                "graphNodes": TASK_GRAPH_NODES,
-                "graphEdges": TASK_GRAPH_EDGES
+                "dotCode": "",
+                "graphNodes": [],
+                "graphEdges": []
             };
             
         } except HTTPError as e {
@@ -639,72 +800,6 @@ Use this information to make intelligent suggestions based on the user's past be
             report {"error": "URL Error", "details": str(e.reason)};
         } except Exception as e {
             report {"error": "Server error", "details": str(e)};
-        }
-    }
-}
-
-
-# Walker to save the current graph as a learned routine
-walker save_routine {
-    has routine_name: str = "daily_routine";
-    
-    can save with `root entry {
-        try {
-            # Save current graph state
-            SAVED_ROUTINES[self.routine_name] = {
-                "nodes": TASK_GRAPH_NODES.copy(),
-                "edges": TASK_GRAPH_EDGES.copy(),
-                "saved_at": str(__import__('datetime').datetime.now())
-            };
-            
-            report {
-                "success": True,
-                "message": f"Saved routine '{self.routine_name}' with {len(TASK_GRAPH_NODES)} tasks",
-                "routine": SAVED_ROUTINES[self.routine_name]
-            };
-        } except Exception as e {
-            report {"error": "Failed to save routine", "details": str(e)};
-        }
-    }
-}
-
-
-# Walker to load past routines for context
-walker load_past_routines {
-    can load with `root entry {
-        try {
-            if len(SAVED_ROUTINES) == 0 {
-                report {"routines": {}, "message": "No past routines saved yet"};
-                return;
-            }
-            
-            # Return saved routines for context
-            report {
-                "routines": SAVED_ROUTINES,
-                "count": len(SAVED_ROUTINES),
-                "message": f"Loaded {len(SAVED_ROUTINES)} saved routine(s)"
-            };
-        } except Exception as e {
-            report {"error": "Failed to load routines", "details": str(e)};
-        }
-    }
-}
-
-
-# Walker to reset the current session graph
-walker reset_session {
-    can reset with `root entry {
-        try {
-            # Clear current graph but keep saved routines
-            TASK_GRAPH_NODES.clear();
-            TASK_GRAPH_EDGES.clear();
-            
-            report {
-                "success": True,
-                "message": "Session reset. Ready for a new conversation."
-            };
-        } except Exception as e {
-            report {"error": "Failed to reset session", "details": str(e)};
         }
     }
 }
