@@ -343,23 +343,18 @@ walker update_task_graph {
 
 impl update_task_graph.navigate_to_graph with `root entry {
     # Find or create user-specific graph based on username
-    print(f"DEBUG UPDATE_TASK_GRAPH: Looking for graph for user: {self.username}");
-    
-    # Find all user_graph_data nodes
     all_graphs = [-->](`?user_graph_data);
     
     user_graph = None;
     for graph in all_graphs {
         if hasattr(graph, 'username') and graph.username == self.username {
             user_graph = graph;
-            print(f"DEBUG UPDATE_TASK_GRAPH: Found existing graph for {self.username}");
             break;
         }
     }
     
     if user_graph == None {
         # Create new graph for this user
-        print(f"DEBUG UPDATE_TASK_GRAPH: Creating new graph for {self.username}");
         user_graph = here ++> user_graph_data(username=self.username);
     }
     
@@ -425,23 +420,18 @@ walker get_task_graph {
 
 impl get_task_graph.navigate_to_graph with `root entry {
     # Find user-specific graph based on username
-    print(f"DEBUG GET_TASK_GRAPH: Looking for graph for user: {self.username}");
-    
-    # Find all user_graph_data nodes
     all_graphs = [-->](`?user_graph_data);
     
     user_graph = None;
     for graph in all_graphs {
         if hasattr(graph, 'username') and graph.username == self.username {
             user_graph = graph;
-            print(f"DEBUG GET_TASK_GRAPH: Found graph for {self.username}");
             break;
         }
     }
     
     if user_graph == None {
         # No graph yet, return empty
-        print(f"DEBUG GET_TASK_GRAPH: No graph found for {self.username}, returning empty");
         report {
             "nodes": [],
             "edges": [],
@@ -477,8 +467,6 @@ walker save_routine {
 
 impl save_routine.navigate_to_graph with `root entry {
     # Find user-specific graph
-    print(f"DEBUG SAVE_ROUTINE: Looking for graph for user: {self.username}");
-    
     all_graphs = [-->](`?user_graph_data);
     
     user_graph = None;
@@ -499,7 +487,6 @@ impl save_routine.navigate_to_graph with `root entry {
 
 impl save_routine.save_routine_data with user_graph_data entry {
     # Store routine directly in the user_graph_data node
-    print("DEBUG SAVE_ROUTINE: Saving routine in user_graph_data");
     
     # Initialize saved_routines dict if needed
     if not hasattr(here, 'saved_routines') or here.saved_routines == None {
@@ -523,8 +510,6 @@ impl save_routine.save_routine_data with user_graph_data entry {
         node_count = node_count + 1;
     }
     
-    print(f"DEBUG SAVE_ROUTINE: Saved routine with {node_count} tasks");
-    
     report {
         "success": True,
         "message": f"Saved routine with {node_count} tasks",
@@ -542,8 +527,6 @@ walker load_past_routines {
 
 impl load_past_routines.navigate_to_routines with `root entry {
     # Find user-specific routines
-    print(f"DEBUG LOAD_ROUTINES: Looking for routines for user: {self.username}");
-    
     all_routines = [-->](`?user_routines);
     
     user_routines_node = None;
@@ -713,9 +696,8 @@ walker call_supervisor {
             for graph in all_graphs {
                 if hasattr(graph, 'username') and graph.username == self.username {
                     current_nodes = graph.nodes if hasattr(graph, 'nodes') else [];
-                    current_edges = graph.edges if hasattr(graph, 'edges') else [];
+                    current_edges = graph.edges if hasattr(graph, 'edge') else [];
                     last_task = graph.last_task if hasattr(graph, 'last_task') else "Start";
-                    print(f"DEBUG SUPERVISOR: Found graph for {self.username} with {len(current_nodes)} nodes");
                     break;
                 }
             }
