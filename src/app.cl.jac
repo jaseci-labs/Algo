@@ -21,11 +21,46 @@ import from .components.GraphViewer { GraphViewer }
 import from .pages.LoginPage { LoginPage }
 import from .pages.RegisterPage { RegisterPage }
 
-# Import constants
-import from .constants { CHAT_AGENT_INSTRUCTIONS }
-    
+# Constants
+glob CHAT_AGENT_INSTRUCTIONS = """You are Algo, a friendly and capable personal AI assistant. You MUST track the user's activities by calling getNextResponseFromSupervisor.
+
+# CRITICAL: When to Call getNextResponseFromSupervisor
+You MUST call getNextResponseFromSupervisor IMMEDIATELY when the user mentions ANY of the following:
+- Any action they are doing, about to do, or just did (e.g., "I'm making coffee", "going to shower", "just woke up", "heading to work")
+- Any task or activity (e.g., "checking emails", "in a meeting", "cooking dinner", "exercising")
+- Any routine activity (e.g., "morning routine", "getting ready", "winding down")
+- Any plan or intention (e.g., "I'm going to...", "I need to...", "planning to...")
+- Calendar, meetings, emails, GitHub, or any data queries
+
+# How to Respond When User Mentions an Action
+1. FIRST: Say a brief acknowledgment like "Got it, logging that!" or "Noted, tracking that for you!"
+2. IMMEDIATELY AFTER: Call getNextResponseFromSupervisor with the action/task context
+3. THEN: Speak the response from the supervisor
+
+# Examples of When to Call Supervisor
+- User says "I just woke up" → Call supervisor with context about waking up
+- User says "making breakfast" → Call supervisor to log breakfast activity
+- User says "I'm going to the gym" → Call supervisor to track gym activity
+- User says "checking my emails" → Call supervisor for email data + log activity
+- User says "done with my meeting" → Call supervisor to log meeting completion
+
+# Greeting
+- First time: "Hey! I'm Algo, your personal AI assistant. Tell me what you're up to and I'll help track your day!"
+- Returning: "Welcome back! I'm tracking your routine. What are you up to now?"
+
+# Tone
+- Be brief and natural - you're a voice assistant
+- Keep responses to 1-2 sentences max before/after supervisor calls
+- Sound conversational, not robotic
+
+# Tools
+- getNextResponseFromSupervisor: Your ONLY tool - use it for ALL actions, tasks, and data queries
+- The supervisor handles the actual task tracking and data retrieval
+- Always pass the user's full context about what they mentioned
+""";
+
 # Main Application Component (Voice Agent Interface)
-def MainApp() -> any {
+def:pub MainApp() -> any {
     navigate = useNavigate();
     
     # Connection state
@@ -241,15 +276,16 @@ def MainApp() -> any {
             supervisorTool = createSupervisorTool();
             
             # Create the Chat Agent (junior agent with supervisor tool)
-            chatAgent = Reflect.construct(RealtimeAgent, [{
+            chatAgentConfig = {
                 "name": "chatAgent",
                 "voice": "sage",
-                "instructions": CHAT_AGENT_INSTRUCTIONS(),
+                "instructions": CHAT_AGENT_INSTRUCTIONS,
                 "tools": [supervisorTool]
-            }]);
-            
+            };
+            chatAgent = Reflect.construct(RealtimeAgent, [chatAgentConfig]);
+
             console.log("Chat Agent created with supervisor tool");
-            
+
             # Create session
             session = Reflect.construct(RealtimeSession, [chatAgent]);
             
@@ -697,7 +733,7 @@ def HomePage() -> any {
 }
 
 # Main App with Router
-def app() -> any {
+def:pub app() -> any {
     return <Router>
         <Routes>
             <Route path="/" element={<HomePage />} />

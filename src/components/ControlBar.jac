@@ -1,7 +1,7 @@
 # ControlBar Component
 # Bottom control bar with connection, PTT, and audio controls
 
-cl def ControlBar(props: any) -> any {
+cl def:pub ControlBar(props: any) -> any {
     # Props
     sessionStatus = props.sessionStatus;
     onToggleConnection = props.onToggleConnection;

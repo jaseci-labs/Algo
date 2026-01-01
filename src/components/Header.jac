@@ -3,7 +3,7 @@
 
 cl import from "@jac-client/utils" { jacLogout, useNavigate }
 
-cl def Header() -> any {
+cl def:pub Header() -> any {
     navigate = useNavigate();
     
     def handleLogout(e: any) -> None {

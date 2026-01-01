@@ -2,7 +2,7 @@
 cl import from "react" { useState, useEffect }
 cl import from "@hpcc-js/wasm/graphviz" { Graphviz }
 
-cl def GraphViewer(props: any) -> any {
+cl def:pub GraphViewer(props: any) -> any {
     dotCode = props.dotCode;
     [svgContent, setSvgContent] = useState("");
     [isLoading, setIsLoading] = useState(True);
