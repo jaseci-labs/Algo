@@ -20,10 +20,12 @@ node user_graph_data {
     has nodes: list = ["Start"];
     has edges: list = [];
     has last_task: str = "Start";
+    has saved_routines: dict = {};  # Store saved routines here
 }
 
 # Container for saved routines
 node user_routines {
+    has username: str = "anonymous";  # User identifier
     has routines: dict = {};
 }
 
@@ -467,60 +469,98 @@ impl get_task_graph.get_graph with user_graph_data entry {
 # Walker to save the current graph as a learned routine
 walker save_routine {
     has routine_name: str = "daily_routine";
+    has username: str = "anonymous";  # Username for isolation
 
-    can navigate_to_containers with `root entry;
+    can navigate_to_graph with `root entry;
     can save_routine_data with user_graph_data entry;
 }
 
-impl save_routine.navigate_to_containers with `root entry {
-    visit [-->](`?user_graph_data) else {
+impl save_routine.navigate_to_graph with `root entry {
+    # Find user-specific graph
+    print(f"DEBUG SAVE_ROUTINE: Looking for graph for user: {self.username}");
+    
+    all_graphs = [-->](`?user_graph_data);
+    
+    user_graph = None;
+    for graph in all_graphs {
+        if hasattr(graph, 'username') and graph.username == self.username {
+            user_graph = graph;
+            break;
+        }
+    }
+    
+    if user_graph == None {
         report {"error": "No graph to save", "success": False};
         disengage;
     }
+    
+    visit user_graph;
 }
 
 impl save_routine.save_routine_data with user_graph_data entry {
-    # Get the routines container
-    routines_containers = [<--](`?user_routines);
-
-    if len(routines_containers) > 0 {
-        routines_container = routines_containers[0];
-
-        # Save routine to container's dict
-        routines_container.routines[self.routine_name] = {
-            "nodes": here.nodes.copy(),
-            "edges": here.edges.copy(),
-            "saved_at": str(__import__('datetime').datetime.now())
-        };
-
-        # Count nodes manually
-        node_count = 0;
-        for _ in here.nodes {
-            node_count = node_count + 1;
-        }
-
-        report {
-            "success": True,
-            "message": f"Saved routine '{self.routine_name}' with {node_count} tasks",
-            "routine": routines_container.routines[self.routine_name]
-        };
-    } else {
-        report {"error": "Routines container not found", "success": False};
+    # Store routine directly in the user_graph_data node
+    print("DEBUG SAVE_ROUTINE: Saving routine in user_graph_data");
+    
+    # Initialize saved_routines dict if needed
+    if not hasattr(here, 'saved_routines') or here.saved_routines == None {
+        here.saved_routines = {};
     }
+    
+    # Get current timestamp
+    import from time { time }
+    timestamp = str(time());
+    
+    # Save the routine
+    here.saved_routines[self.routine_name] = {
+        "nodes": here.nodes.copy(),
+        "edges": here.edges.copy(),
+        "saved_at": timestamp
+    };
+    
+    # Count nodes manually
+    node_count = 0;
+    for _ in here.nodes {
+        node_count = node_count + 1;
+    }
+    
+    print(f"DEBUG SAVE_ROUTINE: Saved routine with {node_count} tasks");
+    
+    report {
+        "success": True,
+        "message": f"Saved routine with {node_count} tasks",
+        "routine": here.saved_routines[self.routine_name]
+    };
 }
 
 # Walker to load past routines for context
 walker load_past_routines {
+    has username: str = "anonymous";  # Username for isolation
+    
     can navigate_to_routines with `root entry;
     can load_routines with user_routines entry;
 }
 
 impl load_past_routines.navigate_to_routines with `root entry {
-    visit [-->](`?user_routines) else {
+    # Find user-specific routines
+    print(f"DEBUG LOAD_ROUTINES: Looking for routines for user: {self.username}");
+    
+    all_routines = [-->](`?user_routines);
+    
+    user_routines_node = None;
+    for r in all_routines {
+        if hasattr(r, 'username') and r.username == self.username {
+            user_routines_node = r;
+            break;
+        }
+    }
+    
+    if user_routines_node == None {
         # No routines yet
         report {"routines": {}, "count": 0, "message": "No past routines saved yet"};
         disengage;
     }
+    
+    visit user_routines_node;
 }
 
 impl load_past_routines.load_routines with user_routines entry {
@@ -663,11 +703,22 @@ walker call_supervisor {
             # Note: Skipping routines for now due to walker spawn issues
             # TODO: Fix walker result handling
 
-            # Load user's current graph state
-            # Note: Skipping graph load for now
-            # TODO: Fix walker result handling
+            # Load user's current graph state by directly traversing the graph
             current_nodes = [];
             current_edges = [];
+            last_task = "Start";
+            
+            # Find user-specific graph data
+            all_graphs = [-->](`?user_graph_data);
+            for graph in all_graphs {
+                if hasattr(graph, 'username') and graph.username == self.username {
+                    current_nodes = graph.nodes if hasattr(graph, 'nodes') else [];
+                    current_edges = graph.edges if hasattr(graph, 'edges') else [];
+                    last_task = graph.last_task if hasattr(graph, 'last_task') else "Start";
+                    print(f"DEBUG SUPERVISOR: Found graph for {self.username} with {len(current_nodes)} nodes");
+                    break;
+                }
+            }
 
             # Build the request body for OpenAI Responses API
             request_body = {
@@ -690,9 +741,14 @@ walker call_supervisor {
                         ==== Current Task Graph ====
                         Existing Nodes: {dumps(current_nodes)}
                         Existing Edges: {dumps(current_edges)}
+                        Last Task (most recent): {last_task}
                         {past_routines_context}
 
-                        IMPORTANT: When adding a new task, use the EXACT node name from the existing nodes as previousTask if the user mentions connecting to an existing task.
+                        IMPORTANT: 
+                        - When adding a new task, check the Existing Nodes list first
+                        - If a similar task already exists (e.g., "GoToMall" exists), use that EXACT name, don't create "GoMall"
+                        - Use the Last Task as previousTask when connecting sequential activities
+                        - Only create a new node if the task doesn't already exist in the Existing Nodes
                         """
                     }
                 ],

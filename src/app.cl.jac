@@ -222,25 +222,36 @@ def:pub MainApp() -> any {
         }
 
         # Fetch updated graph state after supervisor completes
+        # Add small delay to ensure backend has persisted the update
+        await Reflect.construct(Promise, [lambda resolve: any -> None { setTimeout(resolve, 500); }]);
+        
         try {
             graph_response = root spawn get_task_graph(username=username);
             console.log("Fetched updated graph:", graph_response);
 
             if graph_response && graph_response.reports && graph_response.reports.length > 0 {
                 graph_data = graph_response.reports[0];
+                console.log("Graph data received:", graph_data);
+                console.log("DOT code:", graph_data.dotCode);
+                console.log("Nodes:", graph_data.nodes);
+                console.log("Edges:", graph_data.edges);
 
-                # Update graph visualization
-                if graph_data.dotCode {
-                    console.log("Updating graph with DOT code");
-                    setGraphDotCode(graph_data.dotCode);
+                # Force state update by creating new references
+                if graph_data.dotCode != None {
+                    newDotCode = String(graph_data.dotCode);
+                    console.log("Setting new DOT code, length:", newDotCode.length);
+                    setGraphDotCode(newDotCode);
                 }
-                if graph_data.edges && graph_data.edges.length > 0 {
-                    console.log("Updating graph edges:", graph_data.edges);
-                    setGraphEdges(graph_data.edges);
+                if graph_data.edges != None {
+                    newEdges = Array.from(graph_data.edges);
+                    console.log("Setting new edges, count:", newEdges.length);
+                    setGraphEdges(newEdges);
                 }
                 if graph_data.lastTask {
                     setLastTask(graph_data.lastTask);
                 }
+            } else {
+                console.log("No graph data in response:", graph_response);
             }
         } except Exception as graph_error {
             console.error("Failed to fetch updated graph:", graph_error);
@@ -576,6 +587,21 @@ def:pub MainApp() -> any {
         # Add user message to transcript
         addMessage("user", message);
         
+        # Get username from localStorage
+        token = localStorage.getItem("jac_token");
+        username = "anonymous";
+        if token {
+            try {
+                parts = token.split(".");
+                if parts.length > 1 {
+                    payload = JSON.parse(atob(parts[1]));
+                    username = payload.username or "anonymous";
+                }
+            } except Exception as decode_error {
+                console.error("Failed to decode token:", decode_error);
+            }
+        }
+        
         # If connected to realtime session, send via voice
         if sessionRef.current && sessionStatus == "CONNECTED" {
             try {
@@ -592,9 +618,9 @@ def:pub MainApp() -> any {
             assistantItemId = "assistant-" + String(Date.now());
             addTranscriptItem(assistantItemId, "assistant", "Thinking...");
             
-            # Call supervisor walker directly
-            console.log("Calling supervisor with message:", message);
-            response = root spawn call_supervisor(context_from_user=message, conversation_history=[]);
+            # Call supervisor walker directly with username
+            console.log("Calling supervisor with message:", message, "username:", username);
+            response = root spawn call_supervisor(context_from_user=message, conversation_history=[], username=username);
             console.log("Supervisor response:", response);
             
             if response && response.reports && response.reports.length > 0 {
@@ -606,6 +632,30 @@ def:pub MainApp() -> any {
                     updateTranscriptItem(assistantItemId, "Error: " + result.error);
                 } else {
                     updateTranscriptItem(assistantItemId, "Sorry, I couldn't process that request.");
+                }
+                
+                # Fetch updated graph after supervisor completes
+                try {
+                    graph_response = root spawn get_task_graph(username=username);
+                    console.log("Fetched updated graph:", graph_response);
+
+                    if graph_response && graph_response.reports && graph_response.reports.length > 0 {
+                        graph_data = graph_response.reports[0];
+                        console.log("Graph data received:", graph_data);
+
+                        if graph_data.dotCode {
+                            console.log("Updating graph with DOT code:", graph_data.dotCode);
+                            setGraphDotCode(graph_data.dotCode);
+                        }
+                        if graph_data.edges {
+                            setGraphEdges(graph_data.edges);
+                        }
+                        if graph_data.lastTask {
+                            setLastTask(graph_data.lastTask);
+                        }
+                    }
+                } except Exception as graph_error {
+                    console.error("Failed to fetch updated graph:", graph_error);
                 }
             } else {
                 updateTranscriptItem(assistantItemId, "Sorry, something went wrong.");
@@ -656,9 +706,25 @@ def:pub MainApp() -> any {
         }
         
         try {
-            # Save the current routine
-            saveResponse = root spawn save_routine(routine_name="daily_routine");
+            # Get username from localStorage
+            token = localStorage.getItem("jac_token");
+            username = "anonymous";
+            if token {
+                try {
+                    parts = token.split(".");
+                    if parts.length > 1 {
+                        payload = JSON.parse(atob(parts[1]));
+                        username = payload.username or "anonymous";
+                    }
+                } except Exception as decode_error {
+                    console.error("Failed to decode token:", decode_error);
+                }
+            }
+            
+            # Save the current routine with username
+            saveResponse = root spawn save_routine(routine_name="daily_routine", username=username);
             saveResult = saveResponse.reports[0] if saveResponse.reports else {};
+            console.log("Save routine response:", saveResult);
             
             if saveResult && saveResult.success {
                 addMessage("system", "✓ Routine saved! Restarting session...");
@@ -671,7 +737,8 @@ def:pub MainApp() -> any {
                     addMessage("assistant", "Welcome back! I remember your routine. How can I help you today?");
                 }, 500);
             } else {
-                addMessage("error", "Failed to save routine. Please try again.");
+                errorMsg = saveResult.error if saveResult && saveResult.error else "Unknown error";
+                addMessage("error", f"Failed to save routine: {errorMsg}");
             }
         } except Exception as e {
             console.error("Save and restart error:", e);

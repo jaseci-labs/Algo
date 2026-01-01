@@ -42,6 +42,9 @@ RUN pip install -e /tmp/jaseci/jac
 # The jac-client plugin uses .jac files that need jac's auto-import mechanism
 RUN pip install -e /tmp/jaseci/jac-client
 
+# Install jac-scale in editable mode for scaling features
+RUN pip install -e /tmp/jaseci/jac-scale
+
 # Install additional Python dependencies
 RUN pip install --no-cache-dir python-dotenv
 
@@ -51,9 +54,9 @@ COPY . .
 # Install client-side npm dependencies
 RUN jac add --cl
 
-# Clean up unnecessary files but keep jac and jac-client sources
+# Clean up unnecessary files but keep jac, jac-client, and jac-scale sources
 # They contain .jac and .impl.jac files needed at runtime
-RUN rm -rf /tmp/jaseci/jac-scale /tmp/jaseci/jac-byllm /tmp/jaseci/jac-streamlit \
+RUN rm -rf /tmp/jaseci/jac-byllm /tmp/jaseci/jac-streamlit \
     /tmp/jaseci/docs /tmp/jaseci/.git /tmp/jaseci/.github
 
 # Set environment variables
