@@ -1,0 +1,65 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv/
+ENV/
+env/
+.eggs/
+*.egg-info/
+*.egg
+
+# Jac cache
+.jaccache/
+*.jbc
+anchor_store.db.*
+
+# Node modules (will be reinstalled during build)
+node_modules/
+
+# Build artifacts
+.client-build/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment files (secrets should be passed via k8s secrets)
+.env.local
+.env.*.local
+
+# Session files (exclude in all directories)
+*.session
+*.session.*
+**/*.session
+**/*.session.*
+src/app.session
+src/app.session.*
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Test files
+tests/
+*.test.*
