@@ -1,5 +1,14 @@
 import from react { useState, useEffect, useRef }
 import from "@openai/agents/realtime" { RealtimeAgent, RealtimeSession, tool }
+import from "@jac-client/utils" {
+    Router,
+    Routes,
+    Route,
+    Navigate,
+    jacIsLoggedIn,
+    jacLogout,
+    useNavigate
+}
 
 # Import components
 import from .components.TranscriptItem { TranscriptItem }
@@ -8,11 +17,52 @@ import from .components.MessageInput { MessageInput }
 import from .components.ControlBar { ControlBar }
 import from .components.GraphViewer { GraphViewer }
 
-# Import constants
-import from .constants { CHAT_AGENT_INSTRUCTIONS }
+# Import pages
+import from .pages.LoginPage { LoginPage }
+import from .pages.RegisterPage { RegisterPage }
+
+# Constants
+glob CHAT_AGENT_INSTRUCTIONS = """You are Algo, a friendly and capable personal AI assistant. You MUST track the user's activities by calling getNextResponseFromSupervisor.
+
+# CRITICAL: When to Call getNextResponseFromSupervisor
+You MUST call getNextResponseFromSupervisor IMMEDIATELY when the user mentions ANY of the following:
+- Any action they are doing, about to do, or just did (e.g., "I'm making coffee", "going to shower", "just woke up", "heading to work")
+- Any task or activity (e.g., "checking emails", "in a meeting", "cooking dinner", "exercising")
+- Any routine activity (e.g., "morning routine", "getting ready", "winding down")
+- Any plan or intention (e.g., "I'm going to...", "I need to...", "planning to...")
+- Calendar, meetings, emails, GitHub, or any data queries
+
+# How to Respond When User Mentions an Action
+1. FIRST: Say a brief acknowledgment like "Got it, logging that!" or "Noted, tracking that for you!"
+2. IMMEDIATELY AFTER: Call getNextResponseFromSupervisor with the action/task context
+3. THEN: Speak the response from the supervisor
+
+# Examples of When to Call Supervisor
+- User says "I just woke up" → Call supervisor with context about waking up
+- User says "making breakfast" → Call supervisor to log breakfast activity
+- User says "I'm going to the gym" → Call supervisor to track gym activity
+- User says "checking my emails" → Call supervisor for email data + log activity
+- User says "done with my meeting" → Call supervisor to log meeting completion
+
+# Greeting
+- First time: "Hey! I'm Algo, your personal AI assistant. Tell me what you're up to and I'll help track your day!"
+- Returning: "Welcome back! I'm tracking your routine. What are you up to now?"
+
+# Tone
+- Be brief and natural - you're a voice assistant
+- Keep responses to 1-2 sentences max before/after supervisor calls
+- Sound conversational, not robotic
+
+# Tools
+- getNextResponseFromSupervisor: Your ONLY tool - use it for ALL actions, tasks, and data queries
+- The supervisor handles the actual task tracking and data retrieval
+- Always pass the user's full context about what they mentioned
+""";
+
+# Main Application Component (Voice Agent Interface)
+def:pub MainApp() -> any {
+    navigate = useNavigate();
     
-# Main App Component
-def app() -> any {
     # Connection state
     [sessionStatus, setSessionStatus] = useState("DISCONNECTED");
     sessionRef = useRef(None);
@@ -23,6 +73,7 @@ def app() -> any {
     [isPTTActive, setIsPTTActive] = useState(False);
     [isPTTUserSpeaking, setIsPTTUserSpeaking] = useState(False);
     [isAudioPlaybackEnabled, setIsAudioPlaybackEnabled] = useState(True);
+    [isMicMuted, setIsMicMuted] = useState(False);
     
     # Message state
     [userText, setUserText] = useState("");
@@ -225,15 +276,16 @@ def app() -> any {
             supervisorTool = createSupervisorTool();
             
             # Create the Chat Agent (junior agent with supervisor tool)
-            chatAgent = Reflect.construct(RealtimeAgent, [{
+            chatAgentConfig = {
                 "name": "chatAgent",
                 "voice": "sage",
-                "instructions": CHAT_AGENT_INSTRUCTIONS(),
+                "instructions": CHAT_AGENT_INSTRUCTIONS,
                 "tools": [supervisorTool]
-            }]);
-            
+            };
+            chatAgent = Reflect.construct(RealtimeAgent, [chatAgentConfig]);
+
             console.log("Chat Agent created with supervisor tool");
-            
+
             # Create session
             session = Reflect.construct(RealtimeSession, [chatAgent]);
             
@@ -408,7 +460,27 @@ def app() -> any {
             connectToRealtime();
         }
     }
-    
+
+    # Toggle mic mute
+    def toggleMicMute() -> None {
+        setIsMicMuted(lambda prev: bool -> bool { return not prev; });
+    }
+
+    # Effect to handle mic mute/unmute
+    useEffect(
+        lambda -> None {
+            if sessionRef.current {
+                try {
+                    console.log("Setting mic mute state to:", isMicMuted);
+                    sessionRef.current.mute(isMicMuted);
+                } except Exception as e {
+                    console.error("Error toggling mic:", e);
+                }
+            }
+        },
+        [isMicMuted, sessionStatus]
+    );
+
     # Send text message (text-only chat, no voice)
     async def handleSendTextMessage() -> None {
         message = userText.trim();
@@ -637,7 +709,44 @@ def app() -> any {
             onTalkUp={handleTalkButtonUp}
             isAudioPlaybackEnabled={isAudioPlaybackEnabled}
             setIsAudioPlaybackEnabled={setIsAudioPlaybackEnabled}
+            isMicMuted={isMicMuted}
+            onToggleMicMute={toggleMicMute}
             onSaveAndRestart={handleSaveAndRestart}
         />
     </div>;
+}
+
+# Protected Route Component
+def ProtectedRoute(props: any) -> any {
+    if not jacIsLoggedIn() {
+        return <Navigate to="/login" />;
+    }
+    return props.children;
+}
+
+# Home Route - Redirect based on auth status
+def HomePage() -> any {
+    if jacIsLoggedIn() {
+        return <Navigate to="/app" />;
+    }
+    return <Navigate to="/login" />;
+}
+
+# Main App with Router
+def:pub app() -> any {
+    return <Router>
+        <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route
+                path="/app"
+                element={
+                    <ProtectedRoute>
+                        <MainApp />
+                    </ProtectedRoute>
+                }
+            />
+        </Routes>
+    </Router>;
 }

@@ -1,7 +1,7 @@
 # MessageInput Component
 # Text input field with send button
 
-cl def MessageInput(props: any) -> any {
+cl def:pub MessageInput(props: any) -> any {
     userText = props.userText;
     setUserText = props.setUserText;
     onSend = props.onSend;
