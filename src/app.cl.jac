@@ -22,7 +22,12 @@ import from .pages.LoginPage { LoginPage }
 import from .pages.RegisterPage { RegisterPage }
 
 # Constants
-glob CHAT_AGENT_INSTRUCTIONS = """You are Algo, a friendly and capable personal AI assistant. You MUST track the user's activities by calling getNextResponseFromSupervisor.
+glob CHAT_AGENT_INSTRUCTIONS = """You are Algo, a friendly personal AI assistant with a great memory. You remember everything the user tells you about their day.
+
+# IMPORTANT: Language
+- ALWAYS speak in English only
+- Even if the user speaks in another language, respond in English
+- Keep all responses in clear, simple English
 
 # CRITICAL: When to Call getNextResponseFromSupervisor
 You MUST call getNextResponseFromSupervisor IMMEDIATELY when the user mentions ANY of the following:
@@ -33,29 +38,31 @@ You MUST call getNextResponseFromSupervisor IMMEDIATELY when the user mentions A
 - Calendar, meetings, emails, GitHub, or any data queries
 
 # How to Respond When User Mentions an Action
-1. FIRST: Say a brief acknowledgment like "Got it, logging that!" or "Noted, tracking that for you!"
+1. FIRST: Say a brief, natural acknowledgment like "Memorizing that!", "Got it!", "Nice!", or just acknowledge what they said naturally
 2. IMMEDIATELY AFTER: Call getNextResponseFromSupervisor with the action/task context
-3. THEN: Speak the response from the supervisor
+3. THEN: Speak the response from the supervisor naturally
 
-# Examples of When to Call Supervisor
-- User says "I just woke up" → Call supervisor with context about waking up
-- User says "making breakfast" → Call supervisor to log breakfast activity
-- User says "I'm going to the gym" → Call supervisor to track gym activity
-- User says "checking my emails" → Call supervisor for email data + log activity
-- User says "done with my meeting" → Call supervisor to log meeting completion
+# Examples of Natural Responses
+- User: "I just woke up" → "Good morning! Let me remember that..." [call supervisor]
+- User: "making breakfast" → "Nice! Memorizing..." [call supervisor]
+- User: "I'm going to the gym" → "Awesome! Got it..." [call supervisor]
+- User: "checking my emails" → "Sure thing!" [call supervisor]
+- User: "done with my meeting" → "Great! Noted." [call supervisor]
 
 # Greeting
-- First time: "Hey! I'm Algo, your personal AI assistant. Tell me what you're up to and I'll help track your day!"
-- Returning: "Welcome back! I'm tracking your routine. What are you up to now?"
+- First time: "Hey! I'm Algo, your personal AI assistant. Just tell me what you're up to and I'll remember it for you!"
+- Returning: "Welcome back! What are you up to now?"
 
 # Tone
 - Be brief and natural - you're a voice assistant
-- Keep responses to 1-2 sentences max before/after supervisor calls
-- Sound conversational, not robotic
+- Keep responses to 1-2 sentences max
+- Sound conversational, like a helpful friend
+- NEVER say "tracking" or "logged" - use words like "memorizing", "remembering", "got it", "noted"
+- Be enthusiastic but not over the top
 
 # Tools
 - getNextResponseFromSupervisor: Your ONLY tool - use it for ALL actions, tasks, and data queries
-- The supervisor handles the actual task tracking and data retrieval
+- The supervisor handles memorizing activities and data retrieval
 - Always pass the user's full context about what they mentioned
 """;
 
@@ -228,19 +235,27 @@ def:pub MainApp() -> any {
 
             if graph_response && graph_response.reports && graph_response.reports.length > 0 {
                 graph_data = graph_response.reports[0];
+                console.log("Graph data received:", graph_data);
+                console.log("DOT code:", graph_data.dotCode);
+                console.log("Nodes:", graph_data.nodes);
+                console.log("Edges:", graph_data.edges);
 
-                # Update graph visualization
-                if graph_data.dotCode {
-                    console.log("Updating graph with DOT code");
-                    setGraphDotCode(graph_data.dotCode);
+                # Force state update by creating new references
+                if graph_data.dotCode != None {
+                    newDotCode = String(graph_data.dotCode);
+                    console.log("Setting new DOT code, length:", newDotCode.length);
+                    setGraphDotCode(newDotCode);
                 }
-                if graph_data.edges && graph_data.edges.length > 0 {
-                    console.log("Updating graph edges:", graph_data.edges);
-                    setGraphEdges(graph_data.edges);
+                if graph_data.edges != None {
+                    newEdges = Array.from(graph_data.edges);
+                    console.log("Setting new edges, count:", newEdges.length);
+                    setGraphEdges(newEdges);
                 }
                 if graph_data.lastTask {
                     setLastTask(graph_data.lastTask);
                 }
+            } else {
+                console.log("No graph data in response:", graph_response);
             }
         } except Exception as graph_error {
             console.error("Failed to fetch updated graph:", graph_error);
@@ -576,6 +591,21 @@ def:pub MainApp() -> any {
         # Add user message to transcript
         addMessage("user", message);
         
+        # Get username from localStorage
+        token = localStorage.getItem("jac_token");
+        username = "anonymous";
+        if token {
+            try {
+                parts = token.split(".");
+                if parts.length > 1 {
+                    payload = JSON.parse(atob(parts[1]));
+                    username = payload.username or "anonymous";
+                }
+            } except Exception as decode_error {
+                console.error("Failed to decode token:", decode_error);
+            }
+        }
+        
         # If connected to realtime session, send via voice
         if sessionRef.current && sessionStatus == "CONNECTED" {
             try {
@@ -592,9 +622,9 @@ def:pub MainApp() -> any {
             assistantItemId = "assistant-" + String(Date.now());
             addTranscriptItem(assistantItemId, "assistant", "Thinking...");
             
-            # Call supervisor walker directly
-            console.log("Calling supervisor with message:", message);
-            response = root spawn call_supervisor(context_from_user=message, conversation_history=[]);
+            # Call supervisor walker directly with username
+            console.log("Calling supervisor with message:", message, "username:", username);
+            response = root spawn call_supervisor(context_from_user=message, conversation_history=[], username=username);
             console.log("Supervisor response:", response);
             
             if response && response.reports && response.reports.length > 0 {
@@ -606,6 +636,30 @@ def:pub MainApp() -> any {
                     updateTranscriptItem(assistantItemId, "Error: " + result.error);
                 } else {
                     updateTranscriptItem(assistantItemId, "Sorry, I couldn't process that request.");
+                }
+                
+                # Fetch updated graph after supervisor completes
+                try {
+                    graph_response = root spawn get_task_graph(username=username);
+                    console.log("Fetched updated graph:", graph_response);
+
+                    if graph_response && graph_response.reports && graph_response.reports.length > 0 {
+                        graph_data = graph_response.reports[0];
+                        console.log("Graph data received:", graph_data);
+
+                        if graph_data.dotCode {
+                            console.log("Updating graph with DOT code:", graph_data.dotCode);
+                            setGraphDotCode(graph_data.dotCode);
+                        }
+                        if graph_data.edges {
+                            setGraphEdges(graph_data.edges);
+                        }
+                        if graph_data.lastTask {
+                            setLastTask(graph_data.lastTask);
+                        }
+                    }
+                } except Exception as graph_error {
+                    console.error("Failed to fetch updated graph:", graph_error);
                 }
             } else {
                 updateTranscriptItem(assistantItemId, "Sorry, something went wrong.");
@@ -649,6 +703,48 @@ def:pub MainApp() -> any {
         [isAudioPlaybackEnabled]
     );
     
+    # Clear graph handler
+    async def handleClearGraph() -> None {
+        try {
+            # Get username from localStorage
+            token = localStorage.getItem("jac_token");
+            username = "anonymous";
+            if token {
+                try {
+                    parts = token.split(".");
+                    if parts.length > 1 {
+                        payload = JSON.parse(atob(parts[1]));
+                        username = payload.username or "anonymous";
+                    }
+                } except Exception as decode_error {
+                    console.error("Failed to decode token:", decode_error);
+                }
+            }
+            
+            # Clear the graph
+            clearResponse = root spawn clear_graph(username=username);
+            clearResult = clearResponse.reports[0] if clearResponse.reports else {};
+            console.log("Clear graph response:", clearResult);
+            
+            if clearResult && clearResult.success {
+                # Refresh the graph display
+                graphResponse = root spawn get_task_graph(username=username);
+                result = graphResponse.reports[0] if graphResponse.reports else {};
+                
+                setGraphDotCode(result.dotCode or "");
+                setGraphEdges(result.edges or []);
+                setLastTask(result.lastTask or "Start");
+                
+                addMessage("system", "Graph cleared! Starting fresh.");
+            } else {
+                addMessage("error", "Failed to clear graph");
+            }
+        } except Exception as e {
+            console.error("Clear graph error:", e);
+            addMessage("error", "Error clearing graph");
+        }
+    }
+    
     # Save and Restart handler
     async def handleSaveAndRestart() -> None {
         if sessionStatus != "CONNECTED" {
@@ -656,14 +752,30 @@ def:pub MainApp() -> any {
         }
         
         try {
-            # Save the current routine
-            saveResponse = root spawn save_routine(routine_name="daily_routine");
+            # Get username from localStorage
+            token = localStorage.getItem("jac_token");
+            username = "anonymous";
+            if token {
+                try {
+                    parts = token.split(".");
+                    if parts.length > 1 {
+                        payload = JSON.parse(atob(parts[1]));
+                        username = payload.username or "anonymous";
+                    }
+                } except Exception as decode_error {
+                    console.error("Failed to decode token:", decode_error);
+                }
+            }
+            
+            # Save the current routine with username
+            saveResponse = root spawn save_routine(routine_name="daily_routine", username=username);
             saveResult = saveResponse.reports[0] if saveResponse.reports else {};
+            console.log("Save routine response:", saveResult);
             
             if saveResult && saveResult.success {
                 addMessage("system", "✓ Routine saved! Restarting session...");
                 
-                # Clear transcript only (keep graph visible)
+                # Clear transcript only (keep graph for context)
                 setTranscript([]);
                 
                 # Add welcome back message after a brief delay
@@ -671,7 +783,8 @@ def:pub MainApp() -> any {
                     addMessage("assistant", "Welcome back! I remember your routine. How can I help you today?");
                 }, 500);
             } else {
-                addMessage("error", "Failed to save routine. Please try again.");
+                errorMsg = saveResult.error if saveResult && saveResult.error else "Unknown error";
+                addMessage("error", f"Failed to save routine: {errorMsg}");
             }
         } except Exception as e {
             console.error("Save and restart error:", e);
@@ -774,9 +887,30 @@ def:pub MainApp() -> any {
                 <div style={{
                     "flex": "1",
                     "overflow": "auto",
-                    "backgroundColor": "#fafafa"
+                    "backgroundColor": "#fafafa",
+                    "position": "relative"
                 }}>
                     <GraphViewer dotCode={graphDotCode} />
+                    
+                    <button
+                        onClick={handleClearGraph}
+                        style={{
+                            "position": "absolute",
+                            "bottom": "1rem",
+                            "right": "1rem",
+                            "padding": "0.5rem 1rem",
+                            "backgroundColor": "#ef4444",
+                            "color": "white",
+                            "border": "none",
+                            "borderRadius": "0.5rem",
+                            "cursor": "pointer",
+                            "fontSize": "0.875rem",
+                            "fontWeight": "500",
+                            "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"
+                        }}
+                    >
+                        {"Clear Graph"}
+                    </button>
                 </div>
             </div>
         </div>
