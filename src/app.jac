@@ -42,10 +42,24 @@ glob SUPERVISOR_INSTRUCTIONS = """You are the backend intelligence for Algo, a p
 
 # Primary Task: Task Graph Generation
 Your MOST IMPORTANT job is to track the user's tasks and activities as a directed graph.
-- When the user mentions doing something (a task, activity, or action), you MUST call updateTaskGraph
+- When the user mentions doing something NEW (a task, activity, or action), you MUST call updateTaskGraph
 - Extract the task name as a short label (2-4 words, CamelCase, no spaces)
 - Connect it to the previous task to show the sequence of activities
 - Examples: "I'm making coffee" → MakeCoffee, "going to wash my face" → WashFace, "checking emails" → CheckEmails
+
+# CRITICAL: Determining the Previous Task
+When calling updateTaskGraph, pay CLOSE ATTENTION to what the user says:
+- If user says "after [task X]" or "then I'll [task Y]", connect from that specific task X
+  Example: "after going to lunch, I'll go to friend's house" → previousTask="GoToLunch"
+- If user says "I'm now doing X" or "I just did X", connect from the last_task in current context
+- Look at the existing graph nodes - use the exact task name that already exists
+- If unsure, use the last_task from the current graph state
+
+# IMPORTANT: Avoid Duplicate Updates
+- If the user mentions a task that's ALREADY in the graph, DO NOT call updateTaskGraph again
+- Only call updateTaskGraph when the user is doing something NEW that continues their routine
+- Example: If graph already has "WakeUp→WashFace→MakeCoffee" and user says "I just woke up", don't add WakeUp again
+- Example: If user says "what should I do?" or "wondering what's next", that's NOT a new task - don't update the graph
 
 # Learning from Past Behavior
 - When provided with past routines in context, use them to make intelligent suggestions
@@ -85,7 +99,7 @@ glob SUPERVISOR_TOOLS = [
                 },
                 "previousTask": {
                     "type": "string",
-                    "description": "The previous task name to connect from. Use 'Start' for the first task. Must match a previously added task name."
+                    "description": "The task to connect FROM. CRITICAL: If user says 'after [TaskX]', use TaskX. Otherwise use last_task from context. Must match an existing node name exactly (e.g., 'GoToLunch', 'WakeUp')."
                 },
                 "edgeLabel": {
                     "type": "string",
@@ -453,6 +467,50 @@ impl get_task_graph.get_graph with user_graph_data entry {
         "edges": here.edges,
         "dotCode": dot_code,
         "lastTask": here.last_task
+    };
+}
+
+# Walker to clear/reset the graph for a user
+walker clear_graph {
+    has username: str = "anonymous";
+    
+    can navigate_to_graph with `root entry;
+    can clear_data with user_graph_data entry;
+}
+
+impl clear_graph.navigate_to_graph with `root entry {
+    # Find user-specific graph
+    print(f"DEBUG CLEAR_GRAPH: Looking for graph for user: {self.username}");
+    
+    all_graphs = [-->](`?user_graph_data);
+    
+    user_graph = None;
+    for graph in all_graphs {
+        if hasattr(graph, 'username') and graph.username == self.username {
+            user_graph = graph;
+            break;
+        }
+    }
+    
+    if user_graph == None {
+        report {"success": True, "message": "No graph to clear"};
+        disengage;
+    }
+    
+    visit user_graph;
+}
+
+impl clear_graph.clear_data with user_graph_data entry {
+    # Reset graph to initial state
+    here.nodes = ["Start"];
+    here.edges = [];
+    here.last_task = "Start";
+    
+    print(f"DEBUG CLEAR_GRAPH: Graph cleared for user {self.username}");
+    
+    report {
+        "success": True,
+        "message": "Graph cleared successfully"
     };
 }
 

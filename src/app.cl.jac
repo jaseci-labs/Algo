@@ -22,7 +22,12 @@ import from .pages.LoginPage { LoginPage }
 import from .pages.RegisterPage { RegisterPage }
 
 # Constants
-glob CHAT_AGENT_INSTRUCTIONS = """You are Algo, a friendly and capable personal AI assistant. You MUST track the user's activities by calling getNextResponseFromSupervisor.
+glob CHAT_AGENT_INSTRUCTIONS = """You are Algo, a friendly personal AI assistant with a great memory. You remember everything the user tells you about their day.
+
+# IMPORTANT: Language
+- ALWAYS speak in English only
+- Even if the user speaks in another language, respond in English
+- Keep all responses in clear, simple English
 
 # CRITICAL: When to Call getNextResponseFromSupervisor
 You MUST call getNextResponseFromSupervisor IMMEDIATELY when the user mentions ANY of the following:
@@ -33,29 +38,31 @@ You MUST call getNextResponseFromSupervisor IMMEDIATELY when the user mentions A
 - Calendar, meetings, emails, GitHub, or any data queries
 
 # How to Respond When User Mentions an Action
-1. FIRST: Say a brief acknowledgment like "Got it, logging that!" or "Noted, tracking that for you!"
+1. FIRST: Say a brief, natural acknowledgment like "Memorizing that!", "Got it!", "Nice!", or just acknowledge what they said naturally
 2. IMMEDIATELY AFTER: Call getNextResponseFromSupervisor with the action/task context
-3. THEN: Speak the response from the supervisor
+3. THEN: Speak the response from the supervisor naturally
 
-# Examples of When to Call Supervisor
-- User says "I just woke up" → Call supervisor with context about waking up
-- User says "making breakfast" → Call supervisor to log breakfast activity
-- User says "I'm going to the gym" → Call supervisor to track gym activity
-- User says "checking my emails" → Call supervisor for email data + log activity
-- User says "done with my meeting" → Call supervisor to log meeting completion
+# Examples of Natural Responses
+- User: "I just woke up" → "Good morning! Let me remember that..." [call supervisor]
+- User: "making breakfast" → "Nice! Memorizing..." [call supervisor]
+- User: "I'm going to the gym" → "Awesome! Got it..." [call supervisor]
+- User: "checking my emails" → "Sure thing!" [call supervisor]
+- User: "done with my meeting" → "Great! Noted." [call supervisor]
 
 # Greeting
-- First time: "Hey! I'm Algo, your personal AI assistant. Tell me what you're up to and I'll help track your day!"
-- Returning: "Welcome back! I'm tracking your routine. What are you up to now?"
+- First time: "Hey! I'm Algo, your personal AI assistant. Just tell me what you're up to and I'll remember it for you!"
+- Returning: "Welcome back! What are you up to now?"
 
 # Tone
 - Be brief and natural - you're a voice assistant
-- Keep responses to 1-2 sentences max before/after supervisor calls
-- Sound conversational, not robotic
+- Keep responses to 1-2 sentences max
+- Sound conversational, like a helpful friend
+- NEVER say "tracking" or "logged" - use words like "memorizing", "remembering", "got it", "noted"
+- Be enthusiastic but not over the top
 
 # Tools
 - getNextResponseFromSupervisor: Your ONLY tool - use it for ALL actions, tasks, and data queries
-- The supervisor handles the actual task tracking and data retrieval
+- The supervisor handles memorizing activities and data retrieval
 - Always pass the user's full context about what they mentioned
 """;
 
@@ -222,9 +229,6 @@ def:pub MainApp() -> any {
         }
 
         # Fetch updated graph state after supervisor completes
-        # Add small delay to ensure backend has persisted the update
-        await Reflect.construct(Promise, [lambda resolve: any -> None { setTimeout(resolve, 500); }]);
-        
         try {
             graph_response = root spawn get_task_graph(username=username);
             console.log("Fetched updated graph:", graph_response);
@@ -699,6 +703,48 @@ def:pub MainApp() -> any {
         [isAudioPlaybackEnabled]
     );
     
+    # Clear graph handler
+    async def handleClearGraph() -> None {
+        try {
+            # Get username from localStorage
+            token = localStorage.getItem("jac_token");
+            username = "anonymous";
+            if token {
+                try {
+                    parts = token.split(".");
+                    if parts.length > 1 {
+                        payload = JSON.parse(atob(parts[1]));
+                        username = payload.username or "anonymous";
+                    }
+                } except Exception as decode_error {
+                    console.error("Failed to decode token:", decode_error);
+                }
+            }
+            
+            # Clear the graph
+            clearResponse = root spawn clear_graph(username=username);
+            clearResult = clearResponse.reports[0] if clearResponse.reports else {};
+            console.log("Clear graph response:", clearResult);
+            
+            if clearResult && clearResult.success {
+                # Refresh the graph display
+                graphResponse = root spawn get_task_graph(username=username);
+                result = graphResponse.reports[0] if graphResponse.reports else {};
+                
+                setGraphDotCode(result.dotCode or "");
+                setGraphEdges(result.edges or []);
+                setLastTask(result.lastTask or "Start");
+                
+                addMessage("system", "Graph cleared! Starting fresh.");
+            } else {
+                addMessage("error", "Failed to clear graph");
+            }
+        } except Exception as e {
+            console.error("Clear graph error:", e);
+            addMessage("error", "Error clearing graph");
+        }
+    }
+    
     # Save and Restart handler
     async def handleSaveAndRestart() -> None {
         if sessionStatus != "CONNECTED" {
@@ -729,7 +775,7 @@ def:pub MainApp() -> any {
             if saveResult && saveResult.success {
                 addMessage("system", "✓ Routine saved! Restarting session...");
                 
-                # Clear transcript only (keep graph visible)
+                # Clear transcript only (keep graph for context)
                 setTranscript([]);
                 
                 # Add welcome back message after a brief delay
@@ -841,9 +887,30 @@ def:pub MainApp() -> any {
                 <div style={{
                     "flex": "1",
                     "overflow": "auto",
-                    "backgroundColor": "#fafafa"
+                    "backgroundColor": "#fafafa",
+                    "position": "relative"
                 }}>
                     <GraphViewer dotCode={graphDotCode} />
+                    
+                    <button
+                        onClick={handleClearGraph}
+                        style={{
+                            "position": "absolute",
+                            "bottom": "1rem",
+                            "right": "1rem",
+                            "padding": "0.5rem 1rem",
+                            "backgroundColor": "#ef4444",
+                            "color": "white",
+                            "border": "none",
+                            "borderRadius": "0.5rem",
+                            "cursor": "pointer",
+                            "fontSize": "0.875rem",
+                            "fontWeight": "500",
+                            "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"
+                        }}
+                    >
+                        {"Clear Graph"}
+                    </button>
                 </div>
             </div>
         </div>
