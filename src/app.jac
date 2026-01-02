@@ -29,16 +29,47 @@ node user_routines {
     has routines: dict = {};
 }
 
+# Container for user insights and behavior patterns
+node user_insights {
+    has username: str = "anonymous";
+    has total_interactions: int = 0;
+    has common_sequences: list = [];  # List of common task sequences
+    has time_patterns: dict = {};  # When user typically does things
+    has preferences: dict = {};  # Learned preferences
+    has last_questions_asked: list = [];  # Track what we've asked to avoid repetition
+    has unanswered_questions: list = [];  # Questions user hasn't answered yet
+}
+
 # Load .env from project root (auto-discovers .env in cwd or parent dirs)
 with entry {
     load_dotenv();
 }
 
 # ============================================
+# Helper Functions
+# ============================================
+
+# Helper to check if edge exists
+def edge_exists(edges: list, from_task: str, to_task: str) -> bool {
+    for edge in edges {
+        if edge.get("from", "") == from_task and edge.get("to", "") == to_task {
+            return True;
+        }
+    }
+    return False;
+}
+
+# ============================================
 # Supervisor Agent Instructions
 # ============================================
 
-glob SUPERVISOR_INSTRUCTIONS = """You are the backend intelligence for Algo, a personal AI assistant. You process requests from the voice interface and have access to the user's personal tools and data.
+glob SUPERVISOR_INSTRUCTIONS = """You are the backend intelligence for Algo, a personal AI assistant. You are PROACTIVE, not just reactive. You actively learn about the user, ask clarifying questions, and suggest improvements.
+
+# Core Philosophy: BE PROACTIVE
+- Don't just wait for the user to tell you things - ASK questions to understand them better
+- Analyze patterns in their behavior and routines
+- Suggest activities and optimizations based on what you've learned
+- Build a comprehensive understanding of their habits, goals, and preferences
 
 # Primary Task: Task Graph Generation
 Your MOST IMPORTANT job is to track the user's tasks and activities as a directed graph.
@@ -61,21 +92,44 @@ When calling updateTaskGraph, pay CLOSE ATTENTION to what the user says:
 - Example: If graph already has "WakeUp→WashFace→MakeCoffee" and user says "I just woke up", don't add WakeUp again
 - Example: If user says "what should I do?" or "wondering what's next", that's NOT a new task - don't update the graph
 
+# Proactive Learning & Analysis
+- After seeing 3-5 tasks, call analyzeRoutinePattern to identify patterns
+- Use askClarifyingQuestion to learn MORE about tasks: duration, purpose, frequency, time of day
+- Use suggestNextActivity when user seems idle or asks what to do
+- Track insights about user preferences, habits, and behavior patterns
+- Examples of proactive questions:
+  * "How long does [task] usually take you?"
+  * "Do you do [task] at the same time every day?"
+  * "What's your goal with [task]?"
+  * "I noticed you always do X before Y. Is there a reason?"
+
 # Learning from Past Behavior
 - When provided with past routines in context, use them to make intelligent suggestions
 - If the user mentions an activity they've done before, reference the typical next steps from their routine
 - Example: "I just woke up" + past shows WakeUp→MakeCoffee→Shower, suggest: "Would you like to make coffee next? That's what you usually do."
+- Identify patterns like: "I notice you check emails right after waking up. Would you like me to summarize them for you?"
+
+# Proactive Behavior Rules
+1. Ask 1-2 clarifying questions per conversation (don't overwhelm)
+2. Suggest activities when user seems uncertain or idle
+3. Provide insights about their routines ("You've been consistent with morning workouts!")
+4. Offer optimizations ("You could save 10 minutes by doing X before Y")
+5. Track unanswered questions and revisit them later
 
 # Instructions
 - ALWAYS call updateTaskGraph when the user mentions ANY task or activity
+- Use proactive tools (analyzeRoutinePattern, askClarifyingQuestion, suggestNextActivity) regularly
 - You can also call other tools (calendar, emails, github) if needed
 - If you need information, tell the voice agent to ask the user
 - Your message will be spoken verbatim by the voice agent
-- Be helpful, efficient, and personable
+- Be helpful, efficient, and personable but also curious and insightful
 - For voice conversation, be very concise, use natural prose
 
 # Tools Available
 - updateTaskGraph: REQUIRED - Call this whenever user mentions a task/activity
+- analyzeRoutinePattern: Analyze current routine for patterns and insights
+- askClarifyingQuestion: Ask user for more details about their habits/preferences
+- suggestNextActivity: Suggest what user should do next based on patterns
 - getCalendarEvents: Check the user's calendar for meetings and events
 - getEmails: Retrieve and summarize the user's recent emails
 - getGitHubIssues: Look up GitHub issues and repository activity
@@ -83,6 +137,7 @@ When calling updateTaskGraph, pay CLOSE ATTENTION to what the user says:
 # Response Format
 Always provide a clear, concise response that sounds natural when spoken aloud.
 Acknowledge the task the user mentioned in your response.
+Be conversational and show genuine interest in understanding the user better.
 """;
 
 glob SUPERVISOR_TOOLS = [
@@ -107,6 +162,66 @@ glob SUPERVISOR_TOOLS = [
                 }
             },
             "required": ["taskName", "previousTask"],
+            "additionalProperties": False
+        }
+    },
+    {
+        "type": "function",
+        "name": "analyzeRoutinePattern",
+        "description": "Analyze the current task graph to identify patterns, common sequences, and potential insights about user behavior.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "focus": {
+                    "type": "string",
+                    "description": "What to focus analysis on: 'sequences' (common task chains), 'efficiency' (time optimization), 'habits' (behavioral patterns), or 'all'"
+                }
+            },
+            "required": ["focus"],
+            "additionalProperties": False
+        }
+    },
+    {
+        "type": "function",
+        "name": "askClarifyingQuestion",
+        "description": "Ask the user a specific question to learn more about their habits, preferences, or routines. Use this to build a deeper understanding.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "The specific question to ask the user. Should be natural and conversational."
+                },
+                "questionType": {
+                    "type": "string",
+                    "description": "Category: 'timing' (when they do things), 'duration' (how long tasks take), 'purpose' (why they do things), 'preference' (likes/dislikes), 'frequency' (how often)"
+                },
+                "relatedTask": {
+                    "type": "string",
+                    "description": "The task this question relates to (optional)"
+                }
+            },
+            "required": ["question", "questionType"],
+            "additionalProperties": False
+        }
+    },
+    {
+        "type": "function",
+        "name": "suggestNextActivity",
+        "description": "Suggest what the user should do next based on their patterns, current time, and routine analysis.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "suggestion": {
+                    "type": "string",
+                    "description": "The activity to suggest (e.g., 'MakeCoffee', 'CheckEmails')"
+                },
+                "reasoning": {
+                    "type": "string",
+                    "description": "Why you're suggesting this (based on patterns, time, or past behavior)"
+                }
+            },
+            "required": ["suggestion", "reasoning"],
             "additionalProperties": False
         }
     },
@@ -340,6 +455,9 @@ impl init_user_graph.initialize with `root entry {
     }
     visit [-->](`?user_routines) else {
         routine_cont = here ++> user_routines();
+    }
+    visit [-->](`?user_insights) else {
+        insights_cont = here ++> user_insights();
     }
 }
 
@@ -622,6 +740,117 @@ impl load_past_routines.load_routines with user_routines entry {
     }
 }
 
+# Walker to update user insights (track questions, patterns, preferences)
+walker update_user_insights {
+    has username: str = "anonymous";
+    has insight_type: str = "interaction";  # interaction, question, pattern, preference
+    has data: dict = {};
+    
+    can navigate_to_insights with `root entry;
+    can update_insights with user_insights entry;
+}
+
+impl update_user_insights.navigate_to_insights with `root entry {
+    # Find or create user-specific insights
+    all_insights = [-->](`?user_insights);
+    
+    user_insight = None;
+    for insight in all_insights {
+        if hasattr(insight, 'username') and insight.username == self.username {
+            user_insight = insight;
+            break;
+        }
+    }
+    
+    if user_insight == None {
+        # Create new insights node for this user
+        user_insight = here ++> user_insights(username=self.username);
+    }
+    
+    visit user_insight;
+}
+
+impl update_user_insights.update_insights with user_insights entry {
+    # Increment interaction count
+    here.total_interactions = here.total_interactions + 1;
+    
+    # Update based on insight type
+    if self.insight_type == "question" {
+        question_text = self.data.get("question", "");
+        if question_text {
+            # Track questions asked
+            here.last_questions_asked = here.last_questions_asked + [question_text];
+            # Keep only last 10 questions
+            if len(here.last_questions_asked) > 10 {
+                here.last_questions_asked = here.last_questions_asked[-10:];
+            }
+        }
+    } elif self.insight_type == "pattern" {
+        # Store identified patterns
+        pattern = self.data.get("pattern", "");
+        if pattern and pattern not in here.common_sequences {
+            here.common_sequences = here.common_sequences + [pattern];
+        }
+    } elif self.insight_type == "preference" {
+        # Store user preferences
+        pref_key = self.data.get("key", "");
+        pref_value = self.data.get("value", "");
+        if pref_key {
+            here.preferences[pref_key] = pref_value;
+        }
+    }
+    
+    report {
+        "success": True,
+        "total_interactions": here.total_interactions,
+        "message": f"Insights updated ({self.insight_type})"
+    };
+}
+
+# Walker to get user insights for proactive suggestions
+walker get_user_insights {
+    has username: str = "anonymous";
+    
+    can navigate_to_insights with `root entry;
+    can retrieve_insights with user_insights entry;
+}
+
+impl get_user_insights.navigate_to_insights with `root entry {
+    # Find user-specific insights
+    all_insights = [-->](`?user_insights);
+    
+    user_insight = None;
+    for insight in all_insights {
+        if hasattr(insight, 'username') and insight.username == self.username {
+            user_insight = insight;
+            break;
+        }
+    }
+    
+    if user_insight == None {
+        # No insights yet
+        report {
+            "total_interactions": 0,
+            "common_sequences": [],
+            "preferences": {},
+            "last_questions_asked": []
+        };
+        disengage;
+    }
+    
+    visit user_insight;
+}
+
+impl get_user_insights.retrieve_insights with user_insights entry {
+    report {
+        "total_interactions": here.total_interactions,
+        "common_sequences": here.common_sequences,
+        "preferences": here.preferences,
+        "last_questions_asked": here.last_questions_asked,
+        "time_patterns": here.time_patterns
+    };
+}
+
 # Walker to reset the current session graph
 walker reset_session {
     can navigate_to_graph with `root entry;
@@ -650,41 +879,49 @@ impl reset_session.reset_graph with user_graph_data entry {
     };
 }
 
-# NOTE: This function is no longer used for updateTaskGraph
-# Graph operations now use per-user walkers that are called directly
-# from the supervisor walker (see call_supervisor walker below)
-# This function only handles non-graph tools (calendar, emails, GitHub)
-def execute_local_tool(tool_name: str, tool_args: object) -> dict {
-    if tool_name == "getCalendarEvents" {
-        # Filter by date if provided
-        date_filter = tool_args["date"] if "date" in tool_args else "today";
-        # For demo, return all events (in real app, would filter by date)
-        return {"events": SAMPLE_CALENDAR_EVENTS, "query": date_filter};
+# Pattern analysis function
+def analyze_task_patterns(nodes: list, edges: list) -> dict {
+    sequences = [f"{e.get('from', '')} → {e.get('to', '')}" for e in edges if e.get('from') and e.get('to')];
+    return {
+        "sequences": sequences,
+        "totalTasks": len(nodes),
+        "insights": f"You've tracked {len(nodes)} tasks with {len(edges)} connections."
+    };
+}
+
+# Execute local tools (calendar, emails, GitHub, proactive tools)
+def execute_local_tool(tool_name: str, tool_args: object, current_nodes: list = [], current_edges: list = []) -> dict {
+    if tool_name == "analyzeRoutinePattern" {
+        analysis = analyze_task_patterns(current_nodes, current_edges);
+        return {"analysis": analysis, "focus": tool_args.get("focus", "all"), 
+                "message": f"Found {len(analysis['sequences'])} task sequences."};
+    } elif tool_name == "askClarifyingQuestion" {
+        return {"question": tool_args.get("question", ""), "questionType": tool_args.get("questionType", "general"),
+                "relatedTask": tool_args.get("relatedTask", ""), "action": "ask_user", "message": tool_args.get("question", "")};
+    } elif tool_name == "suggestNextActivity" {
+        suggestion = tool_args.get("suggestion", "");
+        reasoning = tool_args.get("reasoning", "");
+        return {"suggestion": suggestion, "reasoning": reasoning, 
+                "message": f"Based on your patterns, I suggest: {suggestion}. {reasoning}"};
+    } elif tool_name == "getCalendarEvents" {
+        return {"events": SAMPLE_CALENDAR_EVENTS, "query": tool_args.get("date", "today")};
     } elif tool_name == "getEmails" {
-        # Filter emails based on parameters
-        filter_type = tool_args["filter"] if "filter" in tool_args else "all";
-        count = tool_args["count"] if "count" in tool_args else 5;
+        filter_type = tool_args.get("filter", "all");
+        count = tool_args.get("count", 5);
         emails = SAMPLE_EMAILS[:count];
-        if filter_type == "unread" {
-            emails = [e for e in SAMPLE_EMAILS if "unread" in e and e["unread"]][:count];
-        } elif filter_type == "important" {
-            emails = [e for e in SAMPLE_EMAILS if "important" in e and e["important"]][:count];
+        if filter_type != "all" {
+            emails = [e for e in SAMPLE_EMAILS if e.get(filter_type, False)][:count];
         }
         return {"emails": emails, "filter": filter_type};
     } elif tool_name == "getGitHubIssues" {
-        # Filter GitHub issues
-        filter_type = tool_args["filter"] if "filter" in tool_args else "all";
-        issue_type = tool_args["type"] if "type" in tool_args else "all";
+        filter_type = tool_args.get("filter", "all");
         issues = SAMPLE_GITHUB_ISSUES;
-        if filter_type == "open" {
-            issues = [i for i in issues if "state" in i and i["state"] == "open"];
-        } elif filter_type == "assigned" {
-            issues = [i for i in issues if "assignee" in i and i["assignee"] == "me"];
+        if filter_type != "all" {
+            issues = [i for i in SAMPLE_GITHUB_ISSUES if i.get("state") == filter_type or i.get("assignee") == "me"];
         }
         return {"issues": issues, "filter": filter_type};
-    } else {
-        return {"result": True};
     }
+    return {"result": True};
 }
 
 # Helper function to extract text from OpenAI Responses API response
@@ -744,18 +981,32 @@ walker call_supervisor {
             # Note: Skipping routines for now due to walker spawn issues
             # TODO: Fix walker result handling
 
-            # Load user's current graph state by directly traversing the graph
+            # Load user's current graph state
             current_nodes = [];
             current_edges = [];
             last_task = "Start";
-            
-            # Find user-specific graph data
             all_graphs = [-->](`?user_graph_data);
             for graph in all_graphs {
                 if hasattr(graph, 'username') and graph.username == self.username {
                     current_nodes = graph.nodes if hasattr(graph, 'nodes') else [];
-                    current_edges = graph.edges if hasattr(graph, 'edge') else [];
+                    current_edges = graph.edges if hasattr(graph, 'edges') else [];
                     last_task = graph.last_task if hasattr(graph, 'last_task') else "Start";
+                    break;
+                }
+            }
+            
+            # Load user insights for proactive behavior
+            user_insights_data = {"total_interactions": 0, "common_sequences": [], 
+                                 "preferences": {}, "last_questions_asked": []};
+            all_insights = [-->](`?user_insights);
+            for insight in all_insights {
+                if hasattr(insight, 'username') and insight.username == self.username {
+                    user_insights_data = {
+                        "total_interactions": insight.total_interactions if hasattr(insight, 'total_interactions') else 0,
+                        "common_sequences": insight.common_sequences if hasattr(insight, 'common_sequences') else [],
+                        "preferences": insight.preferences if hasattr(insight, 'preferences') else {},
+                        "last_questions_asked": insight.last_questions_asked if hasattr(insight, 'last_questions_asked') else []
+                    };
                     break;
                 }
             }
@@ -783,6 +1034,19 @@ walker call_supervisor {
                         Existing Edges: {dumps(current_edges)}
                         Last Task (most recent): {last_task}
                         {past_routines_context}
+                        
+                        ==== User Insights (For Proactive Behavior) ====
+                        Total Interactions: {user_insights_data["total_interactions"]}
+                        Identified Patterns: {dumps(user_insights_data["common_sequences"])}
+                        Questions Asked Recently: {dumps(user_insights_data["last_questions_asked"])}
+                        User Preferences: {dumps(user_insights_data["preferences"])}
+                        
+                        PROACTIVE GUIDANCE:
+                        - If you've had 3+ interactions, start asking clarifying questions about their routine
+                        - If patterns are emerging (repeated sequences), analyze and suggest optimizations
+                        - Avoid asking questions you've already asked (check Questions Asked Recently)
+                        - Suggest next activities when user seems idle or uncertain
+                        - Be genuinely curious about their habits and goals
 
                         IMPORTANT: 
                         - When adding a new task, check the Existing Nodes list first
@@ -801,96 +1065,126 @@ walker call_supervisor {
             output_items = data["output"] if "output" in data else [];
             
             # Process tool calls iteratively (up to 5 rounds)
-            max_iterations = 5;
             iteration = 0;
-            
-            while iteration < max_iterations {
-                # Check for function calls
-                function_calls = [];
-                for item in output_items {
-                    item_type = item["type"] if "type" in item else "";
-                    if item_type == "function_call" {
-                        function_calls = function_calls + [item];
-                    }
-                }
-
-                # Count function calls
-                fc_count = 0;
-                for _ in function_calls {
-                    fc_count = fc_count + 1;
-                }
-
-                if fc_count == 0 {
-                    # No more function calls - extract final response
+            while iteration < 5 {
+                # Extract function calls
+                function_calls = [item for item in output_items if item.get("type") == "function_call"];
+                if len(function_calls) == 0 {
                     break;
                 }
                 
                 # Execute function calls
                 for tool_call in function_calls {
-                    f_name = tool_call["name"] if "name" in tool_call else "";
-                    f_args_str = tool_call["arguments"] if "arguments" in tool_call else "{}";
+                    f_name = tool_call.get("name", "");
+                    f_args_str = tool_call.get("arguments", "{}");
                     f_args = loads(f_args_str);
 
-                    # Execute the tool - use per-user walker for updateTaskGraph
                     tool_output = {};
                     if f_name == "updateTaskGraph" {
-                        # Use per-user walker to update the graph
-                        task_name = f_args["taskName"] if "taskName" in f_args else "";
-                        previous_task = f_args["previousTask"] if "previousTask" in f_args else "Start";
-                        edge_label = f_args["edgeLabel"] if "edgeLabel" in f_args else "";
+                        task_name = f_args.get("taskName", "");
+                        previous_task = f_args.get("previousTask", "Start");
+                        edge_label = f_args.get("edgeLabel", "");
 
-                        # Spawn walker - pass username for isolation
-                        here spawn update_task_graph(
-                            task_name=task_name,
-                            previous_task=previous_task,
-                            edge_label=edge_label,
-                            username=self.username
-                        );
-                        # Return success - the walker handles the actual update
-                        tool_output = {
-                            "success": True,
-                            "message": f"Updated graph with task: {task_name}"
-                        };
+                        # Get or create user's graph
+                        all_graphs = [-->](`?user_graph_data);
+                        user_graph = None;
+                        for graph in all_graphs {
+                            if hasattr(graph, 'username') and graph.username == self.username {
+                                user_graph = graph;
+                                break;
+                            }
+                        }
+                        if user_graph is None {
+                            user_graph = here ++> user_graph_data(username=self.username);
+                        }
+                        
+                        # Update graph
+                        if previous_task == "Start" and "Start" not in user_graph.nodes {
+                            user_graph.nodes = user_graph.nodes + ["Start"];
+                        }
+                        if task_name and task_name not in user_graph.nodes {
+                            user_graph.nodes = user_graph.nodes + [task_name];
+                        }
+                        if task_name and previous_task and not edge_exists(user_graph.edges, previous_task, task_name) {
+                            new_edge = {"from": previous_task, "to": task_name};
+                            if edge_label {
+                                new_edge["label"] = edge_label;
+                            }
+                            user_graph.edges = user_graph.edges + [new_edge];
+                        }
+                        user_graph.last_task = task_name;
+                        current_nodes = user_graph.nodes;
+                        current_edges = user_graph.edges;
+                        tool_output = {"success": True, "message": f"Updated graph with task: {task_name}"};
+                        
+                    } elif f_name == "askClarifyingQuestion" {
+                        # Track question in user insights
+                        all_insights = [-->](`?user_insights);
+                        user_insight = None;
+                        for insight in all_insights {
+                            if hasattr(insight, 'username') and insight.username == self.username {
+                                user_insight = insight;
+                                break;
+                            }
+                        }
+                        if user_insight is None {
+                            user_insight = here ++> user_insights(username=self.username);
+                        }
+                        user_insight.total_interactions = user_insight.total_interactions + 1;
+                        question_text = f_args.get("question", "");
+                        if question_text {
+                            user_insight.last_questions_asked = (user_insight.last_questions_asked + [question_text])[-10:];
+                        }
+                        tool_output = execute_local_tool(f_name, f_args, current_nodes, current_edges);
+                        
+                    } elif f_name == "analyzeRoutinePattern" {
+                        tool_output = execute_local_tool(f_name, f_args, current_nodes, current_edges);
+                        # Track identified patterns
+                        if "analysis" in tool_output and "sequences" in tool_output["analysis"] {
+                            all_insights = [-->](`?user_insights);
+                            user_insight = None;
+                            for insight in all_insights {
+                                if hasattr(insight, 'username') and insight.username == self.username {
+                                    user_insight = insight;
+                                    break;
+                                }
+                            }
+                            if user_insight is None {
+                                user_insight = here ++> user_insights(username=self.username);
+                            }
+                            for seq in tool_output["analysis"]["sequences"] {
+                                if seq not in user_insight.common_sequences {
+                                    user_insight.common_sequences = user_insight.common_sequences + [seq];
+                                }
+                            }
+                        }
                     } else {
-                        # Use existing function for other tools
-                        tool_output = execute_local_tool(f_name, f_args);
+                        tool_output = execute_local_tool(f_name, f_args, current_nodes, current_edges);
                     }
 
-                    # Add function call and result to the request body
+                    # Add function call and result to request body
                     call_id = tool_call["call_id"] if "call_id" in tool_call else "";
-                    request_body["input"] = request_body["input"] + [{
-                        "type": "function_call",
-                        "call_id": call_id,
-                        "name": f_name,
-                        "arguments": f_args_str
-                    }];
-                    request_body["input"] = request_body["input"] + [{
-                        "type": "function_call_output",
-                        "call_id": call_id,
-                        "output": dumps(tool_output)
-                    }];
+                    request_body["input"] = request_body["input"] + [
+                        {"type": "function_call", "call_id": call_id, "name": f_name, "arguments": f_args_str},
+                        {"type": "function_call_output", "call_id": call_id, "output": dumps(tool_output)}
+                    ];
                 }
                 
                 # Make follow-up request
                 data = make_responses_api_call(request_body, api_key);
-                output_items = data["output"] if "output" in data else [];
+                output_items = data.get("output", []);
                 iteration = iteration + 1;
             }
             
-            # Extract final text
+            # Extract and return final response
             final_response = extract_response_text(output_items);
-
-            # TODO: Get updated graph state - fix walker spawn result handling
-            # For now, return empty graph data since updates happen in update_task_graph walker
-            report {
-                "response": final_response,
-                "dotCode": "",
-                "graphNodes": [],
-                "graphEdges": []
-            };
+            report {"response": final_response, "dotCode": "", "graphNodes": [], "graphEdges": []};
             
         } except HTTPError as e {
-            error_msg = e.read().decode('utf-8') if hasattr(e, 'read') else str(e);
+            error_msg = str(e);
+            if hasattr(e, 'read') {
+                error_msg = e.read().decode('utf-8');
+            }
             report {"error": f"HTTP Error: {e.code}", "details": error_msg};
         } except URLError as e {
             report {"error": "URL Error", "details": str(e.reason)};
