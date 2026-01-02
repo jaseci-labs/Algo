@@ -579,10 +579,20 @@ impl get_task_graph.navigate_to_graph with `root entry {
 impl get_task_graph.get_graph with user_graph_data entry {
     # Generate DOT code
     dot_code = generate_dot_code(here.nodes, here.edges);
+    
+    # Convert to plain lists for serialization
+    nodes_list = [];
+    for n in here.nodes {
+        nodes_list = nodes_list + [n];
+    }
+    edges_list = [];
+    for e in here.edges {
+        edges_list = edges_list + [e];
+    }
 
     report {
-        "nodes": here.nodes,
-        "edges": here.edges,
+        "nodes": nodes_list,
+        "edges": edges_list,
         "dotCode": dot_code,
         "lastTask": here.last_task
     };
@@ -776,25 +786,39 @@ impl update_user_insights.update_insights with user_insights entry {
     
     # Update based on insight type
     if self.insight_type == "question" {
-        question_text = self.data.get("question", "");
+        question_text = self.data["question"] if "question" in self.data else "";
         if question_text {
             # Track questions asked
             here.last_questions_asked = here.last_questions_asked + [question_text];
-            # Keep only last 10 questions
-            if len(here.last_questions_asked) > 10 {
-                here.last_questions_asked = here.last_questions_asked[-10:];
+            # Keep only last 10 questions (count manually)
+            q_count = 0;
+            for _ in here.last_questions_asked {
+                q_count = q_count + 1;
+            }
+            if q_count > 10 {
+                # Keep last 10
+                new_questions = [];
+                skip_count = q_count - 10;
+                current = 0;
+                for q in here.last_questions_asked {
+                    if current >= skip_count {
+                        new_questions = new_questions + [q];
+                    }
+                    current = current + 1;
+                }
+                here.last_questions_asked = new_questions;
             }
         }
     } elif self.insight_type == "pattern" {
         # Store identified patterns
-        pattern = self.data.get("pattern", "");
+        pattern = self.data["pattern"] if "pattern" in self.data else "";
         if pattern and pattern not in here.common_sequences {
             here.common_sequences = here.common_sequences + [pattern];
         }
     } elif self.insight_type == "preference" {
         # Store user preferences
-        pref_key = self.data.get("key", "");
-        pref_value = self.data.get("value", "");
+        pref_key = self.data["key"] if "key" in self.data else "";
+        pref_value = self.data["value"] if "value" in self.data else "";
         if pref_key {
             here.preferences[pref_key] = pref_value;
         }
@@ -881,11 +905,30 @@ impl reset_session.reset_graph with user_graph_data entry {
 
 # Pattern analysis function
 def analyze_task_patterns(nodes: list, edges: list) -> dict {
-    sequences = [f"{e.get('from', '')} → {e.get('to', '')}" for e in edges if e.get('from') and e.get('to')];
+    # Build sequences manually
+    sequences = [];
+    for e in edges {
+        from_val = e["from"] if "from" in e else "";
+        to_val = e["to"] if "to" in e else "";
+        if from_val and to_val {
+            sequences = sequences + [f"{from_val} → {to_val}"];
+        }
+    }
+    
+    # Count manually
+    node_count = 0;
+    for _ in nodes {
+        node_count = node_count + 1;
+    }
+    edge_count = 0;
+    for _ in edges {
+        edge_count = edge_count + 1;
+    }
+    
     return {
         "sequences": sequences,
-        "totalTasks": len(nodes),
-        "insights": f"You've tracked {len(nodes)} tasks with {len(edges)} connections."
+        "totalTasks": node_count,
+        "insights": f"You've tracked {node_count} tasks with {edge_count} connections."
     };
 }
 
@@ -893,31 +936,71 @@ def analyze_task_patterns(nodes: list, edges: list) -> dict {
 def execute_local_tool(tool_name: str, tool_args: object, current_nodes: list = [], current_edges: list = []) -> dict {
     if tool_name == "analyzeRoutinePattern" {
         analysis = analyze_task_patterns(current_nodes, current_edges);
-        return {"analysis": analysis, "focus": tool_args.get("focus", "all"), 
-                "message": f"Found {len(analysis['sequences'])} task sequences."};
+        focus_val = tool_args["focus"] if "focus" in tool_args else "all";
+        seq_count = 0;
+        for _ in analysis["sequences"] {
+            seq_count = seq_count + 1;
+        }
+        return {"analysis": analysis, "focus": focus_val, 
+                "message": f"Found {seq_count} task sequences."};
     } elif tool_name == "askClarifyingQuestion" {
-        return {"question": tool_args.get("question", ""), "questionType": tool_args.get("questionType", "general"),
-                "relatedTask": tool_args.get("relatedTask", ""), "action": "ask_user", "message": tool_args.get("question", "")};
+        q_val = tool_args["question"] if "question" in tool_args else "";
+        q_type = tool_args["questionType"] if "questionType" in tool_args else "general";
+        rel_task = tool_args["relatedTask"] if "relatedTask" in tool_args else "";
+        return {"question": q_val, "questionType": q_type,
+                "relatedTask": rel_task, "action": "ask_user", "message": q_val};
     } elif tool_name == "suggestNextActivity" {
-        suggestion = tool_args.get("suggestion", "");
-        reasoning = tool_args.get("reasoning", "");
+        suggestion = tool_args["suggestion"] if "suggestion" in tool_args else "";
+        reasoning = tool_args["reasoning"] if "reasoning" in tool_args else "";
         return {"suggestion": suggestion, "reasoning": reasoning, 
                 "message": f"Based on your patterns, I suggest: {suggestion}. {reasoning}"};
     } elif tool_name == "getCalendarEvents" {
-        return {"events": SAMPLE_CALENDAR_EVENTS, "query": tool_args.get("date", "today")};
+        date_val = tool_args["date"] if "date" in tool_args else "today";
+        return {"events": SAMPLE_CALENDAR_EVENTS, "query": date_val};
     } elif tool_name == "getEmails" {
-        filter_type = tool_args.get("filter", "all");
-        count = tool_args.get("count", 5);
-        emails = SAMPLE_EMAILS[:count];
+        filter_type = tool_args["filter"] if "filter" in tool_args else "all";
+        count = tool_args["count"] if "count" in tool_args else 5;
+        emails = [];
+        idx = 0;
+        for e in SAMPLE_EMAILS {
+            if idx < count {
+                emails = emails + [e];
+                idx = idx + 1;
+            }
+        }
         if filter_type != "all" {
-            emails = [e for e in SAMPLE_EMAILS if e.get(filter_type, False)][:count];
+            filtered = [];
+            f_idx = 0;
+            for e in SAMPLE_EMAILS {
+                if f_idx < count {
+                    has_filter = filter_type in e and e[filter_type];
+                    if has_filter {
+                        filtered = filtered + [e];
+                        f_idx = f_idx + 1;
+                    }
+                }
+            }
+            emails = filtered;
         }
         return {"emails": emails, "filter": filter_type};
     } elif tool_name == "getGitHubIssues" {
-        filter_type = tool_args.get("filter", "all");
+        filter_type = tool_args["filter"] if "filter" in tool_args else "all";
         issues = SAMPLE_GITHUB_ISSUES;
         if filter_type != "all" {
-            issues = [i for i in SAMPLE_GITHUB_ISSUES if i.get("state") == filter_type or i.get("assignee") == "me"];
+            filtered = [];
+            for i in SAMPLE_GITHUB_ISSUES {
+                matches = False;
+                if "state" in i and i["state"] == filter_type {
+                    matches = True;
+                }
+                if "assignee" in i and i["assignee"] == "me" {
+                    matches = True;
+                }
+                if matches {
+                    filtered = filtered + [i];
+                }
+            }
+            issues = filtered;
         }
         return {"issues": issues, "filter": filter_type};
     }
@@ -988,8 +1071,17 @@ walker call_supervisor {
             all_graphs = [-->](`?user_graph_data);
             for graph in all_graphs {
                 if hasattr(graph, 'username') and graph.username == self.username {
-                    current_nodes = graph.nodes if hasattr(graph, 'nodes') else [];
-                    current_edges = graph.edges if hasattr(graph, 'edges') else [];
+                    # Convert to plain lists
+                    if hasattr(graph, 'nodes') {
+                        for n in graph.nodes {
+                            current_nodes = current_nodes + [n];
+                        }
+                    }
+                    if hasattr(graph, 'edges') {
+                        for e in graph.edges {
+                            current_edges = current_edges + [e];
+                        }
+                    }
                     last_task = graph.last_task if hasattr(graph, 'last_task') else "Start";
                     break;
                 }
@@ -1081,9 +1173,9 @@ walker call_supervisor {
 
                     tool_output = {};
                     if f_name == "updateTaskGraph" {
-                        task_name = f_args.get("taskName", "");
-                        previous_task = f_args.get("previousTask", "Start");
-                        edge_label = f_args.get("edgeLabel", "");
+                        task_name = f_args["taskName"] if "taskName" in f_args else "";
+                        previous_task = f_args["previousTask"] if "previousTask" in f_args else "Start";
+                        edge_label = f_args["edgeLabel"] if "edgeLabel" in f_args else "";
 
                         # Get or create user's graph
                         all_graphs = [-->](`?user_graph_data);
@@ -1131,7 +1223,7 @@ walker call_supervisor {
                             user_insight = here ++> user_insights(username=self.username);
                         }
                         user_insight.total_interactions = user_insight.total_interactions + 1;
-                        question_text = f_args.get("question", "");
+                        question_text = f_args["question"] if "question" in f_args else "";
                         if question_text {
                             user_insight.last_questions_asked = (user_insight.last_questions_asked + [question_text])[-10:];
                         }
