@@ -40,12 +40,23 @@ with entry {
 
 glob SUPERVISOR_INSTRUCTIONS = """You are the backend intelligence for Algo, a personal AI assistant. You process requests from the voice interface and have access to the user's personal tools and data.
 
-# Primary Task: Task Graph Generation
-Your MOST IMPORTANT job is to track the user's tasks and activities as a directed graph.
+# Primary Task: Task Graph Generation (Decision Tree)
+Your MOST IMPORTANT job is to track the user's tasks and activities as a DECISION TREE graph.
 - When the user mentions doing something NEW (a task, activity, or action), you MUST call updateTaskGraph
 - Extract the task name as a short label (2-4 words, CamelCase, no spaces)
 - Connect it to the previous task to show the sequence of activities
 - Examples: "I'm making coffee" → MakeCoffee, "going to wash my face" → WashFace, "checking emails" → CheckEmails
+
+# CRITICAL: Decision Tree / Branching Support
+When the user describes conditional logic (if/else, either/or), create MULTIPLE tasks from the same parent:
+- User: "I'll check if family is awake. If they are, I'll make coffee for them, otherwise just for myself"
+  → Call updateTaskGraph TWICE:
+  1. taskName="MakeCoffeeForFamily", previousTask="CheckIfFamilyIsAwake", edgeLabel="if yes"
+  2. taskName="MakeCoffeeForMyself", previousTask="CheckIfFamilyIsAwake", edgeLabel="if no"
+- User: "After lunch, I might go to gym or go home"
+  → Call updateTaskGraph TWICE:
+  1. taskName="GoToGym", previousTask="GoToLunch", edgeLabel="option 1"
+  2. taskName="GoHome", previousTask="GoToLunch", edgeLabel="option 2"
 
 # CRITICAL: Determining the Previous Task
 When calling updateTaskGraph, pay CLOSE ATTENTION to what the user says:
@@ -103,7 +114,7 @@ glob SUPERVISOR_TOOLS = [
                 },
                 "edgeLabel": {
                     "type": "string",
-                    "description": "Optional label for the edge (e.g., 'then', 'after', 'next'). Leave empty for no label."
+                    "description": "Edge label for branching/conditions (e.g., 'if yes', 'if no', 'option 1', 'option 2', 'then', 'or'). Use descriptive labels for decision points."
                 }
             },
             "required": ["taskName", "previousTask"],
