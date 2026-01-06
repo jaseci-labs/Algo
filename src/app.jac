@@ -621,21 +621,7 @@ Remember: You're not just a tool, you're a companion helping users build better 
 """;
 
 
-# ============================================
-# Helper Functions for User Isolation
-# ============================================
 
-# Helper function to get the current authenticated user's ID
-# For now, this returns "anonymous" - will be enhanced to get real user ID from context
-def get_user_id() -> str {
-    # TODO: Access user ID from jac-scale authentication context
-    # This needs to be implemented based on jac-scale's auth system
-    return "anonymous";
-}
-
-# ============================================
-# Backend Walkers
-# ============================================
 
 # Walker to fetch OpenAI Realtime session token
 walker get_session_token {
@@ -685,12 +671,6 @@ walker get_session_token {
         }
     }
 }
-
-
-
-# REMOVED: Global graph state - now stored per-user in nodes
-# Users have isolated graph data attached to their root node
-
 
 # Helper function to generate DOT code from node and edge lists
 def generate_dot_code_from_lists(node_list: list, edge_list: list) -> str {
