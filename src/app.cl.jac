@@ -264,11 +264,15 @@ def:pub MainApp() -> any {
 
         # Extract response - check both ways to access the property
         next_resp = "";
-        if "response" in response_data {
-            next_resp = response_data["response"];
-            console.log("Got response via bracket notation:", next_resp);
+        if response_data {
+            if response_data["response"] != None && response_data["response"] != undefined {
+                next_resp = response_data["response"];
+            } elif response_data.response != None && response_data.response != undefined {
+                next_resp = response_data.response;
+            } else {
+                next_resp = "I apologize, I couldn't process that properly.";
+            }
         } else {
-            console.log("No 'response' key found in response_data!");
             next_resp = "I apologize, I couldn't get a response.";
         }
 
@@ -628,12 +632,18 @@ def:pub MainApp() -> any {
             console.log("Supervisor response:", response);
             
             if response && response.reports && response.reports.length > 0 {
-                result = response.reports[0];
-                console.log("Result:", result);
-                if result && result.response {
-                    updateTranscriptItem(assistantItemId, result.response);
-                } elif result && result.error {
-                    updateTranscriptItem(assistantItemId, "Error: " + result.error);
+                # Get the LAST report from call_supervisor
+                finalReport = response.reports[response.reports.length - 1];
+                
+                # Display response or error
+                if finalReport && finalReport.response {
+                    updateTranscriptItem(assistantItemId, finalReport.response);
+                } elif finalReport && finalReport["response"] {
+                    updateTranscriptItem(assistantItemId, finalReport["response"]);
+                } elif finalReport && finalReport.error {
+                    updateTranscriptItem(assistantItemId, "Error: " + finalReport.error);
+                } elif finalReport && finalReport["error"] {
+                    updateTranscriptItem(assistantItemId, "Error: " + finalReport["error"]);
                 } else {
                     updateTranscriptItem(assistantItemId, "Sorry, I couldn't process that request.");
                 }
