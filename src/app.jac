@@ -1,35 +1,18 @@
-# Algo - Personal AI Assistant with Voice Interface
-# Implements: Voice Agent (realtime) -> Backend Intelligence (gpt-4.1) -> Tools
-# Calendar, Email, GitHub integration
-
 import from os { getenv }
 import from urllib.request { Request, urlopen }
 import from urllib.error { URLError, HTTPError }
 import from json { loads, dumps }
 import from dotenv { load_dotenv }
 
-# Import data models - define nodes directly in this file for now
-# import from .models { user_graph_data, user_routines }
-
-# ============================================
-# OSP Graph Nodes and Edges
-# ============================================
-
-# Task state node - represents a single task in the user's workflow
 node TaskState {
     has task_name: str;
     has created_at: str = "";
 }
 
-# Task flow edge - represents the relationship/flow between tasks
 edge TaskFlow {
     has label: str = "";  # "then", "if yes", "option 1", etc.
 }
 
-# Container node to hold a user's task graph state
-# NOTE: With jac-scale authentication, each user automatically gets their own root node (root_id)
-# Walkers called with auth token run on that user's root, providing automatic isolation
-# TEMP: Added username field for manual isolation with jac serve (remove when using jac scale)
 node user_graph_data {
     has username: str = "anonymous";  # User identifier
     has last_task: str = "Start";
@@ -43,14 +26,9 @@ node user_routines {
     has routines: dict = {};
 }
 
-# Load .env from project root (auto-discovers .env in cwd or parent dirs)
 with entry {
     load_dotenv();
 }
-
-# ============================================
-# Supervisor Agent Instructions
-# ============================================
 
 glob SUPERVISOR_INSTRUCTIONS = """You are Algo's intelligent backend - the "brain" that helps users track their daily activities and build better routines. Think of yourself as a thoughtful companion who observes, learns, and genuinely helps users optimize their lives.
 
