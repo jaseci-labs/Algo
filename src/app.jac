@@ -11,16 +11,30 @@ import from dotenv { load_dotenv }
 # Import data models - define nodes directly in this file for now
 # import from .models { user_graph_data, user_routines }
 
+# ============================================
+# OSP Graph Nodes and Edges
+# ============================================
+
+# Task state node - represents a single task in the user's workflow
+node TaskState {
+    has task_name: str;
+    has created_at: str = "";
+}
+
+# Task flow edge - represents the relationship/flow between tasks
+edge TaskFlow {
+    has label: str = "";  # "then", "if yes", "option 1", etc.
+}
+
 # Container node to hold a user's task graph state
 # NOTE: With jac-scale authentication, each user automatically gets their own root node (root_id)
 # Walkers called with auth token run on that user's root, providing automatic isolation
 # TEMP: Added username field for manual isolation with jac serve (remove when using jac scale)
 node user_graph_data {
     has username: str = "anonymous";  # User identifier
-    has nodes: list = ["Start"];
-    has edges: list = [];
     has last_task: str = "Start";
     has saved_routines: dict = {};  # Store saved routines here
+    # Task nodes are now connected via OSP: user_graph_data ++> TaskState("Start") ++> TaskState("MakeCoffee")
 }
 
 # Container for saved routines
@@ -700,7 +714,48 @@ walker get_session_token {
 # Users have isolated graph data attached to their root node
 
 
-# Helper function to generate DOT code from graph state
+# Helper function to generate DOT code from node and edge lists
+def generate_dot_code_from_lists(node_list: list, edge_list: list) -> str {
+    # Check if graph is empty
+    if len(node_list) == 0 {
+        return "";
+    }
+
+    lines = ["digraph TaskGraph {"];
+    lines.append("  rankdir=TB;");
+    lines.append("  node [shape=box, style=rounded, fontname=\"Arial\"];");
+    lines.append("  edge [fontname=\"Arial\", fontsize=10];");
+    lines.append("");
+
+    # Add nodes with styling
+    for task_node in node_list {
+        if task_node == "Start" {
+            lines.append("  " + task_node + " [shape=circle, style=filled, fillcolor=\"#22c55e\", fontcolor=white];");
+        } else {
+            lines.append("  " + task_node + " [style=\"rounded,filled\", fillcolor=\"#3b82f6\", fontcolor=white];");
+        }
+    }
+
+    lines.append("");
+
+    # Add edges
+    for conn in edge_list {
+        from_task = conn.get("from", "");
+        to_task = conn.get("to", "");
+        conn_label = conn.get("label", "");
+        if conn_label {
+            lines.append("  " + from_task + " -> " + to_task + " [label=\"" + conn_label + "\"];");
+        } else {
+            lines.append("  " + from_task + " -> " + to_task + ";");
+        }
+    }
+
+    lines.append("}");
+    return "\n".join(lines);
+}
+
+# Legacy helper function - kept for backward compatibility during migration
+# TODO: Remove once all walkers are updated to use OSP
 def generate_dot_code(node_list: list, edge_list: list) -> str {
     list_size = 0;
     for _ in node_list {
@@ -748,6 +803,67 @@ def generate_dot_code(node_list: list, edge_list: list) -> str {
 # Per-User Graph Walkers
 # ============================================
 
+# Helper walker to traverse the graph and collect node/edge information
+walker traverse_graph {
+    has nodes_list: list = [];
+    has edges_list: list = [];
+    has visited: dict = {};
+
+    can traverse_node with TaskState entry {
+        # Get this node's name
+        node_name = here.task_name;
+
+        # Debug logging
+        print(f"[TRAVERSE] Visiting node: {node_name}");
+
+        # Skip if already visited
+        if node_name in self.visited {
+            print(f"[TRAVERSE] Already visited {node_name}, skipping");
+            disengage;
+        }
+
+        self.visited[node_name] = True;
+        self.nodes_list.append(node_name);
+
+        # Get all TaskFlow edges from this node
+        all_edges = [edge here->:TaskFlow:->];
+        print(f"[TRAVERSE] Node {node_name} has {len(all_edges)} TaskFlow edges");
+
+        # Get direct successors (only immediate children)
+        successors = [-->](`?TaskState);
+        print(f"[TRAVERSE] Found {len(successors)} successors from {node_name}");
+
+        # Match edges to successors by index
+        # In Jac OSP, the order of edges typically matches the order of successors
+        successor_idx = 0;
+        for next_node in successors {
+            if hasattr(next_node, 'task_name') {
+                print(f"[TRAVERSE]   Successor [{successor_idx}]: {next_node.task_name}");
+
+                # Get the corresponding edge label if available
+                edge_label = "";
+                if successor_idx < len(all_edges) {
+                    e = all_edges[successor_idx];
+                    edge_label = e.label if hasattr(e, 'label') else "";
+                }
+
+                # Add this edge to our list
+                self.edges_list.append({
+                    "from": node_name,
+                    "to": next_node.task_name,
+                    "label": edge_label
+                });
+                print(f"[TRAVERSE]   Added edge: {node_name} --[{edge_label}]--> {next_node.task_name}");
+
+                successor_idx = successor_idx + 1;
+
+                # Continue traversing
+                visit next_node;
+            }
+        }
+    }
+}
+
 # Walker to initialize user's graph container
 # When called with authentication token, runs on user's root node
 walker init_user_graph {
@@ -756,7 +872,12 @@ walker init_user_graph {
 
 impl init_user_graph.initialize with `root entry {
     visit [-->](`?user_graph_data) else {
+        # Create user graph container
         graph_cont = here ++> user_graph_data();
+
+        # Create initial "Start" TaskState node connected to the graph
+        start_node = TaskState(task_name="Start");
+        graph_cont ++> start_node;
     }
     visit [-->](`?user_routines) else {
         routine_cont = here ++> user_routines();
@@ -796,50 +917,109 @@ impl update_task_graph.navigate_to_graph with `root entry {
 }
 
 impl update_task_graph.update_graph with user_graph_data entry {
-    # Add Start task if this is the first task
-    if self.previous_task == "Start" and "Start" not in here.nodes {
-        here.nodes = here.nodes + ["Start"];
+    # Find or create the previous task node
+    prev_node = None;
+    all_task_nodes = [-->](`?TaskState);
+
+    for node in all_task_nodes {
+        if hasattr(node, 'task_name') and node.task_name == self.previous_task {
+            prev_node = node;
+            break;
+        }
     }
 
-    # Add the new task if not already present
-    if self.task_name and self.task_name not in here.nodes {
-        here.nodes = here.nodes + [self.task_name];
+    # If previous task doesn't exist, create it (shouldn't happen normally, but safe fallback)
+    if prev_node == None {
+        print(f"[DEBUG CREATE] Creating prev_node: {self.previous_task}");
+        prev_node = TaskState(task_name=self.previous_task);
+        # Connect ALL nodes to user_graph_data to anchor them in the graph
+        # The TaskFlow edges will represent the actual workflow relationships
+        here ++> prev_node;
+        print(f"[DEBUG CREATE] Connected {self.previous_task} to user_graph_data");
     }
 
-    # Add connection from previous to current (check for duplicates first)
-    if self.task_name and self.previous_task {
-        connection_exists = False;
-        for existing_conn in here.edges {
-            from_val = existing_conn["from"] if "from" in existing_conn else "";
-            to_val = existing_conn["to"] if "to" in existing_conn else "";
-            if from_val == self.previous_task and to_val == self.task_name {
-                connection_exists = True;
-                break;
-            }
+    # Find or create the new task node
+    new_node = None;
+    for node in all_task_nodes {
+        if hasattr(node, 'task_name') and node.task_name == self.task_name {
+            new_node = node;
+            break;
         }
+    }
 
-        # Only add if connection doesn't exist
-        if not connection_exists {
-            new_conn = {"from": self.previous_task, "to": self.task_name};
-            if self.edge_label {
-                new_conn["label"] = self.edge_label;
-            }
-            here.edges = here.edges + [new_conn];
-        }
+    if new_node == None {
+        # Create new task node
+        print(f"[DEBUG CREATE] Creating new_node: {self.task_name}");
+        import from datetime { datetime }
+        new_node = TaskState(
+            task_name=self.task_name,
+            created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        );
+        # Connect to user_graph_data to anchor it in the graph
+        # The TaskFlow edge will be created below to show the workflow
+        here ++> new_node;
+        print(f"[DEBUG CREATE] Connected {self.task_name} to user_graph_data");
+    }
+
+    # For branching logic (multiple paths from one node), we always create the edge
+    # Jac OSP supports multiple edges from one node to different nodes
+    # NOTE: We're not checking for duplicates here - each call creates a new edge
+    # This is intentional to support branching workflows (if/else, options, etc.)
+
+    # Always create the edge to support branching
+    if True {
+        print(f"[DEBUG EDGE] Creating edge: {self.previous_task} --[{self.edge_label}]--> {self.task_name}");
+        print(f"[DEBUG EDGE] prev_node type: {type(prev_node)}, new_node type: {type(new_node)}");
+        prev_node +>:TaskFlow(label=self.edge_label):+> new_node;
+        print(f"[DEBUG EDGE] Edge created successfully");
+
+        # Verify the edge was created
+        verify_edges = [edge prev_node->:TaskFlow:->];
+        print(f"[DEBUG EDGE] prev_node now has {len(verify_edges)} TaskFlow edges");
     }
 
     # Update last task
     here.last_task = self.task_name;
 
-    # Generate updated DOT code
-    dot_code = generate_dot_code(here.nodes, here.edges);
+    # Use helper walker to traverse the graph and collect structure
+    # Find the "Start" node to begin traversal
+    all_task_nodes = [-->](`?TaskState);
+    print(f"[DEBUG] Found {len(all_task_nodes)} TaskState nodes connected to user_graph_data");
+
+    start_node = None;
+    for node in all_task_nodes {
+        if hasattr(node, 'task_name') {
+            print(f"[DEBUG]   Node: {node.task_name}");
+            if node.task_name == "Start" {
+                start_node = node;
+            }
+        }
+    }
+
+    node_list = [];
+    edge_list = [];
+
+    if start_node != None {
+        print(f"[DEBUG] Starting traversal from Start node");
+        # Spawn walker at the Start node
+        traverser = start_node spawn traverse_graph();
+
+        # Get the collected node and edge lists from the walker
+        node_list = traverser.nodes_list;
+        edge_list = traverser.edges_list;
+    } else {
+        print(f"[DEBUG] WARNING: Start node not found!");
+    }
+
+    # Generate DOT code
+    dot_code = generate_dot_code_from_lists(node_list, edge_list);
 
     report {
         "success": True,
         "message": f"Added task '{self.task_name}' connected from '{self.previous_task}'",
         "dotCode": dot_code,
-        "nodes": here.nodes,
-        "edges": here.edges
+        "nodes": node_list,
+        "edges": edge_list
     };
 }
 
@@ -879,12 +1059,42 @@ impl get_task_graph.navigate_to_graph with `root entry {
 }
 
 impl get_task_graph.get_graph with user_graph_data entry {
+    # Use helper walker to traverse the graph
+    # Find the "Start" node to begin traversal
+    all_task_nodes = [-->](`?TaskState);
+    print(f"[DEBUG GET_GRAPH] Found {len(all_task_nodes)} TaskState nodes connected to user_graph_data");
+
+    start_node = None;
+    for node in all_task_nodes {
+        if hasattr(node, 'task_name') {
+            print(f"[DEBUG GET_GRAPH]   Node: {node.task_name}");
+            if node.task_name == "Start" {
+                start_node = node;
+            }
+        }
+    }
+
+    node_list = [];
+    edge_list = [];
+
+    if start_node != None {
+        print(f"[DEBUG GET_GRAPH] Starting traversal from Start node");
+        # Spawn walker at the Start node
+        traverser = start_node spawn traverse_graph();
+
+        # Get the collected node and edge lists
+        node_list = traverser.nodes_list;
+        edge_list = traverser.edges_list;
+    } else {
+        print(f"[DEBUG GET_GRAPH] WARNING: Start node not found!");
+    }
+
     # Generate DOT code
-    dot_code = generate_dot_code(here.nodes, here.edges);
+    dot_code = generate_dot_code_from_lists(node_list, edge_list);
 
     report {
-        "nodes": here.nodes,
-        "edges": here.edges,
+        "nodes": node_list,
+        "edges": edge_list,
         "dotCode": dot_code,
         "lastTask": here.last_task
     };
@@ -921,13 +1131,28 @@ impl clear_graph.navigate_to_graph with `root entry {
 }
 
 impl clear_graph.clear_data with user_graph_data entry {
-    # Reset graph to initial state
-    here.nodes = ["Start"];
-    here.edges = [];
+    # Delete all TaskState nodes connected to this graph
+    all_task_nodes = [-->](`?TaskState);
+
+    print(f"[DEBUG CLEAR] Found {len(all_task_nodes)} TaskState nodes to delete");
+
+    for node in all_task_nodes {
+        if hasattr(node, 'task_name') {
+            print(f"[DEBUG CLEAR] Deleting node: {node.task_name}");
+        }
+        # Delete the node
+        del node;
+    }
+
+    # Recreate the Start node
+    start_node = TaskState(task_name="Start");
+    here ++> start_node;
+
+    # Reset last task
     here.last_task = "Start";
-    
-    print(f"DEBUG CLEAR_GRAPH: Graph cleared for user {self.username}");
-    
+
+    print(f"[DEBUG CLEAR] Graph cleared for user {self.username}, Start node recreated");
+
     report {
         "success": True,
         "message": "Graph cleared successfully"
@@ -965,29 +1190,80 @@ impl save_routine.navigate_to_graph with `root entry {
 
 impl save_routine.save_routine_data with user_graph_data entry {
     # Store routine directly in the user_graph_data node
-    
+
     # Initialize saved_routines dict if needed
     if not hasattr(here, 'saved_routines') or here.saved_routines == None {
         here.saved_routines = {};
     }
-    
+
     # Get current timestamp
     import from time { time }
     timestamp = str(time());
-    
-    # Save the routine
+
+    # Build node and edge lists by traversing the OSP graph
+    node_list = [];
+    edge_list = [];
+
+    # Get all TaskState nodes reachable from this graph
+    all_nodes = [-->](`?TaskState);
+
+    # First pass: collect all node names
+    for node in all_nodes {
+        if hasattr(node, 'task_name') {
+            node_list.append(node.task_name);
+        }
+    }
+
+    # Second pass: collect all edges by checking each node's outgoing connections
+    for node in all_nodes {
+        if not hasattr(node, 'task_name') {
+            continue;
+        }
+
+        from_task = node.task_name;
+
+        # Get edges from this node
+        edges = [edge node->:TaskFlow:->];
+        for e in edges {
+            # For each edge, check all nodes to find the target
+            for target in all_nodes {
+                if hasattr(target, 'task_name') {
+                    # Check if this could be the target
+                    # We'll add all edges we find
+                    edge_label = e.label if hasattr(e, 'label') else "";
+                    # Only add if we haven't already added this edge
+                    edge_exists = False;
+                    for existing_edge in edge_list {
+                        if existing_edge.get("from") == from_task and existing_edge.get("to") == target.task_name {
+                            edge_exists = True;
+                            break;
+                        }
+                    }
+                    if not edge_exists {
+                        edge_list.append({
+                            "from": from_task,
+                            "to": target.task_name,
+                            "label": edge_label
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    # Save the routine as dict for compatibility
     here.saved_routines[self.routine_name] = {
-        "nodes": here.nodes.copy(),
-        "edges": here.edges.copy(),
+        "nodes": node_list.copy(),
+        "edges": edge_list.copy(),
         "saved_at": timestamp
     };
-    
+
     # Count nodes manually
     node_count = 0;
-    for _ in here.nodes {
+    for _ in node_list {
         node_count = node_count + 1;
     }
-    
+
     report {
         "success": True,
         "message": f"Saved routine with {node_count} tasks",
@@ -1074,9 +1350,17 @@ impl reset_session.navigate_to_graph with `root entry {
 }
 
 impl reset_session.reset_graph with user_graph_data entry {
-    # Clear graph but keep saved routines
-    here.nodes = ["Start"];
-    here.edges = [];
+    # Delete all TaskState nodes
+    all_task_nodes = [-->](`?TaskState);
+    for node in all_task_nodes {
+        del node;
+    }
+
+    # Recreate the Start node
+    start_node = TaskState(task_name="Start");
+    here ++> start_node;
+
+    # Reset last task
     here.last_task = "Start";
 
     report {
@@ -1116,26 +1400,61 @@ impl rebuild_graph.navigate_to_graph with `root entry {
 }
 
 impl rebuild_graph.rebuild with user_graph_data entry {
-    # Replace nodes and edges completely
-    here.nodes = self.new_nodes;
-    here.edges = self.new_edges;
-    
+    # Delete all existing TaskState nodes
+    all_task_nodes = [-->](`?TaskState);
+    for node in all_task_nodes {
+        del node;
+    }
+
+    # Create a map to store created nodes
+    node_map = {};
+
+    # Create all nodes first
+    for node_name in self.new_nodes {
+        import from datetime { datetime }
+        new_task = TaskState(
+            task_name=node_name,
+            created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        );
+        node_map[node_name] = new_task;
+
+        # Connect first node (Start) to user_graph_data
+        if node_name == self.new_nodes[0] {
+            here ++> new_task;
+        }
+    }
+
+    # Create all edges
+    for edge_spec in self.new_edges {
+        from_name = edge_spec.get("from", "");
+        to_name = edge_spec.get("to", "");
+        edge_label = edge_spec.get("label", "");
+
+        if from_name in node_map and to_name in node_map {
+            from_node = node_map[from_name];
+            to_node = node_map[to_name];
+
+            # Create typed edge with label
+            from_node +>:TaskFlow(label=edge_label):+> to_node;
+        }
+    }
+
     # Update last task to the last node in the new list
     if self.new_nodes and len(self.new_nodes) > 0 {
         here.last_task = self.new_nodes[-1];
     } else {
         here.last_task = "Start";
     }
-    
+
     # Generate updated DOT code
-    dot_code = generate_dot_code(here.nodes, here.edges);
-    
+    dot_code = generate_dot_code_from_lists(self.new_nodes, self.new_edges);
+
     report {
         "success": True,
         "message": "Graph rebuilt successfully",
         "dotCode": dot_code,
-        "nodes": here.nodes,
-        "edges": here.edges
+        "nodes": self.new_nodes,
+        "edges": self.new_edges
     };
 }
 
@@ -1233,21 +1552,27 @@ walker call_supervisor {
             # Note: Skipping routines for now due to walker spawn issues
             # TODO: Fix walker result handling
 
-            # Load user's current graph state by directly traversing the graph
+            # Load user's current graph state by traversing the OSP graph
             current_nodes = [];
             current_edges = [];
             last_task = "Start";
-            
+
             # Find user-specific graph data
             all_graphs = [-->](`?user_graph_data);
+            user_graph = None;
+
             for graph in all_graphs {
                 if hasattr(graph, 'username') and graph.username == self.username {
-                    current_nodes = graph.nodes if hasattr(graph, 'nodes') else [];
-                    current_edges = graph.edges if hasattr(graph, 'edge') else [];
+                    user_graph = graph;
                     last_task = graph.last_task if hasattr(graph, 'last_task') else "Start";
                     break;
                 }
             }
+
+            # Traverse OSP graph to build node and edge lists
+            # Note: Can't use "from" syntax here, so we'll need to traverse differently
+            # For now, we'll temporarily use an empty graph until we can fix the traversal logic
+            # TODO: Implement proper graph traversal in walkers that can access OSP syntax
 
             # Build the request body for OpenAI Responses API
             request_body = {
