@@ -717,30 +717,10 @@ impl call_supervisor.call {
             task_names=task_names
         );
         
-        # Step 5: Optionally add reasoning for complex decisions
-        final_response = response;
-        if decision.show_reasoning {
-            # Extract context for reasoning
-            context_items = [
-                "User's emotional state: " + emotional_state.state,
-                "Task decision: " + str(decision.task_decision)
-            ];
-            
-            options = ["Consider current context", "Provide clear guidance"];
-            recommendation = response;
-            tradeoffs = ["Balance emotional state with task management"];
-            
-            reasoning = generate_decision_reasoning(
-                user_message=self.context_from_user,
-                context_considered=context_items,
-                options=options,
-                recommendation=recommendation,
-                tradeoffs=tradeoffs
-            );
-            final_response = reasoning + "\n\n" + response;
-        }
+        # Note: Reasoning is generated internally by LLM but NOT shown to users
+        # Only show the final natural response
         
-        report {"response": final_response, "emotional_state": emotional_state.state};
+        report {"response": response, "emotional_state": emotional_state.state};
         
     } except Exception as e {
         report {"error": "Supervisor error", "details": str(e)};

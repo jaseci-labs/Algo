@@ -3,7 +3,27 @@ import from urllib.request { Request, urlopen }
 import from urllib.error { URLError, HTTPError }
 import from json { loads, dumps }
 import from dotenv { load_dotenv }
-import from constants { SUPERVISOR_INSTRUCTIONS, SUPERVISOR_TOOLS, CHAT_AGENT_INSTRUCTIONS }
+
+# Import prompt constants
+import from constants { 
+    SUPERVISOR_INSTRUCTIONS, 
+    SUPERVISOR_TOOLS, 
+    CHAT_AGENT_INSTRUCTIONS
+}
+
+# Import semantic types and functions
+import from semantics {
+    EmotionalState,
+    TaskDecision,
+    ConnectionType,
+    TaskRelationship,
+    SupervisorDecision,
+    detect_emotional_state,
+    analyze_task_commitment,
+    parse_task_relationships,
+    generate_friendly_response,
+    generate_decision_reasoning
+}
 
 node TaskState {
     has task_name: str;
