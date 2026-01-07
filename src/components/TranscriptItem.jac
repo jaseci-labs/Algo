@@ -1,6 +1,8 @@
 # TranscriptItem Component
 # Renders a single transcript message with role-based styling
 
+cl import from ..utils.mergeCls { cn }
+
 cl def:pub TranscriptItem(props: any) -> any {
     item = props.item;
     role = item.role;
@@ -9,31 +11,33 @@ cl def:pub TranscriptItem(props: any) -> any {
     isUser = role == "user";
     isSystem = role == "system" or role == "tool";
     
-    bgColor = "#1f2937" if isUser else ("#fef3c7" if isSystem else "#f3f4f6");
-    textColor = "#fff" if isUser else "#000";
+    # Container alignment based on role
+    containerClass = cn(
+        "flex flex-col",
+        ("items-end" if isUser else "items-start")
+    );
     
-    return <div style={{
-        "display": "flex",
-        "flexDirection": "column",
-        "alignItems": ("flex-end" if isUser else "flex-start")
-    }}>
-        <div style={{
-            "maxWidth": "32rem",
-            "padding": "0.75rem",
-            "borderRadius": "0.75rem",
-            "backgroundColor": bgColor,
-            "color": textColor
-        }}>
-            <div style={{
-                "fontSize": "0.75rem",
-                "color": ("#9ca3af" if isUser else "#6b7280"),
-                "marginBottom": "0.25rem",
-                "textTransform": "uppercase",
-                "fontWeight": "600"
-            }}>
+    # Message bubble styling based on role
+    bubbleClass = cn(
+        "max-w-lg px-3 py-2 rounded-xl",
+        (("bg-secondary text-secondary-foreground") if isUser else (
+            ("bg-warning/20 text-text-primary") if isSystem else 
+            "bg-surface-hover text-text-primary"
+        ))
+    );
+    
+    # Role label styling
+    labelClass = cn(
+        "text-xs mb-1 uppercase font-semibold",
+        ("text-text-secondary/70" if isUser else "text-text-secondary")
+    );
+    
+    return <div className={containerClass}>
+        <div className={bubbleClass}>
+            <div className={labelClass}>
                 {role}
             </div>
-            <div>{content}</div>
+            <div className="text-sm leading-relaxed">{content}</div>
         </div>
     </div>;
 }

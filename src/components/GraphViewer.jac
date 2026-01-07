@@ -1,6 +1,7 @@
 # GraphViewer Component - Renders GraphViz DOT code
 cl import from react { useState, useEffect, useRef }
 cl import from "@hpcc-js/wasm/graphviz" { Graphviz }
+cl import from ..utils.mergeCls { cn }
 
 cl {
     def:pub GraphViewer(props: any) -> any {
@@ -51,47 +52,31 @@ cl {
             [dotCode]
         );
         
+        # Empty state
         if not dotCode or dotCode.length == 0 {
-            return <div style={{
-                "display": "flex",
-                "alignItems": "center",
-                "justifyContent": "center",
-                "height": "100%",
-                "color": "#9ca3af",
-                "fontSize": "0.875rem",
-                "textAlign": "center",
-                "padding": "2rem"
-            }}>
+            return <div className="flex items-center justify-center h-full text-text-secondary text-sm text-center p-8">
                 <div>
-                    <div style={{"fontSize": "2rem", "marginBottom": "0.5rem"}}>{"🌳"}</div>
+                    <div className="text-4xl mb-2">{"🌳"}</div>
                     <div>{"Your task graph will appear here"}</div>
                 </div>
             </div>;
         }
         
+        # Loading state
         if isLoading {
-            return <div style={{
-                "display": "flex",
-                "alignItems": "center",
-                "justifyContent": "center",
-                "height": "100%",
-                "color": "#9ca3af"
-            }}>
-                <div>{"Loading graph..."}</div>
+            return <div className="flex items-center justify-center h-full text-text-secondary">
+                <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 border-2 border-text-secondary/30 border-t-text-secondary rounded-full animate-spin" />
+                    <span>{"Loading graph..."}</span>
+                </div>
             </div>;
         }
         
+        # Rendered graph
         return <div 
             key={renderKey}
-            style={{
-                "padding": "2rem",
-                "height": "100%",
-                "overflowY": "auto",
-                "backgroundColor": "#f9fafb",
-                "display": "flex",
-                "justifyContent": "center",
-                "alignItems": "flex-start"
-            }}>
+            className="p-8 h-full overflow-y-auto bg-surface-hover flex justify-center items-start"
+        >
             <div dangerouslySetInnerHTML={{"__html": svgContent}}></div>
         </div>;
     }

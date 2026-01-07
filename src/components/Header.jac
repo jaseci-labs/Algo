@@ -3,6 +3,7 @@
 
 cl import from react { useState, useEffect }
 cl import from "@jac-client/utils" { jacLogout, useNavigate }
+cl import from ..utils.mergeCls { cn }
 
 cl{ 
 def:pub Header() -> any {
@@ -36,40 +37,22 @@ def:pub Header() -> any {
         navigate("/login");
     }
     
-    return <div style={{
-        "padding": "1.25rem",
-        "fontSize": "1.125rem",
-        "fontWeight": "600",
-        "display": "flex",
-        "justifyContent": "space-between",
-        "alignItems": "center",
-        "borderBottom": "1px solid #e5e7eb"
-    }}>
-        <div style={{"display": "flex", "alignItems": "center"}}>
-            <span>{"🎙️ Algo - Your Personal AI Assistant"}</span>
+    return <header className="px-5 py-4 text-lg font-semibold flex justify-between items-center border-b border-border bg-surface">
+        <div className="flex items-center gap-2">
+            <span className="text-2xl">{"🎙️"}</span>
+            <span className="text-text-primary">{"Algo - Your Personal AI Assistant"}</span>
         </div>
-        <div style={{"display": "flex", "alignItems": "center", "gap": "1.5rem"}}>
-            <span style={{"fontSize": "0.875rem", "color": "#6b7280", "fontWeight": "500"}}>
+        <div className="flex items-center gap-6">
+            <span className="text-sm text-text-secondary font-medium">
                 {f"👤 {username}"}
             </span>
             <button
                 onClick={handleLogout}
-                style={{
-                    "padding": "0.5rem 1rem",
-                    "fontSize": "0.875rem",
-                    "fontWeight": "500",
-                    "color": "#ffffff",
-                    "background": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                    "border": "none",
-                    "borderRadius": "6px",
-                    "cursor": "pointer",
-                    "transition": "all 0.2s",
-                    "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"
-                }}
+                className="px-4 py-2 text-sm font-medium text-primary-foreground bg-gradient-to-br from-primary to-secondary border-none rounded-md cursor-pointer transition-all shadow-md hover:opacity-90 hover:-translate-y-0.5 active:translate-y-0"
             >
-                Logout
+                {"Logout"}
             </button>
         </div>
-    </div>;
+    </header>;
 }
 }

@@ -10,6 +10,7 @@ cl import from ..components.ControlBar { ControlBar }
 cl import from ..components.GraphViewer { GraphViewer }
 
 cl import from ..hooks.useMainApp { useMainApp }
+cl import from ..utils.mergeCls { cn }
 
 # ============================================
 # Main Application Component
@@ -52,23 +53,10 @@ cl {
         }
         
         # ========== Render ==========
-        return <div style={{
-            "display": "flex",
-            "flexDirection": "column",
-            "height": "100vh",
-            "backgroundColor": "#f3f4f6",
-            "color": "#1f2937",
-            "fontFamily": "system-ui, -apple-system, sans-serif"
-        }}>
+        return <div className="flex flex-col h-screen bg-background text-text-primary font-sans">
             <Header />
             
-            <div style={{
-                "flex": "1",
-                "display": "flex",
-                "gap": "0.5rem",
-                "padding": "0.5rem",
-                "overflow": "hidden"
-            }}>
+            <div className="flex-1 flex gap-2 p-2 overflow-hidden">
                 <TranscriptPanel 
                     transcriptItems={transcriptItems}
                     transcriptEndRef={transcriptEndRef}
@@ -114,33 +102,12 @@ cl {
         setUserText: any,
         onSend: any
     ) -> any {
-        return <div style={{
-            "flex": "1",
-            "backgroundColor": "#fff",
-            "borderRadius": "0.75rem",
-            "display": "flex",
-            "flexDirection": "column",
-            "minHeight": "0"
-        }}>
-            <div style={{
-                "display": "flex",
-                "alignItems": "center",
-                "justifyContent": "space-between",
-                "padding": "0.75rem 1.5rem",
-                "borderBottom": "1px solid #e5e7eb",
-                "fontWeight": "600"
-            }}>
+        return <div className="flex-1 bg-surface rounded-xl flex flex-col min-h-0 shadow-sm">
+            <div className="flex items-center justify-between px-6 py-3 border-b border-border font-semibold text-text-primary">
                 {"Transcript"}
             </div>
             
-            <div style={{
-                "flex": "1",
-                "overflowY": "auto",
-                "padding": "1rem",
-                "display": "flex",
-                "flexDirection": "column",
-                "gap": "1rem"
-            }}>
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
                 {transcriptItems}
                 <div ref={transcriptEndRef} />
             </div>
@@ -155,34 +122,15 @@ cl {
     
     # Graph Panel - right side showing task visualization
     def GraphPanel(graphDotCode: str, onClearGraph: any) -> any {
-        return <div style={{
-            "flex": "1",
-            "backgroundColor": "#fff",
-            "borderRadius": "0.75rem",
-            "display": "flex",
-            "flexDirection": "column",
-            "minHeight": "0"
-        }}>
-            <div style={{
-                "display": "flex",
-                "alignItems": "center",
-                "justifyContent": "space-between",
-                "padding": "0.75rem 1.5rem",
-                "borderBottom": "1px solid #e5e7eb",
-                "fontWeight": "600"
-            }}>
+        return <div className="flex-1 bg-surface rounded-xl flex flex-col min-h-0 shadow-sm">
+            <div className="flex items-center justify-between px-6 py-3 border-b border-border font-semibold text-text-primary">
                 {"Task Graph"}
-                <span style={{"fontSize": "0.75rem", "color": "#9ca3af", "fontWeight": "normal"}}>
+                <span className="text-xs text-text-secondary font-normal">
                     {"Real-time visualization"}
                 </span>
             </div>
             
-            <div style={{
-                "flex": "1",
-                "overflow": "auto",
-                "backgroundColor": "#fafafa",
-                "position": "relative"
-            }}>
+            <div className="flex-1 overflow-auto bg-surface-hover relative">
                 <GraphViewer dotCode={graphDotCode} />
                 
                 <ClearGraphButton onClick={onClearGraph} />
@@ -194,20 +142,7 @@ cl {
     def ClearGraphButton(onClick: any) -> any {
         return <button
             onClick={onClick}
-            style={{
-                "position": "absolute",
-                "bottom": "1rem",
-                "right": "1rem",
-                "padding": "0.5rem 1rem",
-                "backgroundColor": "#ef4444",
-                "color": "white",
-                "border": "none",
-                "borderRadius": "0.5rem",
-                "cursor": "pointer",
-                "fontSize": "0.875rem",
-                "fontWeight": "500",
-                "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"
-            }}
+            className="absolute bottom-4 right-4 px-4 py-2 bg-error text-error-foreground border-none rounded-lg cursor-pointer text-sm font-medium shadow-md transition-all hover:opacity-90 hover:-translate-y-0.5 active:translate-y-0"
         >
             {"Clear Graph"}
         </button>;
