@@ -10,6 +10,8 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+algo_env/
+.jaccache
 
 # IDE
 .idea/
