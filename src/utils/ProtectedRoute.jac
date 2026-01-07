@@ -1,4 +1,4 @@
-import from "@jac-client/utils" { jacIsLoggedIn, Navigate }
+cl import from "@jac-client/utils" { jacIsLoggedIn, Navigate }
 
 # Protected Route Component
 def ProtectedRoute(props: any) -> any {
