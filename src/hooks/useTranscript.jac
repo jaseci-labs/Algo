@@ -3,8 +3,9 @@
 
 cl import from react { useState }
 
-cl def useTranscript() -> any {
-    [transcript, setTranscript] = useState([]);
+cl {
+    def:pub useTranscript() -> any {
+        [transcript, setTranscript] = useState([]);
     
     # Add a new message to transcript (for system messages)
     def addMessage(role: str, content: str) -> None {
@@ -67,4 +68,5 @@ cl def useTranscript() -> any {
         "appendTranscriptItem": appendTranscriptItem,
         "clearTranscript": clearTranscript
     };
+    }
 }

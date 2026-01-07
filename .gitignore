@@ -22,6 +22,8 @@ node_modules/
 # Jac Client
 .client-build/
 *.session
+*.session-shm
+*.session-wal
 *.session.*
 .env
 package.json
