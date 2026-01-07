@@ -655,6 +655,14 @@ impl call_supervisor.call {
             if hasattr(graph, 'username') and graph.username == self.username {
                 user_graph = graph;
                 last_task = graph.last_task if hasattr(graph, 'last_task') else "Start";
+                
+                # Populate current_nodes from the graph
+                all_task_nodes = [graph-->](`?TaskState);
+                for node in all_task_nodes {
+                    if hasattr(node, 'task_name') {
+                        current_nodes.append(node.task_name);
+                    }
+                }
                 break;
             }
         }
@@ -686,14 +694,101 @@ impl call_supervisor.call {
                 last_task=last_task
             );
             
-            # Execute the updates
+            # DEBUG: Print parsed relationships
+            print(f"[DEBUG CALL_SUPERVISOR] Parsed {len(relationships)} relationships");
             for rel in relationships {
-                here spawn update_task_graph(
-                    task_name=rel.new_task,
-                    previous_task=rel.previous_task,
-                    edge_label=rel.edge_label,
-                    username=self.username
+                print(f"[DEBUG CALL_SUPERVISOR]   {rel.previous_task} --[{rel.edge_label}]--> {rel.new_task} ({rel.connection_type})");
+            }
+            print(f"[DEBUG CALL_SUPERVISOR] needs_rebuild: {decision.needs_rebuild}");
+            
+            # If reorganization needed (detected by semantic function), use rebuildGraph
+            if decision.needs_rebuild and len(current_nodes) > 1 {
+                print(f"[DEBUG CALL_SUPERVISOR] Triggering graph rebuild (semantic detection)");
+                
+                # Build new node list and edge list from relationships
+                # Strategy: Create a proper sequential chain based on relationships
+                
+                new_nodes = ["Start"];
+                new_edges = [];
+                added_nodes = {};
+                
+                # First, extract all unique tasks from relationships
+                tasks_mentioned = {};
+                for rel in relationships {
+                    tasks_mentioned[rel.new_task] = True;
+                    if rel.previous_task != "Start" and rel.previous_task != last_task {
+                        tasks_mentioned[rel.previous_task] = True;
+                    }
+                }
+                
+                # Build a dependency graph to determine order
+                # Find tasks that should come first (those that are previous_task but not new_task)
+                first_tasks = [];
+                subsequent_tasks = {};
+                
+                for rel in relationships {
+                    subsequent_tasks[rel.new_task] = rel.previous_task;
+                    # If previous_task is not Start and not in subsequent_tasks, it's a first task
+                    if rel.previous_task != "Start" and rel.previous_task not in subsequent_tasks {
+                        if rel.previous_task not in first_tasks {
+                            first_tasks.append(rel.previous_task);
+                        }
+                    }
+                }
+                
+                # Build the chain: Start -> first tasks -> subsequent tasks
+                # Add first tasks
+                for task in first_tasks {
+                    if task not in added_nodes {
+                        new_nodes.append(task);
+                        added_nodes[task] = True;
+                        new_edges.append({
+                            "from": "Start",
+                            "to": task,
+                            "label": "then"
+                        });
+                    }
+                }
+                
+                # Add tasks from relationships
+                for rel in relationships {
+                    if rel.new_task not in added_nodes {
+                        new_nodes.append(rel.new_task);
+                        added_nodes[rel.new_task] = True;
+                    }
+                    # Add the edge
+                    new_edges.append({
+                        "from": rel.previous_task,
+                        "to": rel.new_task,
+                        "label": rel.edge_label
+                    });
+                }
+                
+                # Add any existing nodes not mentioned
+                for node in current_nodes {
+                    if node not in added_nodes and node != "Start" {
+                        new_nodes.append(node);
+                        added_nodes[node] = True;
+                    }
+                }
+                
+                # Use rebuild walker
+                here spawn rebuild_graph(
+                    username=self.username,
+                    new_nodes=new_nodes,
+                    new_edges=new_edges
                 );
+            } else {
+                # Normal update - execute the updates
+                for rel in relationships {
+                    print(f"[DEBUG CALL_SUPERVISOR] Spawning update_task_graph for {rel.new_task}");
+                    here spawn update_task_graph(
+                        task_name=rel.new_task,
+                        previous_task=rel.previous_task,
+                        edge_label=rel.edge_label,
+                        username=self.username
+                    );
+                }
             }
         }
         
