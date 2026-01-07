@@ -8,6 +8,8 @@ cl import from .pages.RegisterPage { RegisterPage }
 
 cl import from .utils.ProtectedRoute { ProtectedRoute }
 
+cl import ".global.css";
+
 cl {
     # Main App with Router
     def:pub app() -> any {
