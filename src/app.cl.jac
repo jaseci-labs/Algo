@@ -6,8 +6,8 @@ import from .pages.HomePage { HomePage }
 import from .pages.LoginPage { LoginPage }
 import from .pages.RegisterPage { RegisterPage }
 
-import from .utils.ProtectedRoute { ProtectedRoute }
 
+import from .utils.ProtectedRoute { ProtectedRoute }
 import ".global.css";
 
 # Main App with Router
