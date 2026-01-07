@@ -3,7 +3,7 @@ import from urllib.request { Request, urlopen }
 import from urllib.error { URLError, HTTPError }
 import from json { loads, dumps }
 import from dotenv { load_dotenv }
-import from CONSTANTS { SUPERVISOR_INSTRUCTIONS, SUPERVISOR_TOOLS, CHAT_AGENT_INSTRUCTIONS }
+import from constants { SUPERVISOR_INSTRUCTIONS, SUPERVISOR_TOOLS, CHAT_AGENT_INSTRUCTIONS }
 
 node TaskState {
     has task_name: str;

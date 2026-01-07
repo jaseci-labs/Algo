@@ -642,12 +642,7 @@ impl call_supervisor.call {
             return;
         }
         
-        # Load user's past routines for context
-        past_routines_context = "";
-        # Note: Skipping routines for now due to walker spawn issues
-        # TODO: Fix walker result handling
-
-        # Load user's current graph state by traversing the OSP graph
+        # Load user's current graph state
         current_nodes = [];
         current_edges = [];
         last_task = "Start";
@@ -664,163 +659,91 @@ impl call_supervisor.call {
             }
         }
 
-        # Traverse OSP graph to build node and edge lists
-        # Note: Can't use "from" syntax here, so we'll need to traverse differently
-        # For now, we'll temporarily use an empty graph until we can fix the traversal logic
-        # TODO: Implement proper graph traversal in walkers that can access OSP syntax
-
-        # Build the request body for OpenAI Responses API
-        request_body = {
-            "model": "gpt-4.1",
-            "input": [
-                {
-                    "type": "message",
-                    "role": "system",
-                    "content": SUPERVISOR_INSTRUCTIONS
-                },
-                {
-                    "type": "message",
-                    "role": "user",
-                    "content": f"""==== Conversation History ====
-                    {dumps(self.conversation_history, indent=2)}
-
-                    ==== Relevant Context From Last User Message ====
-                    {self.context_from_user}
-
-                    ==== Current Task Graph ====
-                    Existing Nodes: {dumps(current_nodes)}
-                    Existing Edges: {dumps(current_edges)}
-                    Last Task (most recent): {last_task}
-                    {past_routines_context}
-
-                    IMPORTANT: 
-                    - When adding a new task, check the Existing Nodes list first
-                    - If a similar task already exists (e.g., "GoToMall" exists), use that EXACT name, don't create "GoMall"
-                    - Use the Last Task as previousTask when connecting sequential activities
-                    - Only create a new node if the task doesn't already exist in the Existing Nodes
-                    """
-                }
-            ],
-            "tools": SUPERVISOR_TOOLS,
-            "parallel_tool_calls": False
-        };
+        # ============================================
+        # SEMANTIC FUNCTION APPROACH
+        # ============================================
+        # Use semantic functions to analyze and respond
         
-        # Make initial API call
-        data = make_responses_api_call(request_body, api_key);
-        output_items = data["output"] if "output" in data else [];
+        # Step 1: Detect emotional state
+        emotional_state = detect_emotional_state(
+            user_message=self.context_from_user,
+            conversation_history=self.conversation_history
+        );
         
-        # Process tool calls iteratively (up to 5 rounds)
-        max_iterations = 5;
-        iteration = 0;
+        # Step 2: Analyze if user is committing to tasks
+        decision = analyze_task_commitment(
+            user_message=self.context_from_user,
+            existing_nodes=current_nodes,
+            last_task=last_task,
+            conversation_context=dumps(self.conversation_history[-3:] if len(self.conversation_history) > 3 else self.conversation_history)
+        );
         
-        while iteration < max_iterations {
-            # Check for function calls
-            function_calls = [];
-            for item in output_items {
-                item_type = item["type"] if "type" in item else "";
-                if item_type == "function_call" {
-                    function_calls = function_calls + [item];
-                }
-            }
-
-            # Count function calls
-            fc_count = 0;
-            for _ in function_calls {
-                fc_count = fc_count + 1;
-            }
-
-            if fc_count == 0 {
-                # No more function calls - extract final response
-                break;
-            }
+        # Step 3: If tasks should be created, parse relationships
+        if decision.should_update_graph {
+            relationships = parse_task_relationships(
+                user_message=self.context_from_user,
+                existing_nodes=current_nodes,
+                last_task=last_task
+            );
             
-            # Execute function calls
-            for tool_call in function_calls {
-                f_name = tool_call["name"] if "name" in tool_call else "";
-                f_args_str = tool_call["arguments"] if "arguments" in tool_call else "{}";
-                f_args = loads(f_args_str);
-
-                # Execute the tool - use per-user walker for updateTaskGraph and rebuildGraph
-                tool_output = {};
-                if f_name == "updateTaskGraph" {
-                    # Use per-user walker to update the graph
-                    task_name = f_args["taskName"] if "taskName" in f_args else "";
-                    previous_task = f_args["previousTask"] if "previousTask" in f_args else "Start";
-                    edge_label = f_args["edgeLabel"] if "edgeLabel" in f_args else "";
-
-                    # Spawn walker - pass username for isolation
-                    here spawn update_task_graph(
-                        task_name=task_name,
-                        previous_task=previous_task,
-                        edge_label=edge_label,
-                        username=self.username
-                    );
-                    # Return success - the walker handles the actual update
-                    tool_output = {
-                        "success": True,
-                        "message": f"Updated graph with task: {task_name}"
-                    };
-                } elif f_name == "rebuildGraph" {
-                    # Use rebuild walker to completely reconstruct the graph
-                    new_nodes = f_args["nodes"] if "nodes" in f_args else ["Start"];
-                    new_edges = f_args["edges"] if "edges" in f_args else [];
-
-                    # Spawn rebuild walker - pass username for isolation
-                    here spawn rebuild_graph(
-                        username=self.username,
-                        new_nodes=new_nodes,
-                        new_edges=new_edges
-                    );
-                    # Return success - the walker handles the actual rebuild
-                    tool_output = {
-                        "success": True,
-                        "message": f"Rebuilt graph with {len(new_nodes)} nodes"
-                    };
-                } else {
-                    # Use existing function for other tools
-                    tool_output = execute_local_tool(f_name, f_args);
-                }
-
-                # Add function call and result to the request body
-                call_id = tool_call["call_id"] if "call_id" in tool_call else "";
-                request_body["input"] = request_body["input"] + [{
-                    "type": "function_call",
-                    "call_id": call_id,
-                    "name": f_name,
-                    "arguments": f_args_str
-                }];
-                request_body["input"] = request_body["input"] + [{
-                    "type": "function_call_output",
-                    "call_id": call_id,
-                    "output": dumps(tool_output)
-                }];
+            # Execute the updates
+            for rel in relationships {
+                here spawn update_task_graph(
+                    task_name=rel.new_task,
+                    previous_task=rel.previous_task,
+                    edge_label=rel.edge_label,
+                    username=self.username
+                );
             }
-            
-            # Make follow-up request
-            data = make_responses_api_call(request_body, api_key);
-            output_items = data["output"] if "output" in data else [];
-            iteration = iteration + 1;
         }
         
-        # Extract final text
-        final_response = extract_response_text(output_items);
-
-        # TODO: Get updated graph state - fix walker spawn result handling
-        # For now, return empty graph data since updates happen in update_task_graph walker
-        report {
-            "response": final_response,
-            "dotCode": "",
-            "graphNodes": [],
-            "graphEdges": []
-        };
+        # Step 4: Generate friendly response
+        task_names = [];
+        if decision.should_update_graph {
+            relationships = parse_task_relationships(
+                user_message=self.context_from_user,
+                existing_nodes=current_nodes,
+                last_task=last_task
+            );
+            for rel in relationships {
+                task_names.append(rel.new_task);
+            }
+        }
         
-    } except HTTPError as e {
-        error_msg = e.read().decode('utf-8') if hasattr(e, 'read') else str(e);
-        report {"error": f"HTTP Error: {e.code}", "details": error_msg};
-    } except URLError as e {
-        report {"error": "URL Error", "details": str(e.reason)};
+        response = generate_friendly_response(
+            user_message=self.context_from_user,
+            emotional_state=emotional_state,
+            action_taken="task_added" if decision.should_update_graph else "none",
+            task_names=task_names
+        );
+        
+        # Step 5: Optionally add reasoning for complex decisions
+        final_response = response;
+        if decision.show_reasoning {
+            # Extract context for reasoning
+            context_items = [
+                "User's emotional state: " + emotional_state.state,
+                "Task decision: " + str(decision.task_decision)
+            ];
+            
+            options = ["Consider current context", "Provide clear guidance"];
+            recommendation = response;
+            tradeoffs = ["Balance emotional state with task management"];
+            
+            reasoning = generate_decision_reasoning(
+                user_message=self.context_from_user,
+                context_considered=context_items,
+                options=options,
+                recommendation=recommendation,
+                tradeoffs=tradeoffs
+            );
+            final_response = reasoning + "\n\n" + response;
+        }
+        
+        report {"response": final_response, "emotional_state": emotional_state.state};
+        
     } except Exception as e {
-        report {"error": "Server error", "details": str(e)};
+        report {"error": "Supervisor error", "details": str(e)};
     }
 }
 
