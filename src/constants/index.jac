@@ -1,6 +1,5 @@
-# Constants
 cl {
-glob CHAT_AGENT_INSTRUCTIONS = """You are Algo, a friendly personal AI assistant with a great memory. You remember everything the user tells you about their day.
+    glob:pub CHAT_AGENT_INSTRUCTIONS = """You are Algo, a friendly personal AI assistant with a great memory. You remember everything the user tells you about their day.
 
 # IMPORTANT: Language
 - ALWAYS speak in English only

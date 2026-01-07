@@ -1,7 +1,8 @@
 cl import from react { useState }
 cl import from "@jac-client/utils" { jacLogin, useNavigate, Link }
 
-cl def:pub LoginPage() -> any {
+cl{ 
+def:pub LoginPage() -> any {
     [username, setUsername] = useState("");
     [password, setPassword] = useState("");
     [error, setError] = useState("");
@@ -251,4 +252,5 @@ cl def:pub LoginPage() -> any {
             </div>
         </div>
     </div>;
+}
 }

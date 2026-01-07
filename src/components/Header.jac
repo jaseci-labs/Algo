@@ -4,7 +4,8 @@
 cl import from react { useState, useEffect }
 cl import from "@jac-client/utils" { jacLogout, useNavigate }
 
-cl def:pub Header() -> any {
+cl{ 
+def:pub Header() -> any {
     navigate = useNavigate();
     [username, setUsername] = useState("User");
     
@@ -70,4 +71,5 @@ cl def:pub Header() -> any {
             </button>
         </div>
     </div>;
+}
 }
