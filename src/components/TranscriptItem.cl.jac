@@ -1,9 +1,9 @@
 # TranscriptItem Component
 # Renders a single transcript message with role-based styling
 
-cl import from ..utils.mergeCls { cn }
+import from ..utils.mergeCls { cn }
 
-cl def:pub TranscriptItem(props: any) -> any {
+def:pub TranscriptItem(props: any) -> any {
     item = props.item;
     role = item.role;
     content = item.content;

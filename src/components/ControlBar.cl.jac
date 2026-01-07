@@ -1,9 +1,8 @@
 # ControlBar Component
 # Bottom control bar with connection, PTT, and audio controls
 
-cl import from ..utils.mergeCls { cn }
+import from ..utils.mergeCls { cn }
 
-cl{ 
 def:pub ControlBar(props: any) -> any {
     # Props
     sessionStatus = props.sessionStatus;
@@ -161,5 +160,4 @@ def:pub ControlBar(props: any) -> any {
             {"Save & Restart"}
         </button>
     </div>;
-}
 }

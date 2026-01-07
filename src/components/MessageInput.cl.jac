@@ -1,9 +1,8 @@
 # MessageInput Component
 # Text input field with send button
 
-cl import from ..utils.mergeCls { cn }
+import from ..utils.mergeCls { cn }
 
-cl{ 
 def:pub MessageInput(props: any) -> any {
     userText = props.userText;
     setUserText = props.setUserText;
@@ -25,5 +24,4 @@ def:pub MessageInput(props: any) -> any {
             {"Send"}
         </button>
     </div>;
-}
 }

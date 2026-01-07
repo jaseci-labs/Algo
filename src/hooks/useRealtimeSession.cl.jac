@@ -1,19 +1,18 @@
 # useRealtimeSession Hook
 # Custom hook for managing OpenAI Realtime API connection and session
 
-cl import from react { useState, useRef }
-cl import from "@openai/agents/realtime" { RealtimeAgent, RealtimeSession, tool }
+import from react { useState, useRef }
+import from "@openai/agents/realtime" { RealtimeAgent, RealtimeSession, tool }
 
-cl import from ..constants.index { CHAT_AGENT_INSTRUCTIONS }
-cl import from ..service.mainAppService {
+import from ..constants.index { CHAT_AGENT_INSTRUCTIONS }
+import from ..service.mainAppService {
     getSessionToken,
     callSupervisor,
     getUsernameFromToken
 }
-# cl import from .utils.messageUtils { extractMessageText }
+# import from .utils.messageUtils { extractMessageText }
 
-cl {
-    def extractMessageText(content: any) -> str {
+def extractMessageText(content: any) -> str {
         if not content or not content.length {
             return "";
         }
@@ -351,8 +350,7 @@ cl {
             # Handlers
             "connectToRealtime": connectToRealtime,
             "disconnectFromRealtime": disconnectFromRealtime,
-            "onToggleConnection": onToggleConnection,
-            "sendRealtimeMessage": sendRealtimeMessage
-        };
-    }
+        "onToggleConnection": onToggleConnection,
+        "sendRealtimeMessage": sendRealtimeMessage
+    };
 }

@@ -1,11 +1,10 @@
 # Header Component
 # Application header with title and username display
 
-cl import from react { useState, useEffect }
-cl import from "@jac-client/utils" { jacLogout, useNavigate }
-cl import from ..utils.mergeCls { cn }
+import from react { useState, useEffect }
+import from "@jac-client/utils" { jacLogout, useNavigate }
+import from ..utils.mergeCls { cn }
 
-cl{ 
 def:pub Header() -> any {
     navigate = useNavigate();
     [username, setUsername] = useState("User");
@@ -54,5 +53,4 @@ def:pub Header() -> any {
             </button>
         </div>
     </header>;
-}
 }
