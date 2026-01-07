@@ -1,4 +1,4 @@
-cl import from "@jac-client/utils" { jacIsLoggedIn, Navigate }
+import from "@jac-client/utils" { jacIsLoggedIn, Navigate }
 
 # Home Route - Redirect based on auth status
 def HomePage() -> any {

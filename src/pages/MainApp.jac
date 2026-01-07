@@ -1,17 +1,16 @@
-cl import from react { useState, useEffect, useRef }
-cl import from "@openai/agents/realtime" { RealtimeAgent, RealtimeSession, tool }
-cl import from "@jac-client/utils" { useNavigate }
+import from react { useState, useEffect, useRef }
+import from "@openai/agents/realtime" { RealtimeAgent, RealtimeSession, tool }
+import from "@jac-client/utils" { useNavigate }
 
-cl import from ..components.TranscriptItem { TranscriptItem }
-cl import from ..components.Header { Header }
-cl import from ..components.MessageInput { MessageInput }
-cl import from ..components.ControlBar { ControlBar }
-cl import from ..components.GraphViewer { GraphViewer }
+import from ..components.TranscriptItem { TranscriptItem }
+import from ..components.Header { Header }
+import from ..components.MessageInput { MessageInput }
+import from ..components.ControlBar { ControlBar }
+import from ..components.GraphViewer { GraphViewer }
 
-cl import from ..constants { CHAT_AGENT_INSTRUCTIONS }
+import from ..constants { CHAT_AGENT_INSTRUCTIONS }
 
 # Main Application Component (Voice Agent Interface)
-cl{
 def:pub MainApp() -> any {
     navigate = useNavigate();
     
@@ -875,5 +874,4 @@ def:pub MainApp() -> any {
             onSaveAndRestart={handleSaveAndRestart}
         />
     </div>;
-}
 }

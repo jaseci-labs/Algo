@@ -1,8 +1,8 @@
 # GraphViewer Component - Renders GraphViz DOT code
-cl import from "react" { useState, useEffect, useRef }
-cl import from "@hpcc-js/wasm/graphviz" { Graphviz }
+import from "react" { useState, useEffect, useRef }
+import from "@hpcc-js/wasm/graphviz" { Graphviz }
 
-cl def:pub GraphViewer(props: any) -> any {
+def:pub GraphViewer(props: any) -> any {
     dotCode = props.dotCode;
     [svgContent, setSvgContent] = useState("");
     [isLoading, setIsLoading] = useState(True);

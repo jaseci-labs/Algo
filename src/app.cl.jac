@@ -1,12 +1,12 @@
-cl import from react { useState, useEffect, useRef }
-cl import from "@jac-client/utils" { Router, Routes, Route }
+import from react { useState, useEffect, useRef }
+import from "@jac-client/utils" { Router, Routes, Route }
 
-cl import from .pages.MainApp { MainApp }
-cl import from .pages.HomePage { HomePage }
-cl import from .pages.LoginPage { LoginPage }
-cl import from .pages.RegisterPage { RegisterPage }
+import from .pages.MainApp { MainApp }
+import from .pages.HomePage { HomePage }
+import from .pages.LoginPage { LoginPage }
+import from .pages.RegisterPage { RegisterPage }
 
-cl import from .utils.ProtectedRoute { ProtectedRoute }
+import from .utils.ProtectedRoute { ProtectedRoute }
 
 # Main App with Router
 def:pub app() -> any {
