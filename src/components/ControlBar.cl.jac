@@ -1,7 +1,9 @@
 # ControlBar Component
 # Bottom control bar with connection, PTT, and audio controls
 
-cl def:pub ControlBar(props: any) -> any {
+import from ..utils.mergeCls { cn }
+
+def:pub ControlBar(props: any) -> any {
     # Props
     sessionStatus = props.sessionStatus;
     onToggleConnection = props.onToggleConnection;
@@ -21,10 +23,23 @@ cl def:pub ControlBar(props: any) -> any {
     isConnecting = sessionStatus == "CONNECTING";
     
     connectBtnText = "Disconnect" if isConnected else ("Connecting..." if isConnecting else "Connect");
-    connectBtnBg = "#dc2626" if isConnected else ("#1f2937" if isConnecting else "#000");
     
-    # Mic mute button computed values
-    micBtnBg = "#000000" if not isMicMuted else "#dc2626";
+    # Button classes with conditional styling
+    connectBtnClass = cn(
+        "text-white text-base py-2 w-36 rounded-md border-none transition-all",
+        ("bg-error cursor-pointer hover:opacity-90" if isConnected else (
+            "bg-secondary cursor-not-allowed opacity-70" if isConnecting else 
+            "bg-black cursor-pointer hover:opacity-90"
+        ))
+    );
+    
+    micBtnClass = cn(
+        "text-white px-4 py-2 rounded-md border-none transition-all flex items-center justify-center min-w-12",
+        ("cursor-not-allowed bg-text-secondary" if not isConnected else (
+            "cursor-pointer" + (" bg-error" if isMicMuted else " bg-black hover:opacity-90")
+        ))
+    );
+    
     micBtnTitle = "Mute microphone" if not isMicMuted else "Unmute microphone";
 
     # Mic icon SVG - unmuted
@@ -37,7 +52,7 @@ cl def:pub ControlBar(props: any) -> any {
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        style={{"display": "block"}}
+        className="block"
     >
         <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
         <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
@@ -55,7 +70,7 @@ cl def:pub ControlBar(props: any) -> any {
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        style={{"display": "block"}}
+        className="block"
     >
         <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
         <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
@@ -65,30 +80,27 @@ cl def:pub ControlBar(props: any) -> any {
 
     # Choose the correct icon based on mute state
     micIcon = micIconMuted if isMicMuted else micIconUnmuted;
+    
+    # Talk button class
+    talkBtnClass = cn(
+        "px-4 py-1 border-none rounded-md transition-all",
+        ("cursor-not-allowed text-text-secondary bg-gray-200" if not isPTTActive else (
+            "cursor-pointer text-black" + (" bg-gray-300" if isPTTUserSpeaking else " bg-gray-200 hover:bg-gray-300")
+        ))
+    );
+    
+    # Save button class
+    saveBtnClass = cn(
+        "text-white text-sm px-4 py-2 rounded-md border-none font-semibold transition-all",
+        ("cursor-not-allowed bg-text-secondary" if not isConnected else 
+         "cursor-pointer bg-success hover:opacity-90")
+    );
 
-    return <div style={{
-        "padding": "1rem",
-        "display": "flex",
-        "flexDirection": "row",
-        "alignItems": "center",
-        "justifyContent": "center",
-        "gap": "2rem",
-        "borderTop": "1px solid #e5e7eb",
-        "backgroundColor": "#fff"
-    }}>
+    return <div className="p-4 flex flex-row items-center justify-center gap-8 border-t border-border bg-surface">
         <button
             onClick={onToggleConnection}
             disabled={isConnecting}
-            style={{
-                "color": "#fff",
-                "fontSize": "1rem",
-                "padding": "0.5rem",
-                "width": "9rem",
-                "borderRadius": "0.375rem",
-                "border": "none",
-                "cursor": ("not-allowed" if isConnecting else "pointer"),
-                "backgroundColor": connectBtnBg
-            }}
+            className={connectBtnClass}
         >
             {connectBtnText}
         </button>
@@ -97,33 +109,21 @@ cl def:pub ControlBar(props: any) -> any {
             onClick={onToggleMicMute}
             disabled={not isConnected}
             title={micBtnTitle}
-            style={{
-                "color": "#fff",
-                "padding": "0.5rem 1rem",
-                "borderRadius": "0.375rem",
-                "border": "none",
-                "cursor": ("not-allowed" if not isConnected else "pointer"),
-                "backgroundColor": (micBtnBg if isConnected else "#9ca3af"),
-                "transition": "all 0.2s ease",
-                "display": "flex",
-                "alignItems": "center",
-                "justifyContent": "center",
-                "minWidth": "3rem"
-            }}
+            className={micBtnClass}
         >
             {micIcon}
         </button>
 
-        <div style={{"display": "flex", "flexDirection": "row", "alignItems": "center", "gap": "0.5rem"}}>
+        <div className="flex flex-row items-center gap-2">
             <input
                 id="push-to-talk"
                 type="checkbox"
                 checked={isPTTActive}
                 onChange={lambda e: any -> None { setIsPTTActive(e.target.checked); }}
                 disabled={not isConnected}
-                style={{"width": "1rem", "height": "1rem"}}
+                className="w-4 h-4 accent-primary"
             />
-            <label htmlFor="push-to-talk" style={{"display": "flex", "alignItems": "center", "cursor": "pointer"}}>
+            <label htmlFor="push-to-talk" className="flex items-center cursor-pointer text-text-primary">
                 {"Push to talk"}
             </label>
             <button
@@ -132,29 +132,22 @@ cl def:pub ControlBar(props: any) -> any {
                 onTouchStart={onTalkDown}
                 onTouchEnd={onTalkUp}
                 disabled={not isPTTActive}
-                style={{
-                    "padding": "0.25rem 1rem",
-                    "border": "none",
-                    "borderRadius": "0.375rem",
-                    "cursor": ("pointer" if isPTTActive else "not-allowed"),
-                    "backgroundColor": ("#d1d5db" if isPTTUserSpeaking else "#e5e7eb"),
-                    "color": ("#6b7280" if not isPTTActive else "#000")
-                }}
+                className={talkBtnClass}
             >
                 {"Talk"}
             </button>
         </div>
         
-        <div style={{"display": "flex", "flexDirection": "row", "alignItems": "center", "gap": "0.25rem"}}>
+        <div className="flex flex-row items-center gap-1">
             <input
                 id="audio-playback"
                 type="checkbox"
                 checked={isAudioPlaybackEnabled}
                 onChange={lambda e: any -> None { setIsAudioPlaybackEnabled(e.target.checked); }}
                 disabled={not isConnected}
-                style={{"width": "1rem", "height": "1rem"}}
+                className="w-4 h-4 accent-primary"
             />
-            <label htmlFor="audio-playback" style={{"display": "flex", "alignItems": "center", "cursor": "pointer"}}>
+            <label htmlFor="audio-playback" className="flex items-center cursor-pointer text-text-primary">
                 {"Audio playback"}
             </label>
         </div>
@@ -162,16 +155,7 @@ cl def:pub ControlBar(props: any) -> any {
         <button
             onClick={onSaveAndRestart}
             disabled={not isConnected}
-            style={{
-                "color": "#fff",
-                "fontSize": "0.875rem",
-                "padding": "0.5rem 1rem",
-                "borderRadius": "0.375rem",
-                "border": "none",
-                "cursor": ("not-allowed" if not isConnected else "pointer"),
-                "backgroundColor": ("#9ca3af" if not isConnected else "#16a34a"),
-                "fontWeight": "600"
-            }}
+            className={saveBtnClass}
         >
             {"Save & Restart"}
         </button>

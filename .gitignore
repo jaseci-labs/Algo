@@ -10,6 +10,8 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+algo_env/
+.jaccache
 
 # IDE
 .idea/
@@ -22,6 +24,8 @@ node_modules/
 # Jac Client
 .client-build/
 *.session
+*.session-shm
+*.session-wal
 *.session.*
 .env
 package.json

@@ -1,10 +1,10 @@
 # useTranscript Hook
 # Custom hook for managing transcript state and operations
 
-cl import from react { useState }
+import from react { useState }
 
-cl def useTranscript() -> any {
-    [transcript, setTranscript] = useState([]);
+def:pub useTranscript() -> any {
+        [transcript, setTranscript] = useState([]);
     
     # Add a new message to transcript (for system messages)
     def addMessage(role: str, content: str) -> None {
