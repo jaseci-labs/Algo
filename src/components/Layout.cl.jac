@@ -3,9 +3,11 @@
 
 import from ..hooks.useHead { useHead, DEFAULT_META }
 
-def:pub Layout(props: any) -> any {
-    children = props.children;
-    meta = props.meta or DEFAULT_META;
+def:pub Layout(
+    children: any,
+    meta: any = None
+) -> any {
+    meta = meta or DEFAULT_META;
     
     # Merge with defaults
     finalMeta = {

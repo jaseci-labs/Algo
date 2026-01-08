@@ -3,8 +3,7 @@
 
 import from ..utils.mergeCls { cn }
 
-def:pub TranscriptItem(props: any) -> any {
-    item = props.item;
+def:pub TranscriptItem(item: any) -> any {
     role = item.role;
     content = item.content;
     

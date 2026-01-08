@@ -1,8 +1,8 @@
 import from "@jac-client/utils" { jacIsLoggedIn, Navigate }
 
-def:pub ProtectedRoute(props: any) -> any {
+def:pub ProtectedRoute(children: any) -> any {
     if not jacIsLoggedIn() {
         return <Navigate to="/login" />;
     }
-    return props.children;
+    return children;
 }

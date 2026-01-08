@@ -72,12 +72,7 @@ def:pub useMainApp() -> any {
     # ========== Local State ==========
     
     # User input state
-    has userText: str = "";
-
-    # Setter function to preserve external API (replaces former useState setter)
-    def setUserText(value: str) -> None {
-        userText = value;
-    }
+    [userText, setUserText] = useState("");
     
     # Ref for auto-scroll
     transcriptEndRef = useRef(None);
@@ -97,7 +92,7 @@ def:pub useMainApp() -> any {
             return;
         }
         
-        userText = "";
+        setUserText("");
         addMessage("user", message);
         
         username = getUsernameFromToken();
