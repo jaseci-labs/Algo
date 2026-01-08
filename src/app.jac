@@ -14,13 +14,14 @@ import from constants {
 # Import semantic types and functions
 import from semantics {
     EmotionalState,
-    TaskDecision,
+    ConversationIntent,
+    ConversationContext,
     ConnectionType,
     TaskRelationship,
-    SupervisorDecision,
+    IntentAnalysis,
     detect_emotional_state,
-    analyze_task_commitment,
-    parse_task_relationships,
+    analyze_conversation_intent,
+    extract_task_sequence,
     generate_friendly_response,
     generate_decision_reasoning
 }

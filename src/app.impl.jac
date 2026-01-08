@@ -139,11 +139,35 @@ impl update_task_graph.navigate_to_graph {
 impl update_task_graph.update_graph {
     # Find or create the previous task node
     prev_node = None;
+    
+    # Search ALL TaskState nodes in the graph, not just those connected to user_graph_data
+    # Start with nodes directly connected to user_graph_data
     all_task_nodes = [-->](`?TaskState);
-
-    for node in all_task_nodes {
-        if hasattr(node, 'task_name') and node.task_name == self.previous_task {
-            prev_node = node;
+    
+    # Also traverse the graph to find all reachable TaskState nodes
+    visited_for_search = {};
+    nodes_to_check = all_task_nodes.copy();
+    
+    while len(nodes_to_check) > 0 {
+        current = nodes_to_check.pop(0);
+        if hasattr(current, 'task_name') {
+            node_id = current.task_name;
+            if node_id not in visited_for_search {
+                visited_for_search[node_id] = current;
+                # Get successors via TaskFlow edges
+                successors = [current-->](`?TaskState);
+                for succ in successors {
+                    nodes_to_check.append(succ);
+                }
+            }
+        }
+    }
+    
+    # Now search for the previous task in all found nodes
+    for node_name in visited_for_search {
+        nodex = visited_for_search[node_name];
+        if nodex.task_name == self.previous_task {
+            prev_node = nodex;
             break;
         }
     }
@@ -152,17 +176,22 @@ impl update_task_graph.update_graph {
     if prev_node == None {
         print(f"[DEBUG CREATE] Creating prev_node: {self.previous_task}");
         prev_node = TaskState(task_name=self.previous_task);
-        # Connect ALL nodes to user_graph_data to anchor them in the graph
-        # The TaskFlow edges will represent the actual workflow relationships
-        here ++> prev_node;
-        print(f"[DEBUG CREATE] Connected {self.previous_task} to user_graph_data");
+        # Only connect to user_graph_data if it's the Start node
+        # All other nodes should only be reachable through TaskFlow edges
+        if self.previous_task == "Start" {
+            here ++> prev_node;
+            print(f"[DEBUG CREATE] Connected {self.previous_task} to user_graph_data");
+        } else {
+            print(f"[DEBUG CREATE] WARNING: Creating orphaned node {self.previous_task} - it won't be reachable!");
+        }
     }
 
     # Find or create the new task node
     new_node = None;
-    for node in all_task_nodes {
-        if hasattr(node, 'task_name') and node.task_name == self.task_name {
-            new_node = node;
+    for node_name in visited_for_search {
+        nodex = visited_for_search[node_name];
+        if nodex.task_name == self.task_name {
+            new_node = nodex;
             break;
         }
     }
@@ -175,10 +204,9 @@ impl update_task_graph.update_graph {
             task_name=self.task_name,
             created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         );
-        # Connect to user_graph_data to anchor it in the graph
-        # The TaskFlow edge will be created below to show the workflow
-        here ++> new_node;
-        print(f"[DEBUG CREATE] Connected {self.task_name} to user_graph_data");
+        # Don't connect to user_graph_data - nodes are only reachable through TaskFlow edges
+        # This ensures traversal from Start works correctly
+        print(f"[DEBUG CREATE] Created {self.task_name} (will be connected via TaskFlow edge)");
     }
 
     # For branching logic (multiple paths from one node), we always create the edge
@@ -592,8 +620,8 @@ impl rebuild_graph.rebuild {
         );
         node_map[node_name] = new_task;
 
-        # Connect first node (Start) to user_graph_data
-        if node_name == self.new_nodes[0] {
+        # ONLY connect Start node to user_graph_data
+        if node_name == "Start" {
             here ++> new_task;
         }
     }
@@ -656,21 +684,34 @@ impl call_supervisor.call {
                 user_graph = graph;
                 last_task = graph.last_task if hasattr(graph, 'last_task') else "Start";
                 
-                # Populate current_nodes from the graph
+                # Find Start node (only node directly connected to graph)
                 all_task_nodes = [graph-->](`?TaskState);
+                start_node = None;
                 for node in all_task_nodes {
-                    if hasattr(node, 'task_name') {
-                        current_nodes.append(node.task_name);
+                    if hasattr(node, 'task_name') and node.task_name == "Start" {
+                        start_node = node;
+                        break;
                     }
                 }
+                
+                # Traverse the ENTIRE graph to get all nodes and edges
+                if start_node != None {
+                    traverser = start_node spawn traverse_graph();
+                    current_nodes = traverser.nodes_list;
+                    current_edges = traverser.edges_list;
+                    print(f"[DEBUG CALL_SUPERVISOR] Loaded {len(current_nodes)} nodes and {len(current_edges)} edges");
+                } else {
+                    # No Start node found, empty graph
+                    current_nodes = ["Start"];
+                }
+                
                 break;
             }
         }
 
         # ============================================
-        # SEMANTIC FUNCTION APPROACH
+        # NEW SEMANTIC APPROACH (Multi-Step Analysis)
         # ============================================
-        # Use semantic functions to analyze and respond
         
         # Step 1: Detect emotional state
         emotional_state = detect_emotional_state(
@@ -678,113 +719,107 @@ impl call_supervisor.call {
             conversation_history=self.conversation_history
         );
         
-        # Step 2: Analyze if user is committing to tasks
-        decision = analyze_task_commitment(
+        # Step 2: Analyze conversation intent (commit, correct, clarify, question, think)
+        intent_analysis = analyze_conversation_intent(
             user_message=self.context_from_user,
+            conversation_history=self.conversation_history,
             existing_nodes=current_nodes,
-            last_task=last_task,
-            conversation_context=dumps(self.conversation_history[-3:] if len(self.conversation_history) > 3 else self.conversation_history)
+            last_task=last_task
         );
         
-        # Step 3: If tasks should be created, parse relationships
-        if decision.should_update_graph {
-            relationships = parse_task_relationships(
+        print(f"[DEBUG] Intent: {intent_analysis.conversation_context.intent}");
+        print(f"[DEBUG] Should create tasks: {intent_analysis.should_create_tasks}");
+        print(f"[DEBUG] Needs rebuild: {intent_analysis.conversation_context.needs_graph_rebuild}");
+        
+        # Step 3: Extract task sequence if creating tasks
+        relationships = [];
+        if intent_analysis.should_create_tasks {
+            relationships = extract_task_sequence(
                 user_message=self.context_from_user,
+                conversation_context=intent_analysis.conversation_context,
                 existing_nodes=current_nodes,
-                last_task=last_task
+                last_task=last_task,
+                current_edges=current_edges
             );
             
-            # DEBUG: Print parsed relationships
-            print(f"[DEBUG CALL_SUPERVISOR] Parsed {len(relationships)} relationships");
+            print(f"[DEBUG] Parsed {len(relationships)} relationships");
             for rel in relationships {
-                print(f"[DEBUG CALL_SUPERVISOR]   {rel.previous_task} --[{rel.edge_label}]--> {rel.new_task} ({rel.connection_type})");
+                print(f"[DEBUG]   [{rel.sequence_order}] {rel.from_task} --[{rel.edge_label}]--> {rel.to_task} ({rel.connection_type})");
             }
-            print(f"[DEBUG CALL_SUPERVISOR] needs_rebuild: {decision.needs_rebuild}");
             
-            # If reorganization needed (detected by semantic function), use rebuildGraph
-            if decision.needs_rebuild and len(current_nodes) > 1 {
-                print(f"[DEBUG CALL_SUPERVISOR] Triggering graph rebuild (semantic detection)");
+            # Execute the graph updates
+            print(f"[DEBUG CHECK] needs_graph_rebuild={intent_analysis.conversation_context.needs_graph_rebuild}, current_nodes={len(current_nodes)}, current_nodes={current_nodes}");
+            if intent_analysis.conversation_context.needs_graph_rebuild and len(current_nodes) > 1 {
+                print(f"[DEBUG] Using rebuildGraph (complete graph rebuild)");
                 
-                # Build new node list and edge list from relationships
-                # Strategy: Create a proper sequential chain based on relationships
+                # Collect all nodes (existing + new)
+                all_nodes = ["Start"];
+                added_nodes = {"Start": True};
                 
-                new_nodes = ["Start"];
+                # Add nodes from new relationships
+                for rel in relationships {
+                    if rel.from_task not in added_nodes {
+                        all_nodes.append(rel.from_task);
+                        added_nodes[rel.from_task] = True;
+                    }
+                    if rel.to_task not in added_nodes {
+                        all_nodes.append(rel.to_task);
+                        added_nodes[rel.to_task] = True;
+                    }
+                }
+                
+                # Add existing nodes that weren't mentioned (preserve them as orphans)
+                for node in current_nodes {
+                    if node not in added_nodes and node != "Start" {
+                        all_nodes.append(node);
+                        added_nodes[node] = True;
+                        print(f"[DEBUG REBUILD] Preserving unmentioned node: {node}");
+                    }
+                }
+                
+                # Create edges ONLY from new relationships (no merging with old edges)
                 new_edges = [];
-                added_nodes = {};
-                
-                # First, extract all unique tasks from relationships
-                tasks_mentioned = {};
                 for rel in relationships {
-                    tasks_mentioned[rel.new_task] = True;
-                    if rel.previous_task != "Start" and rel.previous_task != last_task {
-                        tasks_mentioned[rel.previous_task] = True;
-                    }
-                }
-                
-                # Build a dependency graph to determine order
-                # Find tasks that should come first (those that are previous_task but not new_task)
-                first_tasks = [];
-                subsequent_tasks = {};
-                
-                for rel in relationships {
-                    subsequent_tasks[rel.new_task] = rel.previous_task;
-                    # If previous_task is not Start and not in subsequent_tasks, it's a first task
-                    if rel.previous_task != "Start" and rel.previous_task not in subsequent_tasks {
-                        if rel.previous_task not in first_tasks {
-                            first_tasks.append(rel.previous_task);
-                        }
-                    }
-                }
-                
-                # Build the chain: Start -> first tasks -> subsequent tasks
-                # Add first tasks
-                for task in first_tasks {
-                    if task not in added_nodes {
-                        new_nodes.append(task);
-                        added_nodes[task] = True;
-                        new_edges.append({
-                            "from": "Start",
-                            "to": task,
-                            "label": "then"
-                        });
-                    }
-                }
-                
-                # Add tasks from relationships
-                for rel in relationships {
-                    if rel.new_task not in added_nodes {
-                        new_nodes.append(rel.new_task);
-                        added_nodes[rel.new_task] = True;
-                    }
-                    # Add the edge
                     new_edges.append({
-                        "from": rel.previous_task,
-                        "to": rel.new_task,
+                        "from": rel.from_task,
+                        "to": rel.to_task,
                         "label": rel.edge_label
                     });
                 }
                 
-                # Add any existing nodes not mentioned
-                for node in current_nodes {
-                    if node not in added_nodes and node != "Start" {
-                        new_nodes.append(node);
-                        added_nodes[node] = True;
-                    }
+                print(f"[DEBUG REBUILD] Complete rebuild: {len(all_nodes)} nodes, {len(new_edges)} edges");
+                for edge in new_edges {
+                    print(f"[DEBUG REBUILD] Edge: {edge['from']} -> {edge['to']} [{edge['label']}]");
                 }
                 
-                # Use rebuild walker
                 here spawn rebuild_graph(
                     username=self.username,
-                    new_nodes=new_nodes,
+                    new_nodes=all_nodes,
                     new_edges=new_edges
                 );
             } else {
-                # Normal update - execute the updates
+                print(f"[DEBUG] Using updateTaskGraph (normal addition)");
+                # Normal updates - execute each relationship in sequence order
+                # Manual sort since sorted() with key might not work in Jac
+                sorted_rels = [];
                 for rel in relationships {
-                    print(f"[DEBUG CALL_SUPERVISOR] Spawning update_task_graph for {rel.new_task}");
+                    inserted = False;
+                    for i in range(len(sorted_rels)) {
+                        if rel.sequence_order < sorted_rels[i].sequence_order {
+                            sorted_rels.insert(i, rel);
+                            inserted = True;
+                            break;
+                        }
+                    }
+                    if not inserted {
+                        sorted_rels.append(rel);
+                    }
+                }
+                
+                for rel in sorted_rels {
                     here spawn update_task_graph(
-                        task_name=rel.new_task,
-                        previous_task=rel.previous_task,
+                        task_name=rel.to_task,
+                        previous_task=rel.from_task,
                         edge_label=rel.edge_label,
                         username=self.username
                     );
@@ -794,29 +829,20 @@ impl call_supervisor.call {
         
         # Step 4: Generate friendly response
         task_names = [];
-        if decision.should_update_graph {
-            relationships = parse_task_relationships(
-                user_message=self.context_from_user,
-                existing_nodes=current_nodes,
-                last_task=last_task
-            );
-            for rel in relationships {
-                task_names.append(rel.new_task);
+        for rel in relationships {
+            if rel.to_task not in task_names {
+                task_names.append(rel.to_task);
             }
         }
         
         response = generate_friendly_response(
             user_message=self.context_from_user,
             emotional_state=emotional_state,
-            action_taken="task_added" if decision.should_update_graph else "none",
+            action_taken="task_added" if intent_analysis.should_create_tasks else "none",
             task_names=task_names
         );
         
-        # Note: Reasoning is generated internally by LLM but NOT shown to users
-        # Only show the final natural response
-        
         report {"response": response, "emotional_state": emotional_state.state};
-        
     } except Exception as e {
         report {"error": "Supervisor error", "details": str(e)};
     }
