@@ -53,14 +53,15 @@ impl traverse_graph.traverse_node {
     # Debug logging
     print(f"[TRAVERSE] Visiting node: {node_name}");
 
-    # Skip if already visited
-    if node_name in self.visited {
-        print(f"[TRAVERSE] Already visited {node_name}, skipping");
-        disengage;
+    # Check if already visited - if so, don't add again but DO traverse children
+    already_visited = node_name in self.visited;
+    
+    if not already_visited {
+        self.visited[node_name] = True;
+        self.nodes_list.append(node_name);
+    } else {
+        print(f"[TRAVERSE] Already visited {node_name}, but continuing to check children");
     }
-
-    self.visited[node_name] = True;
-    self.nodes_list.append(node_name);
 
     # Get all TaskFlow edges from this node
     all_edges = [edge here->:TaskFlow:->];
@@ -84,13 +85,24 @@ impl traverse_graph.traverse_node {
                 edge_label = e.label if hasattr(e, 'label') else "";
             }
 
-            # Add this edge to our list
-            self.edges_list.append({
-                "from": node_name,
-                "to": next_node.task_name,
-                "label": edge_label
-            });
-            print(f"[TRAVERSE]   Added edge: {node_name} --[{edge_label}]--> {next_node.task_name}");
+            # Add edge only if not already in list (avoid duplicate edges)
+            edge_key = f"{node_name}->{next_node.task_name}";
+            edge_exists = False;
+            for existing_edge in self.edges_list {
+                if existing_edge.get("from", "") == node_name and existing_edge.get("to", "") == next_node.task_name {
+                    edge_exists = True;
+                    break;
+                }
+            }
+            
+            if not edge_exists {
+                self.edges_list.append({
+                    "from": node_name,
+                    "to": next_node.task_name,
+                    "label": edge_label
+                });
+                print(f"[TRAVERSE]   Added edge: {node_name} --[{edge_label}]--> {next_node.task_name}");
+            }
 
             successor_idx = successor_idx + 1;
 
