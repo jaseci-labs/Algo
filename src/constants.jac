@@ -30,69 +30,6 @@ Use semantic functions to understand intent, then execute graph operations via O
 The semantic objects define all patterns (SEQUENTIAL, PARALLEL, CONDITIONAL, CONVERGENT). Trust the structured output.
 """;
 
-glob SUPERVISOR_TOOLS = [
-    {
-        "type": "function",
-        "name": "getCalendarEvents",
-        "description": "Get user's calendar events for a date or range.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "date": {
-                    "type": "string",
-                    "description": "Date to check: 'today', 'tomorrow', '2025-01-15', 'this week'"
-                }
-            },
-            "required": ["date"],
-            "additionalProperties": False
-        }
-    },
-    {
-        "type": "function",
-        "name": "getEmails",
-        "description": "Retrieve and summarize recent emails.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "filter": {
-                    "type": "string",
-                    "description": "Filter: 'unread', 'important', 'from:<sender>', or search term"
-                },
-                "count": {
-                    "type": "integer",
-                    "description": "Number of emails (default: 5)"
-                }
-            },
-            "required": [],
-            "additionalProperties": False
-        }
-    },
-    {
-        "type": "function",
-        "name": "getGitHubIssues",
-        "description": "Look up GitHub issues, PRs, or repo activity.", 
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "repo": {
-                    "type": "string",
-                    "description": "Repository: 'owner/repo' format"
-                },
-                "filter": {
-                    "type": "string",
-                    "description": "Filter: 'open', 'closed', 'assigned', 'mentioned', 'all'"
-                },
-                "type": {
-                    "type": "string",
-                    "description": "Type: 'issues', 'prs', 'all'"
-                }
-            },
-            "required": [],
-            "additionalProperties": False
-        }
-    }
-];
-
 # =============================================================
 #            CHAT AGENT INSTRUCTIONS (Junior Agent)
 # =============================================================

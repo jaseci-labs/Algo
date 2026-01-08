@@ -7,7 +7,6 @@ import from dotenv { load_dotenv }
 # Import prompt constants
 import from constants { 
     SUPERVISOR_INSTRUCTIONS, 
-    SUPERVISOR_TOOLS, 
     CHAT_AGENT_INSTRUCTIONS
 }
 
