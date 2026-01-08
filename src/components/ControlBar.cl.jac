@@ -3,21 +3,20 @@
 
 import from ..utils.mergeCls { cn }
 
-def:pub ControlBar(props: any) -> any {
-    # Props
-    sessionStatus = props.sessionStatus;
-    onToggleConnection = props.onToggleConnection;
-    isPTTActive = props.isPTTActive;
-    setIsPTTActive = props.setIsPTTActive;
-    isPTTUserSpeaking = props.isPTTUserSpeaking;
-    onTalkDown = props.onTalkDown;
-    onTalkUp = props.onTalkUp;
-    isAudioPlaybackEnabled = props.isAudioPlaybackEnabled;
-    setIsAudioPlaybackEnabled = props.setIsAudioPlaybackEnabled;
-    isMicMuted = props.isMicMuted;
-    onToggleMicMute = props.onToggleMicMute;
-    onSaveAndRestart = props.onSaveAndRestart;
-    
+def:pub ControlBar(
+    sessionStatus: str,
+    onToggleConnection: any,
+    isPTTActive: bool,
+    setIsPTTActive: any,
+    isPTTUserSpeaking: bool,
+    onTalkDown: any,
+    onTalkUp: any,
+    isAudioPlaybackEnabled: bool,
+    setIsAudioPlaybackEnabled: any,
+    isMicMuted: bool,
+    onToggleMicMute: any,
+    onSaveAndRestart: any
+) -> any {
     # Computed values
     isConnected = sessionStatus == "CONNECTED";
     isConnecting = sessionStatus == "CONNECTING";

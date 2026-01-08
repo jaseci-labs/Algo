@@ -3,10 +3,11 @@
 
 import from ..utils.mergeCls { cn }
 
-def:pub MessageInput(props: any) -> any {
-    userText = props.userText;
-    setUserText = props.setUserText;
-    onSend = props.onSend;
+def:pub MessageInput(
+    userText: str,
+    setUserText: any,
+    onSend: any
+) -> any {
     
     return <div className="p-4 border-t border-border flex gap-2 bg-surface">
         <input

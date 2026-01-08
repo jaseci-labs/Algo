@@ -3,8 +3,7 @@ import from react { useState, useEffect, useRef }
 import from "@hpcc-js/wasm/graphviz" { Graphviz }
 import from ..utils.mergeCls { cn }
 
-def:pub GraphViewer(props: any) -> any {
-    dotCode = props.dotCode;
+def:pub GraphViewer(dotCode: str) -> any {
     [svgContent, setSvgContent] = useState("");
     [isLoading, setIsLoading] = useState(True);
     [renderKey, setRenderKey] = useState(0);
