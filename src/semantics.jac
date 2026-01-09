@@ -1,19 +1,8 @@
-# =============================================================
-#                    SEMANTIC TYPE DEFINITIONS
-# =============================================================
-"""
-This module defines all semantic objects, enums, and AI-powered functions
-used by Algo for natural language understanding and graph generation.
-"""
+"""This module defines all semantic objects, enums, and AI-powered functions used by Algo for natural language understanding and graph generation."""
 
 import from byllm.lib { Model }
 
-# Initialize LLM model for semantic functions
 glob llm = Model(model_name="gpt-4.1");
-
-# =============================================================
-#                      SEMANTIC OBJECTS
-# =============================================================
 
 """Represents the emotional state detected from user's message"""
 obj EmotionalState {
