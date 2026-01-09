@@ -169,38 +169,29 @@ impl update_task_graph.update_graph {
     # Update last task
     here.last_task = self.task_name;
 
-    # Generate graph visualization using printgraph() builtin
-    # Find the Start node to use as root for visualization
+    # Use printgraph() to get graph structure, then apply custom styling
     all_task_nodes = [-->](`?TaskState);
-    print(f"[DEBUG] Found {len(all_task_nodes)} TaskState nodes connected to user_graph_data");
-
     start_node = None;
     for node in all_task_nodes {
-        if hasattr(node, 'task_name') {
-            print(f"[DEBUG]   Node: {node.task_name}");
-            if node.task_name == "Start" {
-                start_node = node;
-            }
+        if hasattr(node, 'task_name') and node.task_name == "Start" {
+            start_node = node;
+            break;
         }
     }
 
-    # Use printgraph() to generate DOT visualization
-    dot_code = "";
-    if start_node != None {
-        print(f"[DEBUG] Generating graph from Start node using printgraph()");
-        dot_code = printgraph(node=start_node);
-    } else {
-        print(f"[DEBUG] WARNING: Start node not found!");
-    }
-
-    # Parse DOT to extract node and edge lists for compatibility
     node_list = [];
     edge_list = [];
-    if dot_code {
-        result = parse_dot_to_lists(dot_code);
+    if start_node {
+        dot_output = printgraph(node=start_node);
+        print(f"[DEBUG UPDATE] printgraph output:\n{dot_output}");
+        result = parse_printgraph_output(dot_output);
         node_list = result[0];
         edge_list = result[1];
+        print(f"[DEBUG UPDATE] Parsed {len(node_list)} nodes and {len(edge_list)} edges");
     }
+
+    # Generate styled DOT code
+    dot_code = generate_dot_code_from_lists(node_list, edge_list);
 
     report {
         "success": True,
@@ -239,38 +230,27 @@ impl get_task_graph.navigate_to_graph {
 }
 
 impl get_task_graph.get_graph {
-    # Use printgraph() builtin to generate graph visualization
-    # Find the "Start" node to begin visualization
+    # Use printgraph() to get graph structure, then apply custom styling
     all_task_nodes = [-->](`?TaskState);
-    print(f"[DEBUG GET_GRAPH] Found {len(all_task_nodes)} TaskState nodes connected to user_graph_data");
-
     start_node = None;
     for node in all_task_nodes {
-        if hasattr(node, 'task_name') {
-            print(f"[DEBUG GET_GRAPH]   Node: {node.task_name}");
-            if node.task_name == "Start" {
-                start_node = node;
-            }
+        if hasattr(node, 'task_name') and node.task_name == "Start" {
+            start_node = node;
+            break;
         }
     }
 
-    # Use printgraph() to generate DOT visualization
-    dot_code = "";
-    if start_node != None {
-        print(f"[DEBUG GET_GRAPH] Generating graph from Start node using printgraph()");
-        dot_code = printgraph(node=start_node);
-    } else {
-        print(f"[DEBUG GET_GRAPH] WARNING: Start node not found!");
-    }
-
-    # Parse DOT to extract node and edge lists for compatibility
     node_list = [];
     edge_list = [];
-    if dot_code {
-        result = parse_dot_to_lists(dot_code);
+    if start_node {
+        dot_output = printgraph(node=start_node);
+        result = parse_printgraph_output(dot_output);
         node_list = result[0];
         edge_list = result[1];
     }
+
+    # Generate styled DOT code
+    dot_code = generate_dot_code_from_lists(node_list, edge_list);
 
     report {
         "nodes": node_list,
@@ -588,12 +568,8 @@ impl rebuild_graph.rebuild {
         here.last_task = "Start";
     }
 
-    # Generate updated DOT code using printgraph()
-    start_node = node_map.get("Start", None);
-    dot_code = "";
-    if start_node {
-        dot_code = printgraph(node=start_node);
-    }
+    # Generate DOT code with custom styling
+    dot_code = generate_dot_code_from_lists(self.new_nodes, self.new_edges);
 
     report {
         "success": True,
@@ -640,8 +616,8 @@ impl call_supervisor.call {
                 
                 # Use printgraph() to get graph structure
                 if start_node != None {
-                    dot_code = printgraph(node=start_node);
-                    result = parse_dot_to_lists(dot_code);
+                    dot_output = printgraph(node=start_node);
+                    result = parse_printgraph_output(dot_output);
                     current_nodes = result[0];
                     current_edges = result[1];
                     print(f"[DEBUG CALL_SUPERVISOR] Loaded {len(current_nodes)} nodes and {len(current_edges)} edges");
@@ -797,57 +773,90 @@ impl call_supervisor.call {
 #                       HELPER FUNCTIONS
 #===========================================================
 
-# Helper function to parse DOT code into node and edge lists
-def parse_dot_to_lists(dot_code: str) -> tuple {
-    # Parse DOT graph output from printgraph() to extract nodes and edges
+# Simple parser to extract TaskState nodes and TaskFlow edges from printgraph() output
+def parse_printgraph_output(dot_output: str) -> tuple {
     node_list = [];
     edge_list = [];
+    node_map = {};  # id -> task_name
     
-    if not dot_code {
+    if not dot_output {
         return (node_list, edge_list);
     }
     
-    lines = dot_code.split("\n");
+    # Replace HTML entities with actual characters
+    dot_output = dot_output.replace("&#x27;", "'");
+    dot_output = dot_output.replace("&quot;", '"');
+    
+    lines = dot_output.split("\n");
+    
+    # FIRST PASS: Parse all node definitions
     for line in lines {
         line = line.strip();
         
-        # Parse edges (format: "NodeA" -> "NodeB" [label="label"];)
+        # Parse node: 0 [label="TaskState(task_name='Start', ...)"]
+        if "[label=" in line and "->" not in line {
+            parts = line.split("[label=");
+            if len(parts) == 2 {
+                node_id = parts[0].strip();
+                label = parts[1];
+                
+                # Only process TaskState nodes
+                if "TaskState(task_name=" in label {
+                    # Extract task name: TaskState(task_name='Start', ...)
+                    start = label.find("task_name=") + 11;  # after task_name='
+                    end = label.find("'", start + 1);
+                    if end > start {
+                        task_name = label[start:end];
+                        node_map[node_id] = task_name;
+                        node_list.append(task_name);
+                    }
+                }
+            }
+        }
+    }
+    
+    # SECOND PASS: Parse edges (now that we have all nodes)
+    for line in lines {
+        line = line.strip();
+        
+        # Parse edge: 0 -> 2  [label="TaskFlow(label='then')"]
         if "->" in line and not line.startswith("//") {
-            # Extract node names and label
             parts = line.split("->");
             if len(parts) == 2 {
-                from_node = parts[0].strip().strip('"').strip();
-                rest = parts[1];
+                from_id = parts[0].strip();
+                to_part = parts[1].strip();
                 
-                # Extract to_node and label
-                to_node = "";
-                label = "";
-                if "[" in rest {
-                    to_node = rest.split("[")[0].strip().strip('"').strip().rstrip(";");
-                    # Extract label
-                    if 'label="' in rest {
-                        label_start = rest.index('label="') + 7;
-                        label_end = rest.index('"', label_start);
-                        label = rest[label_start:label_end];
-                    }
+                # Extract to_id (handle spaces before [)
+                to_id = "";
+                if "[" in to_part {
+                    to_id = to_part.split("[")[0].strip();
                 } else {
-                    to_node = rest.strip().strip('"').strip().rstrip(";");
+                    to_id = to_part.strip().rstrip(";");
                 }
                 
-                # Add nodes if not already in list
-                if from_node and from_node not in node_list {
-                    node_list.append(from_node);
-                }
-                if to_node and to_node not in node_list {
-                    node_list.append(to_node);
+                # Extract edge label from TaskFlow
+                edge_label = "";
+                if "TaskFlow(label=" in to_part {
+                    # Find the label value inside TaskFlow
+                    label_idx = to_part.find("TaskFlow(label=");
+                    if label_idx >= 0 {
+                        rest = to_part[label_idx + 15:];  # after "TaskFlow(label="
+                        # Look for the closing quote
+                        if "'" in rest {
+                            quote_end = rest.find("'");
+                            if quote_end > 0 {
+                                edge_label = rest[:quote_end];
+                            }
+                        }
+                    }
                 }
                 
-                # Add edge
-                if from_node and to_node {
+                # Only add edges between TaskState nodes
+                if from_id in node_map and to_id in node_map {
                     edge_list.append({
-                        "from": from_node,
-                        "to": to_node,
-                        "label": label
+                        "from": node_map[from_id],
+                        "to": node_map[to_id],
+                        "label": edge_label
                     });
                 }
             }
