@@ -71,10 +71,6 @@ sem IntentAnalysis.should_create_tasks = "TRUE only if user committed to action,
 sem IntentAnalysis.conversation_context = "Context about what user is doing: correcting, clarifying, committing new";
 sem IntentAnalysis.confidence = "Confidence 0.0-1.0 in the intent classification";
 
-# =============================================================
-#                  SEMANTIC AI FUNCTIONS
-# =============================================================
-
 """Detect the user's emotional state from their message and conversation context"""
 def detect_emotional_state(
     user_message: str,

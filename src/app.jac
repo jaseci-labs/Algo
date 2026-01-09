@@ -49,14 +49,6 @@ walker get_session_token {
     can fetch with `root entry;
 }
 
-walker traverse_graph {
-    has nodes_list: list = [];
-    has edges_list: list = [];
-    has visited: dict = {};
-
-    can traverse_node with TaskState entry;
-}
-
 walker init_user_graph {
     can initialize with `root entry;
 }

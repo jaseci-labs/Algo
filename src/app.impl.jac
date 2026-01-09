@@ -40,66 +40,6 @@ impl get_session_token.fetch {
     }
 }
 
-impl traverse_graph.traverse_node {
-    node_name = here.task_name;
-    print(f"[TRAVERSE] Visiting node: {node_name}");
-    already_visited = node_name in self.visited;
-    
-    if not already_visited {
-        self.visited[node_name] = True;
-        self.nodes_list.append(node_name);
-    } else {
-        print(f"[TRAVERSE] Already visited {node_name}, but continuing to check children");
-    }
-
-    all_edges = [edge here->:TaskFlow:->];
-    print(f"[TRAVERSE] Node {node_name} has {len(all_edges)} TaskFlow edges");
-
-    # Get direct successors (only immediate children)
-    successors = [-->](`?TaskState);
-    print(f"[TRAVERSE] Found {len(successors)} successors from {node_name}");
-
-    # Match edges to successors by index
-    # In Jac OSP, the order of edges typically matches the order of successors
-    successor_idx = 0;
-    for next_node in successors {
-        if hasattr(next_node, 'task_name') {
-            print(f"[TRAVERSE]   Successor [{successor_idx}]: {next_node.task_name}");
-
-            # Get the corresponding edge label if available
-            edge_label = "";
-            if successor_idx < len(all_edges) {
-                e = all_edges[successor_idx];
-                edge_label = e.label if hasattr(e, 'label') else "";
-            }
-
-            # Add edge only if not already in list (avoid duplicate edges)
-            edge_key = f"{node_name}->{next_node.task_name}";
-            edge_exists = False;
-            for existing_edge in self.edges_list {
-                if existing_edge.get("from", "") == node_name and existing_edge.get("to", "") == next_node.task_name {
-                    edge_exists = True;
-                    break;
-                }
-            }
-            
-            if not edge_exists {
-                self.edges_list.append({
-                    "from": node_name,
-                    "to": next_node.task_name,
-                    "label": edge_label
-                });
-                print(f"[TRAVERSE]   Added edge: {node_name} --[{edge_label}]--> {next_node.task_name}");
-            }
-
-            successor_idx = successor_idx + 1;
-
-            # Continue traversing
-            visit next_node;
-        }
-    }
-}
-
 #WALKER: init_user_graph
 impl init_user_graph.initialize {
     visit [-->](`?user_graph_data) else {
@@ -229,8 +169,8 @@ impl update_task_graph.update_graph {
     # Update last task
     here.last_task = self.task_name;
 
-    # Use helper walker to traverse the graph and collect structure
-    # Find the "Start" node to begin traversal
+    # Generate graph visualization using printgraph() builtin
+    # Find the Start node to use as root for visualization
     all_task_nodes = [-->](`?TaskState);
     print(f"[DEBUG] Found {len(all_task_nodes)} TaskState nodes connected to user_graph_data");
 
@@ -244,23 +184,23 @@ impl update_task_graph.update_graph {
         }
     }
 
-    node_list = [];
-    edge_list = [];
-
+    # Use printgraph() to generate DOT visualization
+    dot_code = "";
     if start_node != None {
-        print(f"[DEBUG] Starting traversal from Start node");
-        # Spawn walker at the Start node
-        traverser = start_node spawn traverse_graph();
-
-        # Get the collected node and edge lists from the walker
-        node_list = traverser.nodes_list;
-        edge_list = traverser.edges_list;
+        print(f"[DEBUG] Generating graph from Start node using printgraph()");
+        dot_code = printgraph(node=start_node);
     } else {
         print(f"[DEBUG] WARNING: Start node not found!");
     }
 
-    # Generate DOT code
-    dot_code = generate_dot_code_from_lists(node_list, edge_list);
+    # Parse DOT to extract node and edge lists for compatibility
+    node_list = [];
+    edge_list = [];
+    if dot_code {
+        result = parse_dot_to_lists(dot_code);
+        node_list = result[0];
+        edge_list = result[1];
+    }
 
     report {
         "success": True,
@@ -299,8 +239,8 @@ impl get_task_graph.navigate_to_graph {
 }
 
 impl get_task_graph.get_graph {
-    # Use helper walker to traverse the graph
-    # Find the "Start" node to begin traversal
+    # Use printgraph() builtin to generate graph visualization
+    # Find the "Start" node to begin visualization
     all_task_nodes = [-->](`?TaskState);
     print(f"[DEBUG GET_GRAPH] Found {len(all_task_nodes)} TaskState nodes connected to user_graph_data");
 
@@ -314,23 +254,23 @@ impl get_task_graph.get_graph {
         }
     }
 
-    node_list = [];
-    edge_list = [];
-
+    # Use printgraph() to generate DOT visualization
+    dot_code = "";
     if start_node != None {
-        print(f"[DEBUG GET_GRAPH] Starting traversal from Start node");
-        # Spawn walker at the Start node
-        traverser = start_node spawn traverse_graph();
-
-        # Get the collected node and edge lists
-        node_list = traverser.nodes_list;
-        edge_list = traverser.edges_list;
+        print(f"[DEBUG GET_GRAPH] Generating graph from Start node using printgraph()");
+        dot_code = printgraph(node=start_node);
     } else {
         print(f"[DEBUG GET_GRAPH] WARNING: Start node not found!");
     }
 
-    # Generate DOT code
-    dot_code = generate_dot_code_from_lists(node_list, edge_list);
+    # Parse DOT to extract node and edge lists for compatibility
+    node_list = [];
+    edge_list = [];
+    if dot_code {
+        result = parse_dot_to_lists(dot_code);
+        node_list = result[0];
+        edge_list = result[1];
+    }
 
     report {
         "nodes": node_list,
@@ -648,8 +588,12 @@ impl rebuild_graph.rebuild {
         here.last_task = "Start";
     }
 
-    # Generate updated DOT code
-    dot_code = generate_dot_code_from_lists(self.new_nodes, self.new_edges);
+    # Generate updated DOT code using printgraph()
+    start_node = node_map.get("Start", None);
+    dot_code = "";
+    if start_node {
+        dot_code = printgraph(node=start_node);
+    }
 
     report {
         "success": True,
@@ -694,11 +638,12 @@ impl call_supervisor.call {
                     }
                 }
                 
-                # Traverse the ENTIRE graph to get all nodes and edges
+                # Use printgraph() to get graph structure
                 if start_node != None {
-                    traverser = start_node spawn traverse_graph();
-                    current_nodes = traverser.nodes_list;
-                    current_edges = traverser.edges_list;
+                    dot_code = printgraph(node=start_node);
+                    result = parse_dot_to_lists(dot_code);
+                    current_nodes = result[0];
+                    current_edges = result[1];
                     print(f"[DEBUG CALL_SUPERVISOR] Loaded {len(current_nodes)} nodes and {len(current_edges)} edges");
                 } else {
                     # No Start node found, empty graph
@@ -852,8 +797,69 @@ impl call_supervisor.call {
 #                       HELPER FUNCTIONS
 #===========================================================
 
-# Helper function to generate DOT code from node and edge lists
+# Helper function to parse DOT code into node and edge lists
+def parse_dot_to_lists(dot_code: str) -> tuple {
+    # Parse DOT graph output from printgraph() to extract nodes and edges
+    node_list = [];
+    edge_list = [];
+    
+    if not dot_code {
+        return (node_list, edge_list);
+    }
+    
+    lines = dot_code.split("\n");
+    for line in lines {
+        line = line.strip();
+        
+        # Parse edges (format: "NodeA" -> "NodeB" [label="label"];)
+        if "->" in line and not line.startswith("//") {
+            # Extract node names and label
+            parts = line.split("->");
+            if len(parts) == 2 {
+                from_node = parts[0].strip().strip('"').strip();
+                rest = parts[1];
+                
+                # Extract to_node and label
+                to_node = "";
+                label = "";
+                if "[" in rest {
+                    to_node = rest.split("[")[0].strip().strip('"').strip().rstrip(";");
+                    # Extract label
+                    if 'label="' in rest {
+                        label_start = rest.index('label="') + 7;
+                        label_end = rest.index('"', label_start);
+                        label = rest[label_start:label_end];
+                    }
+                } else {
+                    to_node = rest.strip().strip('"').strip().rstrip(";");
+                }
+                
+                # Add nodes if not already in list
+                if from_node and from_node not in node_list {
+                    node_list.append(from_node);
+                }
+                if to_node and to_node not in node_list {
+                    node_list.append(to_node);
+                }
+                
+                # Add edge
+                if from_node and to_node {
+                    edge_list.append({
+                        "from": from_node,
+                        "to": to_node,
+                        "label": label
+                    });
+                }
+            }
+        }
+    }
+    
+    return (node_list, edge_list);
+}
+
 def generate_dot_code_from_lists(node_list: list, edge_list: list) -> str {
+    # Generate custom styled DOT code from node and edge lists.
+    # Used for applying custom styling not available in printgraph().
     # Check if graph is empty
     if len(node_list) == 0 {
         return "";
