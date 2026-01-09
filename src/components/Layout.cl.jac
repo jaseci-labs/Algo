@@ -7,15 +7,15 @@ def:pub Layout(
     children: any,
     meta: any = None
 ) -> any {
-    meta = meta or DEFAULT_META;
+    activeMeta = meta or DEFAULT_META;
     
     # Merge with defaults
     finalMeta = {
-        "title": meta.title or DEFAULT_META.title,
-        "description": meta.description or DEFAULT_META.description,
-        "favicon": meta.favicon or DEFAULT_META.favicon,
-        "themeColor": meta.themeColor or DEFAULT_META.themeColor,
-        "ogImage": meta.ogImage or DEFAULT_META.ogImage
+        "title": activeMeta.title or DEFAULT_META.title,
+        "description": activeMeta.description or DEFAULT_META.description,
+        "favicon": activeMeta.favicon or DEFAULT_META.favicon,
+        "themeColor": activeMeta.themeColor or DEFAULT_META.themeColor,
+        "ogImage": activeMeta.ogImage or DEFAULT_META.ogImage
     };
     
     # Apply head configuration

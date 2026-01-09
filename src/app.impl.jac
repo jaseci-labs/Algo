@@ -1,3 +1,6 @@
+import from datetime { datetime }
+import from time { time }
+
 impl get_session_token.fetch {
     try {
         api_key = getenv("OPENAI_API_KEY");
@@ -40,73 +43,10 @@ impl get_session_token.fetch {
     }
 }
 
-impl traverse_graph.traverse_node {
-    node_name = here.task_name;
-    print(f"[TRAVERSE] Visiting node: {node_name}");
-    already_visited = node_name in self.visited;
-    
-    if not already_visited {
-        self.visited[node_name] = True;
-        self.nodes_list.append(node_name);
-    } else {
-        print(f"[TRAVERSE] Already visited {node_name}, but continuing to check children");
-    }
-
-    all_edges = [edge here->:TaskFlow:->];
-    print(f"[TRAVERSE] Node {node_name} has {len(all_edges)} TaskFlow edges");
-
-    # Get direct successors (only immediate children)
-    successors = [-->](`?TaskState);
-    print(f"[TRAVERSE] Found {len(successors)} successors from {node_name}");
-
-    # Match edges to successors by index
-    # In Jac OSP, the order of edges typically matches the order of successors
-    successor_idx = 0;
-    for next_node in successors {
-        if hasattr(next_node, 'task_name') {
-            print(f"[TRAVERSE]   Successor [{successor_idx}]: {next_node.task_name}");
-
-            # Get the corresponding edge label if available
-            edge_label = "";
-            if successor_idx < len(all_edges) {
-                e = all_edges[successor_idx];
-                edge_label = e.label if hasattr(e, 'label') else "";
-            }
-
-            # Add edge only if not already in list (avoid duplicate edges)
-            edge_key = f"{node_name}->{next_node.task_name}";
-            edge_exists = False;
-            for existing_edge in self.edges_list {
-                if existing_edge.get("from", "") == node_name and existing_edge.get("to", "") == next_node.task_name {
-                    edge_exists = True;
-                    break;
-                }
-            }
-            
-            if not edge_exists {
-                self.edges_list.append({
-                    "from": node_name,
-                    "to": next_node.task_name,
-                    "label": edge_label
-                });
-                print(f"[TRAVERSE]   Added edge: {node_name} --[{edge_label}]--> {next_node.task_name}");
-            }
-
-            successor_idx = successor_idx + 1;
-
-            # Continue traversing
-            visit next_node;
-        }
-    }
-}
-
 #WALKER: init_user_graph
 impl init_user_graph.initialize {
     visit [-->](`?user_graph_data) else {
-        # Create user graph container
         graph_cont = here ++> user_graph_data();
-
-        # Create initial "Start" TaskState node connected to the graph
         start_node = TaskState(task_name="Start");
         graph_cont ++> start_node;
     }
@@ -141,10 +81,7 @@ impl update_task_graph.update_graph {
     prev_node = None;
     
     # Search ALL TaskState nodes in the graph, not just those connected to user_graph_data
-    # Start with nodes directly connected to user_graph_data
     all_task_nodes = [-->](`?TaskState);
-    
-    # Also traverse the graph to find all reachable TaskState nodes
     visited_for_search = {};
     nodes_to_check = all_task_nodes.copy();
     
@@ -174,15 +111,9 @@ impl update_task_graph.update_graph {
 
     # If previous task doesn't exist, create it (shouldn't happen normally, but safe fallback)
     if prev_node == None {
-        print(f"[DEBUG CREATE] Creating prev_node: {self.previous_task}");
         prev_node = TaskState(task_name=self.previous_task);
-        # Only connect to user_graph_data if it's the Start node
-        # All other nodes should only be reachable through TaskFlow edges
         if self.previous_task == "Start" {
             here ++> prev_node;
-            print(f"[DEBUG CREATE] Connected {self.previous_task} to user_graph_data");
-        } else {
-            print(f"[DEBUG CREATE] WARNING: Creating orphaned node {self.previous_task} - it won't be reachable!");
         }
     }
 
@@ -198,68 +129,37 @@ impl update_task_graph.update_graph {
 
     if new_node == None {
         # Create new task node
-        print(f"[DEBUG CREATE] Creating new_node: {self.task_name}");
-        import from datetime { datetime }
         new_node = TaskState(
             task_name=self.task_name,
             created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         );
-        # Don't connect to user_graph_data - nodes are only reachable through TaskFlow edges
-        # This ensures traversal from Start works correctly
-        print(f"[DEBUG CREATE] Created {self.task_name} (will be connected via TaskFlow edge)");
     }
-
-    # For branching logic (multiple paths from one node), we always create the edge
-    # Jac OSP supports multiple edges from one node to different nodes
-    # NOTE: We're not checking for duplicates here - each call creates a new edge
-    # This is intentional to support branching workflows (if/else, options, etc.)
 
     # Always create the edge to support branching
-    if True {
-        print(f"[DEBUG EDGE] Creating edge: {self.previous_task} --[{self.edge_label}]--> {self.task_name}");
-        print(f"[DEBUG EDGE] prev_node type: {type(prev_node)}, new_node type: {type(new_node)}");
-        prev_node +>:TaskFlow(label=self.edge_label):+> new_node;
-        print(f"[DEBUG EDGE] Edge created successfully");
+    prev_node +>:TaskFlow(label=self.edge_label):+> new_node;
 
-        # Verify the edge was created
-        verify_edges = [edge prev_node->:TaskFlow:->];
-        print(f"[DEBUG EDGE] prev_node now has {len(verify_edges)} TaskFlow edges");
-    }
-
-    # Update last task
     here.last_task = self.task_name;
 
-    # Use helper walker to traverse the graph and collect structure
-    # Find the "Start" node to begin traversal
+    # Use printgraph() to get graph structure, then apply custom styling
     all_task_nodes = [-->](`?TaskState);
-    print(f"[DEBUG] Found {len(all_task_nodes)} TaskState nodes connected to user_graph_data");
-
     start_node = None;
     for node in all_task_nodes {
-        if hasattr(node, 'task_name') {
-            print(f"[DEBUG]   Node: {node.task_name}");
-            if node.task_name == "Start" {
-                start_node = node;
-            }
+        if hasattr(node, 'task_name') and node.task_name == "Start" {
+            start_node = node;
+            break;
         }
     }
 
     node_list = [];
     edge_list = [];
-
-    if start_node != None {
-        print(f"[DEBUG] Starting traversal from Start node");
-        # Spawn walker at the Start node
-        traverser = start_node spawn traverse_graph();
-
-        # Get the collected node and edge lists from the walker
-        node_list = traverser.nodes_list;
-        edge_list = traverser.edges_list;
-    } else {
-        print(f"[DEBUG] WARNING: Start node not found!");
+    if start_node {
+        dot_output = printgraph(node=start_node);
+        result = parse_printgraph_output(dot_output);
+        node_list = result[0];
+        edge_list = result[1];
     }
 
-    # Generate DOT code
+    # Generate styled DOT code
     dot_code = generate_dot_code_from_lists(node_list, edge_list);
 
     report {
@@ -273,7 +173,6 @@ impl update_task_graph.update_graph {
 
 # WALKER: get_task_graph
 impl get_task_graph.navigate_to_graph {
-    # Find user-specific graph based on username
     all_graphs = [-->](`?user_graph_data);
     
     user_graph = None;
@@ -299,37 +198,26 @@ impl get_task_graph.navigate_to_graph {
 }
 
 impl get_task_graph.get_graph {
-    # Use helper walker to traverse the graph
-    # Find the "Start" node to begin traversal
+    # Use printgraph() to get graph structure, then apply custom styling
     all_task_nodes = [-->](`?TaskState);
-    print(f"[DEBUG GET_GRAPH] Found {len(all_task_nodes)} TaskState nodes connected to user_graph_data");
-
     start_node = None;
     for node in all_task_nodes {
-        if hasattr(node, 'task_name') {
-            print(f"[DEBUG GET_GRAPH]   Node: {node.task_name}");
-            if node.task_name == "Start" {
-                start_node = node;
-            }
+        if hasattr(node, 'task_name') and node.task_name == "Start" {
+            start_node = node;
+            break;
         }
     }
 
     node_list = [];
     edge_list = [];
-
-    if start_node != None {
-        print(f"[DEBUG GET_GRAPH] Starting traversal from Start node");
-        # Spawn walker at the Start node
-        traverser = start_node spawn traverse_graph();
-
-        # Get the collected node and edge lists
-        node_list = traverser.nodes_list;
-        edge_list = traverser.edges_list;
-    } else {
-        print(f"[DEBUG GET_GRAPH] WARNING: Start node not found!");
+    if start_node {
+        dot_output = printgraph(node=start_node);
+        result = parse_printgraph_output(dot_output);
+        node_list = result[0];
+        edge_list = result[1];
     }
 
-    # Generate DOT code
+    # Generate styled DOT code
     dot_code = generate_dot_code_from_lists(node_list, edge_list);
 
     report {
@@ -367,12 +255,7 @@ impl clear_graph.clear_data {
     # Delete all TaskState nodes connected to this graph
     all_task_nodes = [-->](`?TaskState);
 
-    print(f"[DEBUG CLEAR] Found {len(all_task_nodes)} TaskState nodes to delete");
-
     for node in all_task_nodes {
-        if hasattr(node, 'task_name') {
-            print(f"[DEBUG CLEAR] Deleting node: {node.task_name}");
-        }
         # Delete the node
         del node;
     }
@@ -383,8 +266,6 @@ impl clear_graph.clear_data {
 
     # Reset last task
     here.last_task = "Start";
-
-    print(f"[DEBUG CLEAR] Graph cleared for user {self.username}, Start node recreated");
 
     report {
         "success": True,
@@ -422,58 +303,25 @@ impl save_routine.save_routine_data {
     }
 
     # Get current timestamp
-    import from time { time }
     timestamp = str(time());
 
-    # Build node and edge lists by traversing the OSP graph
-    node_list = [];
-    edge_list = [];
-
-    # Get all TaskState nodes reachable from this graph
-    all_nodes = [-->](`?TaskState);
-
-    # First pass: collect all node names
-    for node in all_nodes {
-        if hasattr(node, 'task_name') {
-            node_list.append(node.task_name);
+    # Use printgraph() to get graph structure (same approach as other walkers)
+    all_task_nodes = [-->](`?TaskState);
+    start_node = None;
+    for node in all_task_nodes {
+        if hasattr(node, 'task_name') and node.task_name == "Start" {
+            start_node = node;
+            break;
         }
     }
 
-    # Second pass: collect all edges by checking each node's outgoing connections
-    for node in all_nodes {
-        if not hasattr(node, 'task_name') {
-            continue;
-        }
-
-        from_task = node.task_name;
-
-        # Get edges from this node
-        edges = [edge node->:TaskFlow:->];
-        for e in edges {
-            # For each edge, check all nodes to find the target
-            for target in all_nodes {
-                if hasattr(target, 'task_name') {
-                    # Check if this could be the target
-                    # We'll add all edges we find
-                    edge_label = e.label if hasattr(e, 'label') else "";
-                    # Only add if we haven't already added this edge
-                    edge_exists = False;
-                    for existing_edge in edge_list {
-                        if existing_edge.get("from") == from_task and existing_edge.get("to") == target.task_name {
-                            edge_exists = True;
-                            break;
-                        }
-                    }
-                    if not edge_exists {
-                        edge_list.append({
-                            "from": from_task,
-                            "to": target.task_name,
-                            "label": edge_label
-                        });
-                    }
-                }
-            }
-        }
+    node_list = [];
+    edge_list = [];
+    if start_node {
+        dot_output = printgraph(node=start_node);
+        result = parse_printgraph_output(dot_output);
+        node_list = result[0];
+        edge_list = result[1];
     }
 
     # Save the routine as dict for compatibility
@@ -613,7 +461,6 @@ impl rebuild_graph.rebuild {
 
     # Create all nodes first
     for node_name in self.new_nodes {
-        import from datetime { datetime }
         new_task = TaskState(
             task_name=node_name,
             created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -648,7 +495,7 @@ impl rebuild_graph.rebuild {
         here.last_task = "Start";
     }
 
-    # Generate updated DOT code
+    # Generate DOT code with custom styling
     dot_code = generate_dot_code_from_lists(self.new_nodes, self.new_edges);
 
     report {
@@ -694,12 +541,12 @@ impl call_supervisor.call {
                     }
                 }
                 
-                # Traverse the ENTIRE graph to get all nodes and edges
+                # Use printgraph() to get graph structure
                 if start_node != None {
-                    traverser = start_node spawn traverse_graph();
-                    current_nodes = traverser.nodes_list;
-                    current_edges = traverser.edges_list;
-                    print(f"[DEBUG CALL_SUPERVISOR] Loaded {len(current_nodes)} nodes and {len(current_edges)} edges");
+                    dot_output = printgraph(node=start_node);
+                    result = parse_printgraph_output(dot_output);
+                    current_nodes = result[0];
+                    current_edges = result[1];
                 } else {
                     # No Start node found, empty graph
                     current_nodes = ["Start"];
@@ -727,10 +574,6 @@ impl call_supervisor.call {
             last_task=last_task
         );
         
-        print(f"[DEBUG] Intent: {intent_analysis.conversation_context.intent}");
-        print(f"[DEBUG] Should create tasks: {intent_analysis.should_create_tasks}");
-        print(f"[DEBUG] Needs rebuild: {intent_analysis.conversation_context.needs_graph_rebuild}");
-        
         # Step 3: Extract task sequence if creating tasks
         relationships = [];
         if intent_analysis.should_create_tasks {
@@ -742,15 +585,8 @@ impl call_supervisor.call {
                 current_edges=current_edges
             );
             
-            print(f"[DEBUG] Parsed {len(relationships)} relationships");
-            for rel in relationships {
-                print(f"[DEBUG]   [{rel.sequence_order}] {rel.from_task} --[{rel.edge_label}]--> {rel.to_task} ({rel.connection_type})");
-            }
-            
             # Execute the graph updates
-            print(f"[DEBUG CHECK] needs_graph_rebuild={intent_analysis.conversation_context.needs_graph_rebuild}, current_nodes={len(current_nodes)}, current_nodes={current_nodes}");
             if intent_analysis.conversation_context.needs_graph_rebuild and len(current_nodes) > 1 {
-                print(f"[DEBUG] Using rebuildGraph (complete graph rebuild)");
                 
                 # Collect all nodes (existing + new)
                 all_nodes = ["Start"];
@@ -773,7 +609,6 @@ impl call_supervisor.call {
                     if node not in added_nodes and node != "Start" {
                         all_nodes.append(node);
                         added_nodes[node] = True;
-                        print(f"[DEBUG REBUILD] Preserving unmentioned node: {node}");
                     }
                 }
                 
@@ -787,18 +622,12 @@ impl call_supervisor.call {
                     });
                 }
                 
-                print(f"[DEBUG REBUILD] Complete rebuild: {len(all_nodes)} nodes, {len(new_edges)} edges");
-                for edge in new_edges {
-                    print(f"[DEBUG REBUILD] Edge: {edge['from']} -> {edge['to']} [{edge['label']}]");
-                }
-                
                 here spawn rebuild_graph(
                     username=self.username,
                     new_nodes=all_nodes,
                     new_edges=new_edges
                 );
             } else {
-                print(f"[DEBUG] Using updateTaskGraph (normal addition)");
                 # Normal updates - execute each relationship in sequence order
                 # Manual sort since sorted() with key might not work in Jac
                 sorted_rels = [];
@@ -852,8 +681,102 @@ impl call_supervisor.call {
 #                       HELPER FUNCTIONS
 #===========================================================
 
-# Helper function to generate DOT code from node and edge lists
+# Simple parser to extract TaskState nodes and TaskFlow edges from printgraph() output
+def parse_printgraph_output(dot_output: str) -> tuple {
+    node_list = [];
+    edge_list = [];
+    node_map = {};  # id -> task_name
+    
+    if not dot_output {
+        return (node_list, edge_list);
+    }
+    
+    # Replace HTML entities with actual characters
+    dot_output = dot_output.replace("&#x27;", "'");
+    dot_output = dot_output.replace("&quot;", '"');
+    
+    lines = dot_output.split("\n");
+    
+    # FIRST PASS: Parse all node definitions
+    for line in lines {
+        line = line.strip();
+        
+        # Parse node: 0 [label="TaskState(task_name='Start', ...)"]
+        if "[label=" in line and "->" not in line {
+            parts = line.split("[label=");
+            if len(parts) == 2 {
+                node_id = parts[0].strip();
+                label = parts[1];
+                
+                # Only process TaskState nodes
+                if "TaskState(task_name=" in label {
+                    # Extract task name: TaskState(task_name='Start', ...)
+                    start = label.find("task_name=") + 11;  # after task_name='
+                    end = label.find("'", start + 1);
+                    if end > start {
+                        task_name = label[start:end];
+                        node_map[node_id] = task_name;
+                        node_list.append(task_name);
+                    }
+                }
+            }
+        }
+    }
+    
+    # SECOND PASS: Parse edges (now that we have all nodes)
+    for line in lines {
+        line = line.strip();
+        
+        # Parse edge: 0 -> 2  [label="TaskFlow(label='then')"]
+        if "->" in line and not line.startswith("//") {
+            parts = line.split("->");
+            if len(parts) == 2 {
+                from_id = parts[0].strip();
+                to_part = parts[1].strip();
+                
+                # Extract to_id (handle spaces before [)
+                to_id = "";
+                if "[" in to_part {
+                    to_id = to_part.split("[")[0].strip();
+                } else {
+                    to_id = to_part.strip().rstrip(";");
+                }
+                
+                # Extract edge label from TaskFlow
+                edge_label = "";
+                if "TaskFlow(label=" in to_part {
+                    # Find the label value inside TaskFlow
+                    label_idx = to_part.find("TaskFlow(label=");
+                    if label_idx >= 0 {
+                        rest = to_part[label_idx + 15:];  # after "TaskFlow(label="
+                        # Skip opening quote and find closing quote
+                        if len(rest) > 1 and rest[0] == "'" {
+                            quote_end = rest.find("'", 1);  # Find closing quote after position 1
+                            if quote_end > 1 {
+                                edge_label = rest[1:quote_end];  # Extract between quotes
+                            }
+                        }
+                    }
+                }
+                
+                # Only add edges between TaskState nodes
+                if from_id in node_map and to_id in node_map {
+                    edge_list.append({
+                        "from": node_map[from_id],
+                        "to": node_map[to_id],
+                        "label": edge_label
+                    });
+                }
+            }
+        }
+    }
+    
+    return (node_list, edge_list);
+}
+
 def generate_dot_code_from_lists(node_list: list, edge_list: list) -> str {
+    # Generate custom styled DOT code from node and edge lists.
+    # Used for applying custom styling not available in printgraph().
     # Check if graph is empty
     if len(node_list) == 0 {
         return "";
