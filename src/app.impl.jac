@@ -53,14 +53,15 @@ impl traverse_graph.traverse_node {
     # Debug logging
     print(f"[TRAVERSE] Visiting node: {node_name}");
 
-    # Skip if already visited
-    if node_name in self.visited {
-        print(f"[TRAVERSE] Already visited {node_name}, skipping");
-        disengage;
+    # Check if already visited - if so, don't add again but DO traverse children
+    already_visited = node_name in self.visited;
+    
+    if not already_visited {
+        self.visited[node_name] = True;
+        self.nodes_list.append(node_name);
+    } else {
+        print(f"[TRAVERSE] Already visited {node_name}, but continuing to check children");
     }
-
-    self.visited[node_name] = True;
-    self.nodes_list.append(node_name);
 
     # Get all TaskFlow edges from this node
     all_edges = [edge here->:TaskFlow:->];
@@ -84,13 +85,24 @@ impl traverse_graph.traverse_node {
                 edge_label = e.label if hasattr(e, 'label') else "";
             }
 
-            # Add this edge to our list
-            self.edges_list.append({
-                "from": node_name,
-                "to": next_node.task_name,
-                "label": edge_label
-            });
-            print(f"[TRAVERSE]   Added edge: {node_name} --[{edge_label}]--> {next_node.task_name}");
+            # Add edge only if not already in list (avoid duplicate edges)
+            edge_key = f"{node_name}->{next_node.task_name}";
+            edge_exists = False;
+            for existing_edge in self.edges_list {
+                if existing_edge.get("from", "") == node_name and existing_edge.get("to", "") == next_node.task_name {
+                    edge_exists = True;
+                    break;
+                }
+            }
+            
+            if not edge_exists {
+                self.edges_list.append({
+                    "from": node_name,
+                    "to": next_node.task_name,
+                    "label": edge_label
+                });
+                print(f"[TRAVERSE]   Added edge: {node_name} --[{edge_label}]--> {next_node.task_name}");
+            }
 
             successor_idx = successor_idx + 1;
 
@@ -139,11 +151,35 @@ impl update_task_graph.navigate_to_graph {
 impl update_task_graph.update_graph {
     # Find or create the previous task node
     prev_node = None;
+    
+    # Search ALL TaskState nodes in the graph, not just those connected to user_graph_data
+    # Start with nodes directly connected to user_graph_data
     all_task_nodes = [-->](`?TaskState);
-
-    for node in all_task_nodes {
-        if hasattr(node, 'task_name') and node.task_name == self.previous_task {
-            prev_node = node;
+    
+    # Also traverse the graph to find all reachable TaskState nodes
+    visited_for_search = {};
+    nodes_to_check = all_task_nodes.copy();
+    
+    while len(nodes_to_check) > 0 {
+        current = nodes_to_check.pop(0);
+        if hasattr(current, 'task_name') {
+            node_id = current.task_name;
+            if node_id not in visited_for_search {
+                visited_for_search[node_id] = current;
+                # Get successors via TaskFlow edges
+                successors = [current-->](`?TaskState);
+                for succ in successors {
+                    nodes_to_check.append(succ);
+                }
+            }
+        }
+    }
+    
+    # Now search for the previous task in all found nodes
+    for node_name in visited_for_search {
+        nodex = visited_for_search[node_name];
+        if nodex.task_name == self.previous_task {
+            prev_node = nodex;
             break;
         }
     }
@@ -152,17 +188,22 @@ impl update_task_graph.update_graph {
     if prev_node == None {
         print(f"[DEBUG CREATE] Creating prev_node: {self.previous_task}");
         prev_node = TaskState(task_name=self.previous_task);
-        # Connect ALL nodes to user_graph_data to anchor them in the graph
-        # The TaskFlow edges will represent the actual workflow relationships
-        here ++> prev_node;
-        print(f"[DEBUG CREATE] Connected {self.previous_task} to user_graph_data");
+        # Only connect to user_graph_data if it's the Start node
+        # All other nodes should only be reachable through TaskFlow edges
+        if self.previous_task == "Start" {
+            here ++> prev_node;
+            print(f"[DEBUG CREATE] Connected {self.previous_task} to user_graph_data");
+        } else {
+            print(f"[DEBUG CREATE] WARNING: Creating orphaned node {self.previous_task} - it won't be reachable!");
+        }
     }
 
     # Find or create the new task node
     new_node = None;
-    for node in all_task_nodes {
-        if hasattr(node, 'task_name') and node.task_name == self.task_name {
-            new_node = node;
+    for node_name in visited_for_search {
+        nodex = visited_for_search[node_name];
+        if nodex.task_name == self.task_name {
+            new_node = nodex;
             break;
         }
     }
@@ -175,10 +216,9 @@ impl update_task_graph.update_graph {
             task_name=self.task_name,
             created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         );
-        # Connect to user_graph_data to anchor it in the graph
-        # The TaskFlow edge will be created below to show the workflow
-        here ++> new_node;
-        print(f"[DEBUG CREATE] Connected {self.task_name} to user_graph_data");
+        # Don't connect to user_graph_data - nodes are only reachable through TaskFlow edges
+        # This ensures traversal from Start works correctly
+        print(f"[DEBUG CREATE] Created {self.task_name} (will be connected via TaskFlow edge)");
     }
 
     # For branching logic (multiple paths from one node), we always create the edge
@@ -592,8 +632,8 @@ impl rebuild_graph.rebuild {
         );
         node_map[node_name] = new_task;
 
-        # Connect first node (Start) to user_graph_data
-        if node_name == self.new_nodes[0] {
+        # ONLY connect Start node to user_graph_data
+        if node_name == "Start" {
             here ++> new_task;
         }
     }
@@ -642,12 +682,7 @@ impl call_supervisor.call {
             return;
         }
         
-        # Load user's past routines for context
-        past_routines_context = "";
-        # Note: Skipping routines for now due to walker spawn issues
-        # TODO: Fix walker result handling
-
-        # Load user's current graph state by traversing the OSP graph
+        # Load user's current graph state
         current_nodes = [];
         current_edges = [];
         last_task = "Start";
@@ -660,216 +695,174 @@ impl call_supervisor.call {
             if hasattr(graph, 'username') and graph.username == self.username {
                 user_graph = graph;
                 last_task = graph.last_task if hasattr(graph, 'last_task') else "Start";
+                
+                # Find Start node (only node directly connected to graph)
+                all_task_nodes = [graph-->](`?TaskState);
+                start_node = None;
+                for node in all_task_nodes {
+                    if hasattr(node, 'task_name') and node.task_name == "Start" {
+                        start_node = node;
+                        break;
+                    }
+                }
+                
+                # Traverse the ENTIRE graph to get all nodes and edges
+                if start_node != None {
+                    traverser = start_node spawn traverse_graph();
+                    current_nodes = traverser.nodes_list;
+                    current_edges = traverser.edges_list;
+                    print(f"[DEBUG CALL_SUPERVISOR] Loaded {len(current_nodes)} nodes and {len(current_edges)} edges");
+                } else {
+                    # No Start node found, empty graph
+                    current_nodes = ["Start"];
+                }
+                
                 break;
             }
         }
 
-        # Traverse OSP graph to build node and edge lists
-        # Note: Can't use "from" syntax here, so we'll need to traverse differently
-        # For now, we'll temporarily use an empty graph until we can fix the traversal logic
-        # TODO: Implement proper graph traversal in walkers that can access OSP syntax
-
-        # Build the request body for OpenAI Responses API
-        request_body = {
-            "model": "gpt-4.1",
-            "input": [
-                {
-                    "type": "message",
-                    "role": "system",
-                    "content": SUPERVISOR_INSTRUCTIONS
-                },
-                {
-                    "type": "message",
-                    "role": "user",
-                    "content": f"""==== Conversation History ====
-                    {dumps(self.conversation_history, indent=2)}
-
-                    ==== Relevant Context From Last User Message ====
-                    {self.context_from_user}
-
-                    ==== Current Task Graph ====
-                    Existing Nodes: {dumps(current_nodes)}
-                    Existing Edges: {dumps(current_edges)}
-                    Last Task (most recent): {last_task}
-                    {past_routines_context}
-
-                    IMPORTANT: 
-                    - When adding a new task, check the Existing Nodes list first
-                    - If a similar task already exists (e.g., "GoToMall" exists), use that EXACT name, don't create "GoMall"
-                    - Use the Last Task as previousTask when connecting sequential activities
-                    - Only create a new node if the task doesn't already exist in the Existing Nodes
-                    """
-                }
-            ],
-            "tools": SUPERVISOR_TOOLS,
-            "parallel_tool_calls": False
-        };
+        # ============================================
+        # NEW SEMANTIC APPROACH (Multi-Step Analysis)
+        # ============================================
         
-        # Make initial API call
-        data = make_responses_api_call(request_body, api_key);
-        output_items = data["output"] if "output" in data else [];
+        # Step 1: Detect emotional state
+        emotional_state = detect_emotional_state(
+            user_message=self.context_from_user,
+            conversation_history=self.conversation_history
+        );
         
-        # Process tool calls iteratively (up to 5 rounds)
-        max_iterations = 5;
-        iteration = 0;
+        # Step 2: Analyze conversation intent (commit, correct, clarify, question, think)
+        intent_analysis = analyze_conversation_intent(
+            user_message=self.context_from_user,
+            conversation_history=self.conversation_history,
+            existing_nodes=current_nodes,
+            last_task=last_task
+        );
         
-        while iteration < max_iterations {
-            # Check for function calls
-            function_calls = [];
-            for item in output_items {
-                item_type = item["type"] if "type" in item else "";
-                if item_type == "function_call" {
-                    function_calls = function_calls + [item];
-                }
-            }
-
-            # Count function calls
-            fc_count = 0;
-            for _ in function_calls {
-                fc_count = fc_count + 1;
-            }
-
-            if fc_count == 0 {
-                # No more function calls - extract final response
-                break;
+        print(f"[DEBUG] Intent: {intent_analysis.conversation_context.intent}");
+        print(f"[DEBUG] Should create tasks: {intent_analysis.should_create_tasks}");
+        print(f"[DEBUG] Needs rebuild: {intent_analysis.conversation_context.needs_graph_rebuild}");
+        
+        # Step 3: Extract task sequence if creating tasks
+        relationships = [];
+        if intent_analysis.should_create_tasks {
+            relationships = extract_task_sequence(
+                user_message=self.context_from_user,
+                conversation_context=intent_analysis.conversation_context,
+                existing_nodes=current_nodes,
+                last_task=last_task,
+                current_edges=current_edges
+            );
+            
+            print(f"[DEBUG] Parsed {len(relationships)} relationships");
+            for rel in relationships {
+                print(f"[DEBUG]   [{rel.sequence_order}] {rel.from_task} --[{rel.edge_label}]--> {rel.to_task} ({rel.connection_type})");
             }
             
-            # Execute function calls
-            for tool_call in function_calls {
-                f_name = tool_call["name"] if "name" in tool_call else "";
-                f_args_str = tool_call["arguments"] if "arguments" in tool_call else "{}";
-                f_args = loads(f_args_str);
-
-                # Execute the tool - use per-user walker for updateTaskGraph and rebuildGraph
-                tool_output = {};
-                if f_name == "updateTaskGraph" {
-                    # Use per-user walker to update the graph
-                    task_name = f_args["taskName"] if "taskName" in f_args else "";
-                    previous_task = f_args["previousTask"] if "previousTask" in f_args else "Start";
-                    edge_label = f_args["edgeLabel"] if "edgeLabel" in f_args else "";
-
-                    # Spawn walker - pass username for isolation
+            # Execute the graph updates
+            print(f"[DEBUG CHECK] needs_graph_rebuild={intent_analysis.conversation_context.needs_graph_rebuild}, current_nodes={len(current_nodes)}, current_nodes={current_nodes}");
+            if intent_analysis.conversation_context.needs_graph_rebuild and len(current_nodes) > 1 {
+                print(f"[DEBUG] Using rebuildGraph (complete graph rebuild)");
+                
+                # Collect all nodes (existing + new)
+                all_nodes = ["Start"];
+                added_nodes = {"Start": True};
+                
+                # Add nodes from new relationships
+                for rel in relationships {
+                    if rel.from_task not in added_nodes {
+                        all_nodes.append(rel.from_task);
+                        added_nodes[rel.from_task] = True;
+                    }
+                    if rel.to_task not in added_nodes {
+                        all_nodes.append(rel.to_task);
+                        added_nodes[rel.to_task] = True;
+                    }
+                }
+                
+                # Add existing nodes that weren't mentioned (preserve them as orphans)
+                for node in current_nodes {
+                    if node not in added_nodes and node != "Start" {
+                        all_nodes.append(node);
+                        added_nodes[node] = True;
+                        print(f"[DEBUG REBUILD] Preserving unmentioned node: {node}");
+                    }
+                }
+                
+                # Create edges ONLY from new relationships (no merging with old edges)
+                new_edges = [];
+                for rel in relationships {
+                    new_edges.append({
+                        "from": rel.from_task,
+                        "to": rel.to_task,
+                        "label": rel.edge_label
+                    });
+                }
+                
+                print(f"[DEBUG REBUILD] Complete rebuild: {len(all_nodes)} nodes, {len(new_edges)} edges");
+                for edge in new_edges {
+                    print(f"[DEBUG REBUILD] Edge: {edge['from']} -> {edge['to']} [{edge['label']}]");
+                }
+                
+                here spawn rebuild_graph(
+                    username=self.username,
+                    new_nodes=all_nodes,
+                    new_edges=new_edges
+                );
+            } else {
+                print(f"[DEBUG] Using updateTaskGraph (normal addition)");
+                # Normal updates - execute each relationship in sequence order
+                # Manual sort since sorted() with key might not work in Jac
+                sorted_rels = [];
+                for rel in relationships {
+                    inserted = False;
+                    for i in range(len(sorted_rels)) {
+                        if rel.sequence_order < sorted_rels[i].sequence_order {
+                            sorted_rels.insert(i, rel);
+                            inserted = True;
+                            break;
+                        }
+                    }
+                    if not inserted {
+                        sorted_rels.append(rel);
+                    }
+                }
+                
+                for rel in sorted_rels {
                     here spawn update_task_graph(
-                        task_name=task_name,
-                        previous_task=previous_task,
-                        edge_label=edge_label,
+                        task_name=rel.to_task,
+                        previous_task=rel.from_task,
+                        edge_label=rel.edge_label,
                         username=self.username
                     );
-                    # Return success - the walker handles the actual update
-                    tool_output = {
-                        "success": True,
-                        "message": f"Updated graph with task: {task_name}"
-                    };
-                } elif f_name == "rebuildGraph" {
-                    # Use rebuild walker to completely reconstruct the graph
-                    new_nodes = f_args["nodes"] if "nodes" in f_args else ["Start"];
-                    new_edges = f_args["edges"] if "edges" in f_args else [];
-
-                    # Spawn rebuild walker - pass username for isolation
-                    here spawn rebuild_graph(
-                        username=self.username,
-                        new_nodes=new_nodes,
-                        new_edges=new_edges
-                    );
-                    # Return success - the walker handles the actual rebuild
-                    tool_output = {
-                        "success": True,
-                        "message": f"Rebuilt graph with {len(new_nodes)} nodes"
-                    };
-                } else {
-                    # Use existing function for other tools
-                    tool_output = execute_local_tool(f_name, f_args);
                 }
-
-                # Add function call and result to the request body
-                call_id = tool_call["call_id"] if "call_id" in tool_call else "";
-                request_body["input"] = request_body["input"] + [{
-                    "type": "function_call",
-                    "call_id": call_id,
-                    "name": f_name,
-                    "arguments": f_args_str
-                }];
-                request_body["input"] = request_body["input"] + [{
-                    "type": "function_call_output",
-                    "call_id": call_id,
-                    "output": dumps(tool_output)
-                }];
             }
-            
-            # Make follow-up request
-            data = make_responses_api_call(request_body, api_key);
-            output_items = data["output"] if "output" in data else [];
-            iteration = iteration + 1;
         }
         
-        # Extract final text
-        final_response = extract_response_text(output_items);
-
-        # TODO: Get updated graph state - fix walker spawn result handling
-        # For now, return empty graph data since updates happen in update_task_graph walker
-        report {
-            "response": final_response,
-            "dotCode": "",
-            "graphNodes": [],
-            "graphEdges": []
-        };
+        # Step 4: Generate friendly response
+        task_names = [];
+        for rel in relationships {
+            if rel.to_task not in task_names {
+                task_names.append(rel.to_task);
+            }
+        }
         
-    } except HTTPError as e {
-        error_msg = e.read().decode('utf-8') if hasattr(e, 'read') else str(e);
-        report {"error": f"HTTP Error: {e.code}", "details": error_msg};
-    } except URLError as e {
-        report {"error": "URL Error", "details": str(e.reason)};
+        response = generate_friendly_response(
+            user_message=self.context_from_user,
+            emotional_state=emotional_state,
+            action_taken="task_added" if intent_analysis.should_create_tasks else "none",
+            task_names=task_names
+        );
+        
+        report {"response": response, "emotional_state": emotional_state.state};
     } except Exception as e {
-        report {"error": "Server error", "details": str(e)};
+        report {"error": "Supervisor error", "details": str(e)};
     }
 }
 
 #===========================================================
 #                       HELPER FUNCTIONS
 #===========================================================
-
-# Legacy helper function - kept for backward compatibility during migration
-def generate_dot_code(node_list: list, edge_list: list) -> str {
-    list_size = 0;
-    for _ in node_list {
-        list_size = list_size + 1;
-    }
-    if list_size == 0 {
-        return "";
-    }
-
-    lines = ["digraph TaskGraph {"];
-    lines.append("  rankdir=TB;");
-    lines.append("  node [shape=box, style=rounded, fontname=\"Arial\"];");
-    lines.append("  edge [fontname=\"Arial\", fontsize=10];");
-    lines.append("");
-
-    # Add nodes with styling
-    for task_node in node_list {
-        if task_node == "Start" {
-            lines.append("  " + task_node + " [shape=circle, style=filled, fillcolor=\"#22c55e\", fontcolor=white];");
-        } else {
-            lines.append("  " + task_node + " [style=\"rounded,filled\", fillcolor=\"#3b82f6\", fontcolor=white];");
-        }
-    }
-
-    lines.append("");
-
-    # Add edges
-    for conn in edge_list {
-        from_task = conn.get("from", "");
-        to_task = conn.get("to", "");
-        conn_label = conn.get("label", "");
-        if conn_label {
-            lines.append("  " + from_task + " -> " + to_task + " [label=\"" + conn_label + "\"];");
-        } else {
-            lines.append("  " + from_task + " -> " + to_task + ";");
-        }
-    }
-
-    lines.append("}");
-    return "\n".join(lines);
-}
 
 # Helper function to generate DOT code from node and edge lists
 def generate_dot_code_from_lists(node_list: list, edge_list: list) -> str {
@@ -943,40 +936,4 @@ def execute_local_tool(tool_name: str, tool_args: object) -> dict {
     } else {
         return {"result": True};
     }
-}
-
-# Helper function to extract text from OpenAI Responses API response
-def extract_response_text(output_items: list) -> str {
-    final_text = "";
-    for item in output_items {
-        item_type = item["type"] if "type" in item else "";
-        if item_type == "message" {
-            content_arr = item["content"] if "content" in item else [];
-            for c in content_arr {
-                c_type = c["type"] if "type" in c else "";
-                if c_type == "output_text" {
-                    text_val = c["text"] if "text" in c else "";
-                    final_text = final_text + text_val;
-                }
-            }
-        }
-    }
-    return final_text;
-}
-
-# Helper function to make OpenAI Responses API call
-def make_responses_api_call(request_body: dict, api_key: object) {
-    url = "https://api.openai.com/v1/responses";
-    req = Request(
-        url,
-        data=dumps(request_body).encode('utf-8'),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        },
-        method="POST"
-    );
-    response = urlopen(req);
-    result = loads(response.read().decode('utf-8'));
-    return result;
 }
