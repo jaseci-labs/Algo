@@ -1,8 +1,3 @@
-# =============================================================
-#                               WALKERS
-#==============================================================
-
-# WALKER: get_session_token 
 impl get_session_token.fetch {
     try {
         api_key = getenv("OPENAI_API_KEY");
@@ -45,15 +40,9 @@ impl get_session_token.fetch {
     }
 }
 
-# WALKER: traverse_graph
 impl traverse_graph.traverse_node {
-    # Get this node's name
     node_name = here.task_name;
-
-    # Debug logging
     print(f"[TRAVERSE] Visiting node: {node_name}");
-
-    # Check if already visited - if so, don't add again but DO traverse children
     already_visited = node_name in self.visited;
     
     if not already_visited {
@@ -63,7 +52,6 @@ impl traverse_graph.traverse_node {
         print(f"[TRAVERSE] Already visited {node_name}, but continuing to check children");
     }
 
-    # Get all TaskFlow edges from this node
     all_edges = [edge here->:TaskFlow:->];
     print(f"[TRAVERSE] Node {node_name} has {len(all_edges)} TaskFlow edges");
 

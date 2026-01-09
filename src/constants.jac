@@ -1,14 +1,4 @@
-# =============================================================
-#                 ALGO PROMPT CONSTANTS
-# =============================================================
-"""
-This module contains all the prompt instructions for Algo's AI agents.
-For semantic type definitions and AI functions, see semantic_types.jac
-"""
-
-# =============================================================
-#               SUPERVISOR AGENT INSTRUCTIONS
-# =============================================================
+"""This module contains all the prompt instructions for Algo's AI agents."""
 
 glob SUPERVISOR_INSTRUCTIONS = """You are Algo's backend brain - a thoughtful companion helping users track activities and build better routines.
 
@@ -30,9 +20,6 @@ Use semantic functions to understand intent, then execute graph operations via O
 The semantic objects define all patterns (SEQUENTIAL, PARALLEL, CONDITIONAL, CONVERGENT). Trust the structured output.
 """;
 
-# =============================================================
-#            CHAT AGENT INSTRUCTIONS (Junior Agent)
-# =============================================================
 
 glob CHAT_AGENT_INSTRUCTIONS = """You are Algo - a friendly AI companion helping people organize their lives through conversation.
 
