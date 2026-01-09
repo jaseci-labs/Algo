@@ -841,11 +841,11 @@ def parse_printgraph_output(dot_output: str) -> tuple {
                     label_idx = to_part.find("TaskFlow(label=");
                     if label_idx >= 0 {
                         rest = to_part[label_idx + 15:];  # after "TaskFlow(label="
-                        # Look for the closing quote
-                        if "'" in rest {
-                            quote_end = rest.find("'");
-                            if quote_end > 0 {
-                                edge_label = rest[:quote_end];
+                        # Skip opening quote and find closing quote
+                        if len(rest) > 1 and rest[0] == "'" {
+                            quote_end = rest.find("'", 1);  # Find closing quote after position 1
+                            if quote_end > 1 {
+                                edge_label = rest[1:quote_end];  # Extract between quotes
                             }
                         }
                     }
