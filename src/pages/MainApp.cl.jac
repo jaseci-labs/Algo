@@ -32,7 +32,7 @@ def:pub MainApp() -> any {
     userText = hook.userText;
     setUserText = hook.setUserText;
     transcript = hook.transcript;
-    graphDotCode = hook.graphDotCode;
+    graphEdges = hook.graphEdges;
     transcriptEndRef = hook.transcriptEndRef;
     suggestions = hook.suggestions;
     
@@ -73,7 +73,7 @@ def:pub MainApp() -> any {
                 />
                 
                 <GraphPanel 
-                    graphDotCode={graphDotCode}
+                    graphEdges={graphEdges}
                     onClearGraph={handleClearGraph}
                 />
             </div>
@@ -134,7 +134,7 @@ def TranscriptPanel(
 }
 
 # Graph Panel - right side showing task visualization
-def GraphPanel(graphDotCode: str, onClearGraph: any) -> any {
+def GraphPanel(graphEdges: str, onClearGraph: any) -> any {
     return <div className="flex-1 bg-surface rounded-xl flex flex-col min-h-0 shadow-sm">
         <div className="flex items-center justify-between px-6 py-3 border-b border-border font-semibold text-text-primary">
             {"Task Graph"}
@@ -143,8 +143,8 @@ def GraphPanel(graphDotCode: str, onClearGraph: any) -> any {
             </span>
         </div>
         
-        <div className="flex-1 overflow-auto bg-surface-hover relative">
-            <GraphViewer dotCode={graphDotCode} />
+        <div className="flex-1 overflow-hidden bg-graph-bg relative">
+            <GraphViewer graphEdges={graphEdges} />
             
             <ClearGraphButton onClick={onClearGraph} />
         </div>

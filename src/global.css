@@ -27,6 +27,10 @@
   --color-console: #1e1e1e;
   --color-console-text: #d4d4d4;
 
+  /* Graph */
+  --color-graph-bg: #0f172a;
+
+
   /* Semantic Colors */
   --color-success: #4caf50;
   --color-success-foreground: #ffffff;
@@ -97,4 +101,166 @@
 
 .dark ::-webkit-scrollbar-thumb:hover {
   @apply bg-text-secondary;
+}
+
+
+/* ============================================
+   React Flow Graph Visualization Styles
+   ============================================ */
+
+/* Graph container */
+.graph-viewer-container {
+  background-color: var(--color-graph-bg);
+}
+
+/* React Flow base node styling */
+.react-flow__node {
+  font-family: inherit;
+}
+
+/* Start Node - Cyan Glow Circle */
+.start-node {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0d9488, #06b6d4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 0 20px rgba(6, 182, 212, 0.5),
+    0 0 40px rgba(6, 182, 212, 0.3),
+    inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  border: 2px solid #22d3ee;
+  transition: box-shadow 0.3s ease;
+}
+
+.start-node:hover {
+  box-shadow:
+    0 0 30px rgba(6, 182, 212, 0.6),
+    0 0 60px rgba(6, 182, 212, 0.4);
+}
+
+.start-node-inner {
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Task Node - Dark Rounded Rectangle */
+.task-node {
+  min-width: 140px;
+  max-width: 200px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  border-radius: 12px;
+  border: 1px solid #475569;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.3),
+    0 2px 4px -1px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.task-node:hover {
+  box-shadow:
+    0 8px 12px -2px rgba(0, 0, 0, 0.4),
+    0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+.task-node-label {
+  color: #e2e8f0;
+  font-weight: 500;
+  font-size: 14px;
+  text-align: center;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+/* Hide default connection handles */
+.handle-hidden {
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  min-width: 1px;
+  min-height: 1px;
+  background: transparent;
+  border: none;
+}
+
+/* Edge styling - Dashed lines */
+.react-flow__edge-path {
+  stroke: #64748b;
+  stroke-width: 2;
+  stroke-dasharray: 5, 5;
+}
+
+.react-flow__edge-text {
+  fill: #94a3b8;
+  font-size: 12px;
+}
+
+.react-flow__edge-textbg {
+  fill: #1e293b;
+  fill-opacity: 0.9;
+}
+
+/* Controls Dark Theme */
+.react-flow-controls-dark {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+}
+
+.react-flow-controls-dark button {
+  background: #1e293b;
+  border-bottom: 1px solid #334155;
+  color: #94a3b8;
+}
+
+.react-flow-controls-dark button:hover {
+  background: #334155;
+}
+
+.react-flow-controls-dark button svg {
+  fill: #94a3b8;
+}
+
+.react-flow-controls-dark button:last-child {
+  border-bottom: none;
+}
+
+/* MiniMap Dark Theme */
+.react-flow-minimap-dark {
+  background: #0f172a !important;
+  border: 1px solid #334155 !important;
+  border-radius: 8px !important;
+  bottom: 80px !important;
+  right: 10px !important;
+}
+
+.react-flow__minimap {
+  background: #0f172a;
+}
+
+.react-flow__minimap-mask {
+  fill: rgba(15, 23, 42, 0.7);
+}
+
+.react-flow__minimap-node {
+  fill: #475569;
+  stroke: #1e293b;
+  stroke-width: 1;
+}
+
+/* Background */
+.react-flow__background {
+  background-color: #0f172a;
+}
+
+/* Attribution (hide if needed) */
+.react-flow__attribution {
+  display: none;
 }

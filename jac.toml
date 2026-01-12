@@ -18,6 +18,8 @@ zod = "3"
 "clsx" = "^2.1.1"
 "tailwind-merge" = "^3.4.0"
 "tailwindcss" = "^4.1.17"
+"@xyflow/react" = "latest"
+"@dagrejs/dagre" = "latest"
 
 [dependencies.npm.dev]
 vite = "^6.4.1"
