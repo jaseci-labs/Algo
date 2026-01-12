@@ -20,23 +20,12 @@ glob NODE_TYPES = {
     "taskNode": TaskNode
 };
 
-# Default edge options for dashed, smooth edges
+# Default edge options - bezier for curved lines with better label positioning
 glob DEFAULT_EDGE_OPTIONS = {
-    "type": "smoothstep",
+    "type": "bezier",
     "animated": False,
-    "style": {
-        "stroke": "#64748b",
-        "strokeWidth": 2,
-        "strokeDasharray": "5,5"
-    },
-    "labelStyle": {
-        "fill": "#94a3b8",
-        "fontSize": 12
-    },
-    "labelBgStyle": {
-        "fill": "#1e293b",
-        "fillOpacity": 0.8
-    }
+    "labelBgPadding": [8, 4],
+    "labelBgBorderRadius": 4
 };
 
 def:pub GraphViewer(graphEdges: list) -> any {
@@ -141,21 +130,14 @@ def:pub GraphViewer(graphEdges: list) -> any {
             maxZoom={2}
         >
             <Background
-                color="#334155"
                 gap={20}
                 size={1}
                 variant="dots"
             />
-            <Controls
-                showInteractive={False}
-                className="react-flow-controls-dark"
-            />
+            <Controls showInteractive={False} />
             <MiniMap
                 nodeColor={getNodeColor}
-                nodeStrokeColor="#1e293b"
                 nodeBorderRadius={4}
-                maskColor="rgba(15, 23, 42, 0.7)"
-                className="react-flow-minimap-dark"
                 zoomable={True}
                 pannable={True}
             />

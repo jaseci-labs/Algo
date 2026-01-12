@@ -11,6 +11,7 @@ import from ..components.GraphViewer { GraphViewer }
 import from ..components.Layout { Layout }
 
 import from ..hooks.useMainApp { useMainApp }
+import from ..hooks.useTheme { useTheme }
 import from ..utils.mergeCls { cn }
 
 # ============================================
@@ -20,6 +21,11 @@ import from ..utils.mergeCls { cn }
 def:pub MainApp() -> any {
     # Get all state and handlers from the hook
     hook = useMainApp();
+
+    # Theme management
+    theme = useTheme();
+    isDarkMode = theme.isDarkMode;
+    toggleTheme = theme.toggleTheme;
     
     # Destructure hook values for cleaner access
     sessionStatus = hook.sessionStatus;
@@ -57,7 +63,7 @@ def:pub MainApp() -> any {
     # ========== Render ==========
     return <Layout meta={{"title": "Dashboard | Algo", "description": "Your AI assistant dashboard with voice interface"}}>
         <div className="flex flex-col h-screen">
-            <Header />
+            <Header isDarkMode={isDarkMode} onToggleTheme={toggleTheme} />
             
             <div className="flex-1 flex gap-2 p-2 overflow-hidden">
                 <TranscriptPanel 

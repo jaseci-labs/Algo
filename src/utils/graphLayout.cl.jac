@@ -45,7 +45,7 @@ def:pub transformGraphData(graphEdges: list) -> dict {
             "source": <>edge.<>from,
             "target": edge["to"],
             "label": edge["label"] or "",
-            "type": "smoothstep"
+            "type": "bezier"
         });
         idx = idx + 1;
     }

@@ -4,8 +4,9 @@
 import from react { useState, useEffect }
 import from "@jac-client/utils" { jacLogout, useNavigate }
 import from ..utils.mergeCls { cn }
+import from .ThemeToggle { ThemeToggle }
 
-def:pub Header() -> any {
+def:pub Header(isDarkMode: bool, onToggleTheme: any) -> any {
     navigate = useNavigate();
     [username, setUsername] = useState("User");
     
@@ -41,7 +42,8 @@ def:pub Header() -> any {
             <span className="text-2xl">{"🎙️"}</span>
             <span className="text-text-primary">{"Algo - Your Personal AI Assistant"}</span>
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4">
+            <ThemeToggle isDarkMode={isDarkMode} onToggle={onToggleTheme} />
             <span className="text-sm text-text-secondary font-medium">
                 {f"👤 {username}"}
             </span>
