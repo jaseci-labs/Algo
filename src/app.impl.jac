@@ -604,7 +604,7 @@ impl call_supervisor.call {
                     }
                 }
                 
-                # Add existing nodes that weren't mentioned (preserve them as orphans)
+                # Add existing nodes that weren't mentioned (preserve them)
                 for node in current_nodes {
                     if node not in added_nodes and node != "Start" {
                         all_nodes.append(node);
@@ -612,14 +612,31 @@ impl call_supervisor.call {
                     }
                 }
                 
-                # Create edges ONLY from new relationships (no merging with old edges)
-                new_edges = [];
+                # Start with existing edges, then add/override with new ones
+                edge_map = {};
+                
+                # Add all existing edges first
+                for edge in current_edges {
+                    from_task = edge.get("from", "");
+                    to_task = edge.get("to", "");
+                    edge_key = f"{from_task}->{to_task}";
+                    edge_map[edge_key] = edge;
+                }
+                
+                # Add/override with new relationships
                 for rel in relationships {
-                    new_edges.append({
+                    edge_key = f"{rel.from_task}->{rel.to_task}";
+                    edge_map[edge_key] = {
                         "from": rel.from_task,
                         "to": rel.to_task,
                         "label": rel.edge_label
-                    });
+                    };
+                }
+                
+                # Convert edge map back to list
+                new_edges = [];
+                for edge_key in edge_map {
+                    new_edges.append(edge_map[edge_key]);
                 }
                 
                 here spawn rebuild_graph(
@@ -629,7 +646,6 @@ impl call_supervisor.call {
                 );
             } else {
                 # Normal updates - execute each relationship in sequence order
-                # Manual sort since sorted() with key might not work in Jac
                 sorted_rels = [];
                 for rel in relationships {
                     inserted = False;
