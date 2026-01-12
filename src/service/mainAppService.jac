@@ -3,11 +3,8 @@ import from urllib.request { Request, urlopen }
 import from urllib.error { URLError, HTTPError }
 import from json { loads, dumps }
 import from dotenv { load_dotenv }
-import from constants { 
-    SUPERVISOR_INSTRUCTIONS, 
-    CHAT_AGENT_INSTRUCTIONS
-}
-import from semantics {
+import from constants { CHAT_AGENT_INSTRUCTIONS }
+import from semantics.semantics {
     EmotionalState,
     ConversationIntent,
     ConversationContext,
