@@ -604,7 +604,7 @@ impl call_supervisor.call {
                     }
                 }
                 
-                # Add existing nodes that weren't mentioned (preserve them as orphans)
+                # Add existing nodes that weren't mentioned (preserve them)
                 for node in current_nodes {
                     if node not in added_nodes and node != "Start" {
                         all_nodes.append(node);
@@ -612,14 +612,31 @@ impl call_supervisor.call {
                     }
                 }
                 
-                # Create edges ONLY from new relationships (no merging with old edges)
-                new_edges = [];
+                # Start with existing edges, then add/override with new ones
+                edge_map = {};
+                
+                # Add all existing edges first
+                for edge in current_edges {
+                    from_task = edge.get("from", "");
+                    to_task = edge.get("to", "");
+                    edge_key = f"{from_task}->{to_task}";
+                    edge_map[edge_key] = edge;
+                }
+                
+                # Add/override with new relationships
                 for rel in relationships {
-                    new_edges.append({
+                    edge_key = f"{rel.from_task}->{rel.to_task}";
+                    edge_map[edge_key] = {
                         "from": rel.from_task,
                         "to": rel.to_task,
                         "label": rel.edge_label
-                    });
+                    };
+                }
+                
+                # Convert edge map back to list
+                new_edges = [];
+                for edge_key in edge_map {
+                    new_edges.append(edge_map[edge_key]);
                 }
                 
                 here spawn rebuild_graph(
@@ -629,7 +646,6 @@ impl call_supervisor.call {
                 );
             } else {
                 # Normal updates - execute each relationship in sequence order
-                # Manual sort since sorted() with key might not work in Jac
                 sorted_rels = [];
                 for rel in relationships {
                     inserted = False;
@@ -671,7 +687,32 @@ impl call_supervisor.call {
             task_names=task_names
         );
         
-        report {"response": response, "emotional_state": emotional_state.state};
+        # Step 5: Generate suggestions for next actions
+        suggestions = [];
+        try {
+            # Get recent tasks (last 3 tasks from current_nodes, excluding Start)
+            recent_tasks = [];
+            task_count = 0;
+            for i in range(len(current_nodes) - 1, -1, -1) {
+                if current_nodes[i] != "Start" and task_count < 3 {
+                    recent_tasks.insert(0, current_nodes[i]);
+                    task_count = task_count + 1;
+                }
+            }
+            
+            suggestions = generate_next_suggestions(
+                last_task=last_task,
+                recent_tasks=recent_tasks,
+                conversation_context=self.context_from_user,
+                emotional_state=emotional_state.state
+            );
+        } except Exception as e {
+            # If suggestions fail, just continue without them
+            print(f"Failed to generate suggestions: {str(e)}");
+            suggestions = [];
+        }
+        
+        report {"response": response, "emotional_state": emotional_state.state, "suggestions": suggestions};
     } except Exception as e {
         report {"error": "Supervisor error", "details": str(e)};
     }
@@ -813,38 +854,4 @@ def generate_dot_code_from_lists(node_list: list, edge_list: list) -> str {
 
     lines.append("}");
     return "\n".join(lines);
-}
-
-# Function to handle non-graph tool execution (calendar, emails, GitHub, etc.)
-def execute_local_tool(tool_name: str, tool_args: object) -> dict {
-    if tool_name == "getCalendarEvents" {
-        # Filter by date if provided
-        date_filter = tool_args["date"] if "date" in tool_args else "today";
-        # For demo, return all events (in real app, would filter by date)
-        return {"events": SAMPLE_CALENDAR_EVENTS, "query": date_filter};
-    } elif tool_name == "getEmails" {
-        # Filter emails based on parameters
-        filter_type = tool_args["filter"] if "filter" in tool_args else "all";
-        count = tool_args["count"] if "count" in tool_args else 5;
-        emails = SAMPLE_EMAILS[:count];
-        if filter_type == "unread" {
-            emails = [e for e in SAMPLE_EMAILS if "unread" in e and e["unread"]][:count];
-        } elif filter_type == "important" {
-            emails = [e for e in SAMPLE_EMAILS if "important" in e and e["important"]][:count];
-        }
-        return {"emails": emails, "filter": filter_type};
-    } elif tool_name == "getGitHubIssues" {
-        # Filter GitHub issues
-        filter_type = tool_args["filter"] if "filter" in tool_args else "all";
-        issue_type = tool_args["type"] if "type" in tool_args else "all";
-        issues = SAMPLE_GITHUB_ISSUES;
-        if filter_type == "open" {
-            issues = [i for i in issues if "state" in i and i["state"] == "open"];
-        } elif filter_type == "assigned" {
-            issues = [i for i in issues if "assignee" in i and i["assignee"] == "me"];
-        }
-        return {"issues": issues, "filter": filter_type};
-    } else {
-        return {"result": True};
-    }
 }

@@ -31,7 +31,8 @@ def extractMessageText(content: any) -> str {
     # Hook for managing OpenAI Realtime session
     # @param transcriptHelpers - Object containing transcript manipulation functions
     # @param refreshGraphState - Function to refresh graph state after supervisor calls
-    def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any) -> any {
+    # @param setSuggestions - Function to update suggestions state in parent
+    def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSuggestions: any) -> any {
         # Connection state
         [sessionStatus, setSessionStatus] = useState("DISCONNECTED");
         sessionRef = useRef(None);
@@ -90,6 +91,13 @@ def extractMessageText(content: any) -> str {
 
             # Fetch updated graph state after supervisor completes
             await refreshGraphState(username);
+            
+            # Update suggestions if available
+            if result.suggestions and Array.isArray(result.suggestions) {
+                setSuggestions(result.suggestions);
+            } else {
+                setSuggestions([]);
+            }
 
             # Get response from service result
             next_resp = result.response or "I apologize, I couldn't get a response.";

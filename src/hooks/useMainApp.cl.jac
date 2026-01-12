@@ -21,6 +21,17 @@ import from ..service.mainAppService {
 def:pub useMainApp() -> any {
     navigate = useNavigate();
     
+    # ========== Local State ==========
+    
+    # User input state
+    [userText, setUserText] = useState("");
+    
+    # Suggestions state
+    [suggestions, setSuggestions] = useState([]);
+    
+    # Ref for auto-scroll
+    transcriptEndRef = useRef(None);
+    
     # ========== Compose Sub-Hooks ==========
     
     # Transcript management
@@ -48,8 +59,8 @@ def:pub useMainApp() -> any {
     refreshGraphState = graphHook.refreshGraphState;
     handleClearGraph = graphHook.handleClearGraph;
     
-    # Realtime session management
-    sessionHook = useRealtimeSession(transcriptHelpers, refreshGraphState);
+    # Realtime session management (pass setSuggestions)
+    sessionHook = useRealtimeSession(transcriptHelpers, refreshGraphState, setSuggestions);
     sessionStatus = sessionHook.sessionStatus;
     sessionRef = sessionHook.sessionRef;
     isConnected = sessionHook.isConnected;
@@ -69,13 +80,16 @@ def:pub useMainApp() -> any {
     handleTalkButtonUp = audioHook.handleTalkButtonUp;
     resetPTTState = audioHook.resetPTTState;
     
-    # ========== Local State ==========
+    # ========== Enhanced State Setters ==========
     
-    # User input state
-    [userText, setUserText] = useState("");
-    
-    # Ref for auto-scroll
-    transcriptEndRef = useRef(None);
+    # Wrap setUserText to clear suggestions when user starts typing
+    def handleUserTextChange(newText: str) -> None {
+        setUserText(newText);
+        # Clear suggestions if user is typing (not empty)
+        if newText and suggestions.length > 0 {
+            setSuggestions([]);
+        }
+    }
     
     # ========== Connection Handlers ==========
     
@@ -93,6 +107,7 @@ def:pub useMainApp() -> any {
         }
         
         setUserText("");
+        setSuggestions([]);  # Clear suggestions when sending
         addMessage("user", message);
         
         username = getUsernameFromToken();
@@ -114,12 +129,62 @@ def:pub useMainApp() -> any {
             if result.success {
                 updateTranscriptItem(assistantItemId, result.response);
                 await refreshGraphState(username);
+                
+                # Update suggestions if available
+                if result.suggestions and Array.isArray(result.suggestions) {
+                    setSuggestions(result.suggestions);
+                } else {
+                    setSuggestions([]);
+                }
             } else {
                 updateTranscriptItem(assistantItemId, "Error: " + (result.error or "Unknown error"));
+                setSuggestions([]);
             }
         } except Exception as e {
             console.error("Text chat error:", e);
             addMessage("system", "Error: Failed to get response");
+            setSuggestions([]);
+        }
+    }
+    
+    # Handle suggestion click - auto-send the suggestion
+    async def handleSuggestionClick(suggestionText: str) -> None {
+        setUserText(suggestionText);
+        setSuggestions([]);  # Clear suggestions immediately
+        addMessage("user", suggestionText);
+        
+        username = getUsernameFromToken();
+        
+        # If connected to realtime session, send via voice
+        if sendRealtimeMessage(suggestionText) {
+            return;
+        }
+        
+        # Text-only mode: call supervisor
+        try {
+            assistantItemId = "assistant-" + String(Date.now());
+            addTranscriptItem(assistantItemId, "assistant", "Thinking...");
+            
+            result = await callSupervisor(suggestionText, [], username);
+            
+            if result.success {
+                updateTranscriptItem(assistantItemId, result.response);
+                await refreshGraphState(username);
+                
+                # Update suggestions if available
+                if result.suggestions and Array.isArray(result.suggestions) {
+                    setSuggestions(result.suggestions);
+                } else {
+                    setSuggestions([]);
+                }
+            } else {
+                updateTranscriptItem(assistantItemId, "Error: " + (result.error or "Unknown error"));
+                setSuggestions([]);
+            }
+        } except Exception as e {
+            console.error("Suggestion click error:", e);
+            addMessage("system", "Error: Failed to get response");
+            setSuggestions([]);
         }
     }
     
@@ -177,11 +242,13 @@ def:pub useMainApp() -> any {
         "setIsAudioPlaybackEnabled": setIsAudioPlaybackEnabled,
         "isMicMuted": isMicMuted,
         "userText": userText,
-        "setUserText": setUserText,
+        "setUserText": handleUserTextChange,  # Use wrapped version
         "transcript": transcript,
         "graphDotCode": graphDotCode,
         "graphEdges": graphEdges,
         "lastTask": lastTask,
+        "suggestions": suggestions,
+        "setSuggestions": setSuggestions,
         
         # Refs
         "transcriptEndRef": transcriptEndRef,
@@ -196,6 +263,7 @@ def:pub useMainApp() -> any {
         "handleTalkButtonDown": handleTalkButtonDown,
         "handleTalkButtonUp": handleTalkButtonUp,
         "handleSendTextMessage": handleSendTextMessage,
+        "handleSuggestionClick": handleSuggestionClick,
         "handleClearGraph": handleClearGraph,
         "handleSaveAndRestart": handleSaveAndRestart
     };

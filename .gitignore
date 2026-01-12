@@ -20,6 +20,7 @@ algo_env/
 
 # Node.js
 node_modules/
+package-lock.json
 
 # Jac Client
 .client-build/
