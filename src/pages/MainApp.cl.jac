@@ -68,6 +68,8 @@ def:pub MainApp() -> any {
                     onSend={handleSendTextMessage}
                     suggestions={suggestions}
                     onSelectSuggestion={handleSuggestionClick}
+                    sessionStatus={sessionStatus}
+                    onToggleConnection={onToggleConnection}
                 />
                 
                 <GraphPanel 
@@ -78,7 +80,6 @@ def:pub MainApp() -> any {
             
             <ControlBar
                 sessionStatus={sessionStatus}
-                onToggleConnection={onToggleConnection}
                 isPTTActive={isPTTActive}
                 setIsPTTActive={setIsPTTActive}
                 isPTTUserSpeaking={isPTTUserSpeaking}
@@ -106,7 +107,9 @@ def TranscriptPanel(
     setUserText: any,
     onSend: any,
     suggestions: list,
-    onSelectSuggestion: any
+    onSelectSuggestion: any,
+    sessionStatus: str,
+    onToggleConnection: any
 ) -> any {
     return <div className="flex-1 bg-surface rounded-xl flex flex-col min-h-0 shadow-sm">
         <div className="flex items-center justify-between px-6 py-3 border-b border-border font-semibold text-text-primary">
@@ -124,6 +127,8 @@ def TranscriptPanel(
             onSend={onSend}
             suggestions={suggestions}
             onSelectSuggestion={onSelectSuggestion}
+            sessionStatus={sessionStatus}
+            onToggleConnection={onToggleConnection}
         />
     </div>;
 }

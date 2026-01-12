@@ -5,7 +5,6 @@ import from ..utils.mergeCls { cn }
 
 def:pub ControlBar(
     sessionStatus: str,
-    onToggleConnection: any,
     isPTTActive: bool,
     setIsPTTActive: any,
     isPTTUserSpeaking: bool,
@@ -19,18 +18,6 @@ def:pub ControlBar(
 ) -> any {
     # Computed values
     isConnected = sessionStatus == "CONNECTED";
-    isConnecting = sessionStatus == "CONNECTING";
-    
-    connectBtnText = "Disconnect" if isConnected else ("Connecting..." if isConnecting else "Connect");
-    
-    # Button classes with conditional styling
-    connectBtnClass = cn(
-        "text-white text-base py-2 w-36 rounded-md border-none transition-all",
-        ("bg-error cursor-pointer hover:opacity-90" if isConnected else (
-            "bg-secondary cursor-not-allowed opacity-70" if isConnecting else 
-            "bg-black cursor-pointer hover:opacity-90"
-        ))
-    );
     
     micBtnClass = cn(
         "text-white px-4 py-2 rounded-md border-none transition-all flex items-center justify-center min-w-12",
@@ -96,14 +83,6 @@ def:pub ControlBar(
     );
 
     return <div className="p-4 flex flex-row items-center justify-center gap-8 border-t border-border bg-surface">
-        <button
-            onClick={onToggleConnection}
-            disabled={isConnecting}
-            className={connectBtnClass}
-        >
-            {connectBtnText}
-        </button>
-
         <button
             onClick={onToggleMicMute}
             disabled={not isConnected}
