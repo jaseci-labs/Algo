@@ -830,37 +830,3 @@ def generate_dot_code_from_lists(node_list: list, edge_list: list) -> str {
     lines.append("}");
     return "\n".join(lines);
 }
-
-# Function to handle non-graph tool execution (calendar, emails, GitHub, etc.)
-def execute_local_tool(tool_name: str, tool_args: object) -> dict {
-    if tool_name == "getCalendarEvents" {
-        # Filter by date if provided
-        date_filter = tool_args["date"] if "date" in tool_args else "today";
-        # For demo, return all events (in real app, would filter by date)
-        return {"events": SAMPLE_CALENDAR_EVENTS, "query": date_filter};
-    } elif tool_name == "getEmails" {
-        # Filter emails based on parameters
-        filter_type = tool_args["filter"] if "filter" in tool_args else "all";
-        count = tool_args["count"] if "count" in tool_args else 5;
-        emails = SAMPLE_EMAILS[:count];
-        if filter_type == "unread" {
-            emails = [e for e in SAMPLE_EMAILS if "unread" in e and e["unread"]][:count];
-        } elif filter_type == "important" {
-            emails = [e for e in SAMPLE_EMAILS if "important" in e and e["important"]][:count];
-        }
-        return {"emails": emails, "filter": filter_type};
-    } elif tool_name == "getGitHubIssues" {
-        # Filter GitHub issues
-        filter_type = tool_args["filter"] if "filter" in tool_args else "all";
-        issue_type = tool_args["type"] if "type" in tool_args else "all";
-        issues = SAMPLE_GITHUB_ISSUES;
-        if filter_type == "open" {
-            issues = [i for i in issues if "state" in i and i["state"] == "open"];
-        } elif filter_type == "assigned" {
-            issues = [i for i in issues if "assignee" in i and i["assignee"] == "me"];
-        }
-        return {"issues": issues, "filter": filter_type};
-    } else {
-        return {"result": True};
-    }
-}
