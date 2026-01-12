@@ -271,3 +271,30 @@ Structured reasoning with emoji markers:
 
 Use for advice/complex decisions, not simple tracking.
 """;
+
+"""Generate 2 contextual suggestions for what the user might do next"""
+def generate_next_suggestions(
+    last_task: str,
+    recent_tasks: list[str],
+    conversation_context: str,
+    emotional_state: str
+) -> list[str] by llm();
+
+sem generate_next_suggestions = """
+Generate exactly 2 short, natural suggestions (3-5 words each) for what the user might do next.
+
+Guidelines:
+- Keep them conversational and first-person ("I'll make coffee" not "Make coffee")
+- Base them on typical routine patterns and the current context
+- Consider time of day and flow (morning → breakfast, lunch → afternoon tasks)
+- Make them diverse (different types of activities)
+- Keep them brief and actionable
+
+Examples:
+After "WakeUp" → ["I'll make coffee", "I'll take a shower"]
+After "HaveLunch" → ["I'll get back to work", "I'll take a short break"]
+After "FinishWork" → ["I'll head home", "I'll grab dinner"]
+After "Dinner" → ["I'll watch TV", "I'll read a book"]
+
+Return as a simple list of 2 strings, nothing else.
+""";

@@ -18,7 +18,8 @@ import from semantics {
     analyze_conversation_intent,
     extract_task_sequence,
     generate_friendly_response,
-    generate_decision_reasoning
+    generate_decision_reasoning,
+    generate_next_suggestions
 }
 
 node TaskState {

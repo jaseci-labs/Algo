@@ -144,10 +144,17 @@ async def:pub callSupervisor(context_from_user: str, conversation_history: list,
         } else {
             next_resp = "I apologize, I couldn't get a response.";
         }
+        
+        # Extract suggestions if available
+        suggestions = [];
+        if "suggestions" in response_data {
+            suggestions = response_data["suggestions"];
+        }
 
         return {
             "success": True,
             "response": next_resp,
+            "suggestions": suggestions,
             "data": response_data
         };
     } except Exception as e {

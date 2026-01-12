@@ -34,6 +34,7 @@ def:pub MainApp() -> any {
     transcript = hook.transcript;
     graphDotCode = hook.graphDotCode;
     transcriptEndRef = hook.transcriptEndRef;
+    suggestions = hook.suggestions;
     
     # Handlers
     onToggleConnection = hook.onToggleConnection;
@@ -41,6 +42,7 @@ def:pub MainApp() -> any {
     handleTalkButtonDown = hook.handleTalkButtonDown;
     handleTalkButtonUp = hook.handleTalkButtonUp;
     handleSendTextMessage = hook.handleSendTextMessage;
+    handleSuggestionClick = hook.handleSuggestionClick;
     handleClearGraph = hook.handleClearGraph;
     handleSaveAndRestart = hook.handleSaveAndRestart;
     
@@ -64,6 +66,8 @@ def:pub MainApp() -> any {
                     userText={userText}
                     setUserText={setUserText}
                     onSend={handleSendTextMessage}
+                    suggestions={suggestions}
+                    onSelectSuggestion={handleSuggestionClick}
                 />
                 
                 <GraphPanel 
@@ -100,7 +104,9 @@ def TranscriptPanel(
     transcriptEndRef: any,
     userText: str,
     setUserText: any,
-    onSend: any
+    onSend: any,
+    suggestions: list,
+    onSelectSuggestion: any
 ) -> any {
     return <div className="flex-1 bg-surface rounded-xl flex flex-col min-h-0 shadow-sm">
         <div className="flex items-center justify-between px-6 py-3 border-b border-border font-semibold text-text-primary">
@@ -116,6 +122,8 @@ def TranscriptPanel(
             userText={userText}
             setUserText={setUserText}
             onSend={onSend}
+            suggestions={suggestions}
+            onSelectSuggestion={onSelectSuggestion}
         />
     </div>;
 }

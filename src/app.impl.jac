@@ -687,7 +687,32 @@ impl call_supervisor.call {
             task_names=task_names
         );
         
-        report {"response": response, "emotional_state": emotional_state.state};
+        # Step 5: Generate suggestions for next actions
+        suggestions = [];
+        try {
+            # Get recent tasks (last 3 tasks from current_nodes, excluding Start)
+            recent_tasks = [];
+            task_count = 0;
+            for i in range(len(current_nodes) - 1, -1, -1) {
+                if current_nodes[i] != "Start" and task_count < 3 {
+                    recent_tasks.insert(0, current_nodes[i]);
+                    task_count = task_count + 1;
+                }
+            }
+            
+            suggestions = generate_next_suggestions(
+                last_task=last_task,
+                recent_tasks=recent_tasks,
+                conversation_context=self.context_from_user,
+                emotional_state=emotional_state.state
+            );
+        } except Exception as e {
+            # If suggestions fail, just continue without them
+            print(f"Failed to generate suggestions: {str(e)}");
+            suggestions = [];
+        }
+        
+        report {"response": response, "emotional_state": emotional_state.state, "suggestions": suggestions};
     } except Exception as e {
         report {"error": "Supervisor error", "details": str(e)};
     }
