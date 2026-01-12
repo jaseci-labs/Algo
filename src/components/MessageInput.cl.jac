@@ -1,95 +1,78 @@
 # MessageInput Component
-# Text input field with send button, voice call button, and suggestion chips
+# Text input field with send button, voice call button (with hover trigger for floating control bar)
 
 import from ..utils.mergeCls { cn }
-import from .SuggestionChips { SuggestionChips }
 
 def:pub MessageInput(
     userText: str,
     setUserText: any,
     onSend: any,
-    suggestions: list = [],
-    onSelectSuggestion: any = None,
     sessionStatus: str = "DISCONNECTED",
-    onToggleConnection: any = None
+    onToggleConnection: any = None,
+    onShowControlBar: any = None,
+    onHideControlBar: any = None
 ) -> any {
-    
+
     # Compute connection state
     isConnected = sessionStatus == "CONNECTED";
     isConnecting = sessionStatus == "CONNECTING";
-    
-    # Voice button styling
+
+    # Voice button styling - coral/primary color
     voiceBtnClass = cn(
-        "w-12 h-12 rounded-full border-none flex items-center justify-center transition-all",
+        "w-10 h-10 rounded-full border-none flex items-center justify-center transition-all",
         (
-            "bg-error text-white cursor-pointer hover:opacity-90" if isConnected else (
-                "bg-gray-300 text-gray-500 cursor-not-allowed opacity-70" if isConnecting else 
-                "bg-success text-white cursor-pointer hover:opacity-90"
+            "bg-primary text-white cursor-pointer hover:opacity-90" if isConnected else (
+                "bg-gray-300 text-gray-500 cursor-not-allowed opacity-70" if isConnecting else
+                "bg-primary text-white cursor-pointer hover:opacity-90"
             )
         )
     );
-    
-    # Voice call icon SVG - for connecting
-    voiceConnectIcon = <svg
-        width="20"
-        height="20"
+
+    # Voice call icon SVG - phone
+    voiceIcon = <svg
+        xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        fill="currentColor"
+        className="w-5 h-5"
     >
-        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+        <path fillRule="evenodd" d="M1.5 4.5a3 3 0 013-3h1.372c.86 0 1.61.586 1.819 1.42l1.105 4.423a1.875 1.875 0 01-.694 1.955l-1.293.97c-.135.101-.164.249-.126.352a11.285 11.285 0 006.697 6.697c.103.038.25.009.352-.126l.97-1.293a1.875 1.875 0 011.955-.694l4.423 1.105c.834.209 1.42.959 1.42 1.82V19.5a3 3 0 01-3 3h-2.25C8.552 22.5 1.5 15.448 1.5 6.75V4.5z" clipRule="evenodd" />
     </svg>;
-    
-    # Voice disconnect icon SVG - phone with X/hang up
-    voiceDisconnectIcon = <svg
-        width="20"
-        height="20"
+
+    # Send arrow icon
+    sendIcon = <svg
+        xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        fill="currentColor"
+        className="w-5 h-5"
     >
-        <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91" />
-        <line x1="22" x2="2" y1="2" y2="22" />
+        <path d="M3.478 2.404a.75.75 0 00-.926.941l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.404z" />
     </svg>;
-    
-    # Choose icon based on connection state
-    voiceIcon = voiceDisconnectIcon if isConnected else voiceConnectIcon;
-    
-    return <div className="border-t border-border bg-surface">
-        <SuggestionChips 
-            suggestions={suggestions}
-            onSelectSuggestion={onSelectSuggestion}
+
+    return <div className="p-4 flex gap-2 items-center">
+        <input
+            type="text"
+            value={userText}
+            onChange={lambda e: any -> None { setUserText(e.target.value); }}
+            onKeyPress={lambda e: any -> None { if e.key == "Enter" { onSend(); } }}
+            placeholder="Type a message..."
+            className="flex-1 px-4 py-3 border border-border rounded-lg text-base bg-surface text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
         />
-        
-        <div className="p-4 flex gap-2">
-            <input
-                type="text"
-                value={userText}
-                onChange={lambda e: any -> None { setUserText(e.target.value); }}
-                onKeyPress={lambda e: any -> None { if e.key == "Enter" { onSend(); } }}
-                placeholder="Click the 📞 for the best experience or type your message here..."
-                className="flex-1 px-4 py-3 border border-border rounded-lg text-base bg-surface text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-            />
-            <button
-                onClick={onToggleConnection}
-                disabled={isConnecting}
-                title={("Disconnect voice" if isConnected else ("Connecting..." if isConnecting else "Connect voice"))}
-                className={voiceBtnClass}
-            >
-                {voiceIcon}
-            </button>
-            <button
-                onClick={onSend}
-                className="px-6 py-3 bg-secondary text-secondary-foreground border-none rounded-lg cursor-pointer font-medium transition-all hover:opacity-90 hover:-translate-y-0.5 active:translate-y-0"
-            >
-                {"Send"}
-            </button>
-        </div>
+        <button
+            onClick={onToggleConnection}
+            onMouseEnter={onShowControlBar}
+            onMouseLeave={onHideControlBar}
+            disabled={isConnecting}
+            title={("End voice session" if isConnected else ("Connecting..." if isConnecting else "Start voice session"))}
+            className={voiceBtnClass}
+        >
+            {voiceIcon}
+        </button>
+        <button
+            onClick={onSend}
+            className="w-10 h-10 bg-primary text-white border-none rounded-full cursor-pointer flex items-center justify-center transition-all hover:opacity-90"
+            title="Send message"
+        >
+            {sendIcon}
+        </button>
     </div>;
 }
