@@ -102,9 +102,9 @@ def:pub GraphViewer(graphEdges: list) -> any {
     # Helper function for minimap node colors
     def getNodeColor(node: any) -> str {
         if node.type == "startNode" {
-            return "#06b6d4";
+            return "hsl(var(--primary))";
         }
-        return "#475569";
+        return "hsl(var(--muted-foreground))";
     }
 
     # Rendered graph with React Flow

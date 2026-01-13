@@ -21,7 +21,7 @@ def:pub Layout(
     # Apply head configuration
     useHead(finalMeta);
     
-    return <div className="min-h-screen bg-background text-text-primary font-sans">
+    return <div className="min-h-screen bg-background text-foreground font-sans">
         {children}
     </div>;
 }

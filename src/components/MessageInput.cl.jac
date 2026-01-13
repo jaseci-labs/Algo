@@ -22,9 +22,9 @@ def:pub MessageInput(
     voiceBtnClass = cn(
         "control-button w-9 h-9 rounded-lg",
         (
-            "bg-destructive text-white hover:bg-destructive/90" if isConnected else (
-                "bg-gray-300 text-gray-500 cursor-not-allowed opacity-70" if isConnecting else
-                "bg-primary text-white hover:bg-primary/90"
+            "bg-destructive text-destructive-foreground hover:bg-destructive/90" if isConnected else (
+                "bg-muted text-muted-foreground cursor-not-allowed opacity-70" if isConnecting else
+                "bg-primary text-primary-foreground hover:bg-primary/90"
             )
         )
     );

@@ -221,7 +221,7 @@ def GraphPanel(graphEdges: str, onClearGraph: any) -> any {
             </span>
         </div>
 
-        <div className="flex-1 overflow-hidden bg-graph-bg relative">
+        <div className="flex-1 overflow-hidden bg-background relative">
             <GraphViewer graphEdges={graphEdges} />
 
             <ClearGraphButton onClick={onClearGraph} />

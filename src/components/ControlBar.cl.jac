@@ -21,9 +21,9 @@ def:pub ControlBar(
     isConnected = sessionStatus == "CONNECTED";
     
     micBtnClass = cn(
-        "text-white px-4 py-2 rounded-md border-none transition-all flex items-center justify-center min-w-12",
-        ("cursor-not-allowed bg-text-secondary" if not isConnected else (
-            "cursor-pointer" + (" bg-error" if isMicMuted else " bg-black hover:opacity-90")
+        "text-primary-foreground px-4 py-2 rounded-md border-none transition-all flex items-center justify-center min-w-12",
+        ("cursor-not-allowed bg-muted" if not isConnected else (
+            "cursor-pointer" + (" bg-destructive" if isMicMuted else " bg-primary hover:opacity-90")
         ))
     );
     
@@ -32,19 +32,19 @@ def:pub ControlBar(
     # Talk button class
     talkBtnClass = cn(
         "px-4 py-1 border-none rounded-md transition-all",
-        ("cursor-not-allowed text-text-secondary bg-gray-200" if not isPTTActive else (
-            "cursor-pointer text-black" + (" bg-gray-300" if isPTTUserSpeaking else " bg-gray-200 hover:bg-gray-300")
+        ("cursor-not-allowed text-muted-foreground bg-muted" if not isPTTActive else (
+            "cursor-pointer text-foreground" + (" bg-secondary" if isPTTUserSpeaking else " bg-secondary/50 hover:bg-secondary")
         ))
     );
     
     # Save button class
     saveBtnClass = cn(
-        "text-white text-sm px-4 py-2 rounded-md border-none font-semibold transition-all",
-        ("cursor-not-allowed bg-text-secondary" if not isConnected else 
+        "text-success-foreground text-sm px-4 py-2 rounded-md border-none font-semibold transition-all",
+        ("cursor-not-allowed bg-muted" if not isConnected else 
          "cursor-pointer bg-success hover:opacity-90")
     );
 
-    return <div className="p-4 flex flex-row items-center justify-center gap-8 border-t border-border bg-surface">
+    return <div className="p-4 flex flex-row items-center justify-center gap-8 border-t border-border bg-card">;
         <button
             onClick={onToggleMicMute}
             disabled={not isConnected}

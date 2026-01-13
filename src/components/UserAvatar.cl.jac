@@ -38,7 +38,7 @@ def UserAvatarComponent() -> any {
 
     return <button className="flex items-center gap-3 px-3 py-2 rounded-xl bg-secondary/50 border border-border/50 hover:bg-secondary/70 transition-colors group">
         <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center ring-2 ring-primary/20">
-            <span className="text-white font-semibold text-xs">{initials}</span>
+            <span className="text-primary-foreground font-semibold text-xs">{initials}</span>
         </div>
         <div className="text-left">
             <p className="text-sm font-medium text-foreground">{username}</p>

@@ -1,344 +1,226 @@
 @import "tailwindcss";
 
-@theme {
-  /* Brand */
-  --color-primary: #ff7743;
-  --color-primary-foreground: #ffffff;
+@layer base {
+  :root {
+    /* Core semantic colors - HSL values for Tailwind compatibility */
+    --background: 30 30% 98%;
+    --foreground: 20 20% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 20 20% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 20% 10%;
 
-  --color-secondary: #273f4f;
-  --color-secondary-foreground: #ffffff;
+    /* Brand colors */
+    --primary: 16 100% 60%;
+    --primary-foreground: 0 0% 100%;
 
-  /* Backgrounds */
-  --color-background: #f0eeea;
-  --color-surface: #ffffff;
-  --color-card: #ffffff;
-  --color-surface-hover: #f5f5f5;
+    /* UI colors */
+    --secondary: 30 20% 95%;
+    --secondary-foreground: 20 20% 10%;
+    --muted: 30 15% 94%;
+    --muted-foreground: 20 10% 45%;
+    --accent: 24 95% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 15% 88%;
+    --input: 30 15% 88%;
+    --ring: 16 100% 60%;
+    --radius: 0.75rem;
 
-  /* Text */
-  --color-text-primary: #273f4f;
-  --color-text-secondary: #6f7173;
-  --color-foreground: #273f4f;
-  --color-muted-foreground: #6f7173;
+    /* Custom semantic tokens */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 20 20% 10%;
+    --error: 0 72% 51%;
+    --error-foreground: 0 0% 100%;
 
-  /* Borders */
-  --color-border: #dadada;
+    /* Graph specific colors */
+    --graph-node-start: 16 100% 60%;
+    --graph-node-task: 30 20% 95%;
+    --graph-node-special: 340 70% 55%;
+    --graph-edge: 30 15% 80%;
+    --graph-bg: 30 30% 98%;
 
-  /* Utility Colors */
-  --color-destructive: #f44336;
+    /* Message colors */
+    --message-user: 16 100% 60%;
+    --message-assistant: 30 20% 95%;
+  }
 
-  /* Utility */
-  --color-black: #000000;
+  .dark {
+    /* Core semantic colors */
+    --background: 20 15% 8%;
+    --foreground: 30 20% 95%;
+    --card: 20 15% 10%;
+    --card-foreground: 30 20% 95%;
+    --popover: 20 15% 12%;
+    --popover-foreground: 30 20% 95%;
 
-  /* Console/Terminal */
-  --color-console: #1e1e1e;
-  --color-console-text: #d4d4d4;
+    /* Brand colors */
+    --primary: 16 100% 60%;
+    --primary-foreground: 20 15% 8%;
 
-  /* Graph - Light Theme */
-  --color-graph-bg: #f8fafc;
-  --color-graph-node-bg: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
-  --color-graph-node-border: #e2e8f0;
-  --color-graph-node-text: #1e293b;
-  --color-graph-node-shadow: rgba(0, 0, 0, 0.1);
-  --color-graph-start-bg: linear-gradient(135deg, #f97316, #fb923c);
-  --color-graph-start-border: #fdba74;
-  --color-graph-start-glow: rgba(249, 115, 22, 0.4);
-  --color-graph-edge: #94a3b8;
-  --color-graph-edge-label: #64748b;
-  --color-graph-edge-label-bg: #ffffff;
-  --color-graph-controls-bg: #ffffff;
-  --color-graph-controls-border: #e2e8f0;
-  --color-graph-controls-text: #64748b;
-  --color-graph-minimap-bg: #f1f5f9;
-  --color-graph-minimap-mask: rgba(241, 245, 249, 0.7);
-  --color-graph-dots: #cbd5e1;
+    /* UI colors */
+    --secondary: 20 12% 16%;
+    --secondary-foreground: 30 20% 95%;
+    --muted: 20 12% 20%;
+    --muted-foreground: 30 15% 55%;
+    --accent: 24 95% 55%;
+    --accent-foreground: 20 15% 8%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 30 20% 95%;
+    --border: 20 12% 20%;
+    --input: 20 12% 16%;
+    --ring: 16 100% 60%;
 
-  /* Semantic Colors */
-  --color-success: #4caf50;
-  --color-success-foreground: #ffffff;
-  --color-warning: #ff9800;
-  --color-warning-foreground: #000000;
-  --color-error: #f44336;
-  --color-error-foreground: #ffffff;
+    /* Custom semantic tokens */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 20 15% 8%;
+    --error: 0 72% 51%;
+    --error-foreground: 30 20% 95%;
+
+    /* Graph specific colors */
+    --graph-node-start: 16 100% 60%;
+    --graph-node-task: 20 15% 22%;
+    --graph-node-special: 340 70% 55%;
+    --graph-edge: 20 12% 35%;
+    --graph-bg: 20 15% 8%;
+
+    /* Message colors */
+    --message-user: 16 100% 60%;
+    --message-assistant: 20 12% 16%;
+  }
 }
 
-/* Dark Mode */
-.dark {
-  --color-primary: #ff8a5c;
-  --color-primary-foreground: #ffffff;
+* {
+  border-color: hsl(var(--border));
+}
 
-  --color-secondary: #2d3748;
-  --color-secondary-foreground: #e5e5e5;
-
-  /* Backgrounds */
-  --color-background: #0f1419;
-  --color-surface: #1a1f2e;
-  --color-card: #1a1f2e;
-  --color-surface-hover: #2d3748;
-
-  /* Text */
-  --color-text-primary: #e5e5e5;
-  --color-text-secondary: #94a3b8;
-  --color-foreground: #e5e5e5;
-  --color-muted-foreground: #94a3b8;
-
-  /* Borders */
-  --color-border: #2d3748;
-
-  /* Utility Colors */
-  --color-destructive: #ef4444;
-
-  /* Console/Terminal */
-  --color-console: #0d0d0d;
-  --color-console-text: #d4d4d4;
-
-  /* Graph - Dark Theme */
-  --color-graph-bg: #0f172a;
-  --color-graph-node-bg: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-  --color-graph-node-border: #475569;
-  --color-graph-node-text: #e2e8f0;
-  --color-graph-node-shadow: rgba(0, 0, 0, 0.3);
-  --color-graph-start-bg: linear-gradient(135deg, #0d9488, #06b6d4);
-  --color-graph-start-border: #22d3ee;
-  --color-graph-start-glow: rgba(6, 182, 212, 0.5);
-  --color-graph-edge: #64748b;
-  --color-graph-edge-label: #94a3b8;
-  --color-graph-edge-label-bg: #1e293b;
-  --color-graph-controls-bg: #1e293b;
-  --color-graph-controls-border: #334155;
-  --color-graph-controls-text: #94a3b8;
-  --color-graph-minimap-bg: #0f172a;
-  --color-graph-minimap-mask: rgba(15, 23, 42, 0.7);
-  --color-graph-dots: #334155;
-
-  /* Semantic Colors - slightly brighter for dark mode */
-  --color-success: #66bb6a;
-  --color-success-foreground: #000000;
-  --color-warning: #ffb74d;
-  --color-warning-foreground: #000000;
-  --color-error: #ef5350;
-  --color-error-foreground: #ffffff;
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-surface-hover;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-text-secondary rounded;
+  background-color: hsl(var(--muted));
+  border-radius: 0.25rem;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-text-primary;
+  background-color: hsl(var(--muted-foreground));
 }
 
-.dark ::-webkit-scrollbar-track {
-  @apply bg-surface;
+/* Glass panel effect */
+.glass-panel {
+  background-color: hsl(var(--card) / 0.8);
+  backdrop-filter: blur(24px);
+  border: 1px solid;
+  border-color: hsl(var(--border) / 0.5);
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
-.dark ::-webkit-scrollbar-thumb {
-  @apply bg-border;
+/* Chat bubbles */
+.chat-bubble-user {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-radius: 1rem;
+  border-bottom-right-radius: 0.375rem;
+  padding: 0.625rem 1rem;
 }
 
-.dark ::-webkit-scrollbar-thumb:hover {
-  @apply bg-text-secondary;
+.chat-bubble-assistant {
+  background-color: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  border-radius: 1rem;
+  border-bottom-left-radius: 0.375rem;
+  padding: 0.625rem 1rem;
+  border: 1px solid;
+  border-color: hsl(var(--border) / 0.3);
 }
 
-/* ============================================
-   React Flow Graph Visualization Styles
-   Dynamic theming with CSS variables
-   ============================================ */
-
-/* Graph container */
-.graph-viewer-container {
-  background-color: var(--color-graph-bg);
-}
-
-/* React Flow base node styling */
-.react-flow__node {
-  font-family: inherit;
-}
-
-/* Start Node - Glowing Circle */
-.start-node {
-  width: 70px;
-  height: 70px;
-  border-radius: 50%;
-  background: var(--color-graph-start-bg);
+/* Control buttons */
+.control-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 20px var(--color-graph-start-glow),
-    0 0 40px var(--color-graph-start-glow),
-    inset 0 1px 1px rgba(255, 255, 255, 0.2);
-  border: 2px solid var(--color-graph-start-border);
-  transition: box-shadow 0.3s ease, transform 0.2s ease;
+  border-radius: 0.5rem;
+  transition: all 200ms;
 }
 
-.start-node:hover {
+.control-button:hover {
   transform: scale(1.05);
-  box-shadow: 0 0 30px var(--color-graph-start-glow),
-    0 0 60px var(--color-graph-start-glow);
 }
 
-.start-node-inner {
-  color: #ffffff;
-  font-weight: 600;
-  font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+.control-button:active {
+  transform: scale(0.95);
 }
 
-/* Task Node - Rounded Rectangle */
-.task-node {
-  min-width: 140px;
-  max-width: 200px;
-  padding: 12px 20px;
-  background: var(--color-graph-node-bg);
-  border-radius: 12px;
-  border: 1px solid var(--color-graph-node-border);
-  box-shadow: 0 4px 6px -1px var(--color-graph-node-shadow),
-    0 2px 4px -1px var(--color-graph-node-shadow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+.control-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
-.task-node:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 12px -2px var(--color-graph-node-shadow),
-    0 4px 6px -1px var(--color-graph-node-shadow);
+/* Graph nodes */
+.graph-node-start {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-radius: 9999px;
+  box-shadow: 0 0 20px hsl(var(--primary) / 0.4),
+    0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
-.task-node-label {
-  color: var(--color-graph-node-text);
-  font-weight: 500;
-  font-size: 14px;
-  text-align: center;
-  word-break: break-word;
-  line-height: 1.4;
+.graph-node-task {
+  background-color: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  border: 1px solid;
+  border-color: hsl(var(--border));
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
 }
 
-/* Hide default connection handles */
-.handle-hidden {
-  opacity: 0;
-  width: 1px;
-  height: 1px;
-  min-width: 1px;
-  min-height: 1px;
-  background: transparent;
-  border: none;
+.graph-node-special {
+  border: 1px solid;
+  border-color: hsl(var(--border));
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  background: hsl(var(--graph-node-special) / 0.2);
+  color: hsl(var(--graph-node-special));
 }
 
-/* Edge styling - Curved dashed lines */
-.react-flow__edge-path {
-  stroke: var(--color-graph-edge);
-  stroke-width: 2;
-  stroke-dasharray: 6, 4;
-}
-
-/* Edge labels - positioned away from line */
-.react-flow__edge-text {
-  fill: var(--color-graph-edge-label);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.react-flow__edge-textbg {
-  fill: var(--color-graph-edge-label-bg);
-  fill-opacity: 0.95;
-  rx: 4;
-  ry: 4;
-}
-
-/* Controls styling */
-.react-flow__controls {
-  background: var(--color-graph-controls-bg);
-  border: 1px solid var(--color-graph-controls-border);
-  border-radius: 8px;
-  box-shadow: 0 2px 8px var(--color-graph-node-shadow);
-}
-
-.react-flow__controls button {
-  background: var(--color-graph-controls-bg);
-  border-bottom: 1px solid var(--color-graph-controls-border);
-  color: var(--color-graph-controls-text);
-}
-
-.react-flow__controls button:hover {
-  background: var(--color-graph-node-border);
-}
-
-.react-flow__controls button svg {
-  fill: var(--color-graph-controls-text);
-}
-
-.react-flow__controls button:last-child {
-  border-bottom: none;
-}
-
-/* MiniMap styling */
-.react-flow__minimap {
-  background: var(--color-graph-minimap-bg) !important;
-  border: 1px solid var(--color-graph-controls-border) !important;
-  border-radius: 8px !important;
-}
-
-.react-flow__minimap-mask {
-  fill: var(--color-graph-minimap-mask);
-}
-
-.react-flow__minimap-node {
-  fill: var(--color-graph-node-border);
-  stroke: var(--color-graph-controls-bg);
-  stroke-width: 1;
-}
-
-/* Background dots */
-.react-flow__background {
-  background-color: var(--color-graph-bg);
-}
-
-.react-flow__background pattern circle {
-  fill: var(--color-graph-dots);
-}
-
-/* Attribution (hide) */
-.react-flow__attribution {
-  display: none;
-}
-
-/* ============================================
-   Floating Control Bar Styles
-   ============================================ */
-
+/* Floating control bar */
 .floating-control-bar {
   position: fixed;
-  bottom: 24px;
+  bottom: 1.5rem;
   left: 50%;
   transform: translateX(-50%);
+  z-index: 50;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.95);
+  gap: 0.375rem;
+  padding: 0.5rem;
+  background-color: hsl(var(--card) / 0.95);
   backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: opacity 0.3s ease, transform 0.3s ease;
-  z-index: 100;
-}
-
-.dark .floating-control-bar {
-  background: rgba(26, 31, 46, 0.95);
-  border-color: rgba(45, 55, 72, 0.5);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  border: 1px solid;
+  border-color: hsl(var(--border) / 0.5);
+  border-radius: 1rem;
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  transition: all 300ms;
 }
 
 .floating-control-bar-visible {
@@ -348,7 +230,7 @@
 
 .floating-control-bar-hidden {
   opacity: 0;
-  transform: translateX(-50%) translateY(10px);
+  transform: translateX(-50%) translateY(1rem);
   pointer-events: none;
 }
 
@@ -356,48 +238,27 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  border: none;
-  background: rgba(45, 55, 72, 0.8);
-  color: rgba(255, 255, 255, 0.9);
-  cursor: pointer;
-  transition: all 0.2s ease;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  background-color: hsl(var(--secondary) / 0.5);
+  color: hsl(var(--muted-foreground));
+  transition: all 200ms;
 }
 
-.dark .floating-control-btn {
-  background: rgba(45, 55, 72, 0.8);
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.floating-control-btn:hover:not(:disabled) {
-  background: rgba(39, 63, 79, 1);
-  color: white;
+.floating-control-btn:hover {
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--secondary));
   transform: scale(1.05);
 }
 
-.floating-control-btn:active:not(:disabled) {
+.floating-control-btn:active {
   transform: scale(0.95);
 }
 
 .floating-control-btn-active {
-  background: rgba(255, 119, 67, 0.9);
-  color: white;
-}
-
-.floating-control-btn-active:hover:not(:disabled) {
-  background: rgb(255, 119, 67);
-}
-
-.dark .floating-control-btn:hover:not(:disabled) {
-  background: rgba(74, 107, 124, 1);
-  color: white;
-}
-
-.dark .floating-control-btn-active {
-  background: rgba(255, 138, 92, 0.9);
-  color: white;
+  background-color: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary));
 }
 
 .floating-control-btn-disabled {
@@ -409,36 +270,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  border: none;
-  background: rgba(45, 55, 72, 0.8);
-  color: rgba(255, 255, 255, 0.9);
-  cursor: pointer;
-  transition: all 0.2s ease;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  background-color: hsl(var(--secondary) / 0.5);
+  color: hsl(var(--muted-foreground));
+  transition: all 200ms;
 }
 
-.dark .floating-voice-btn {
-  background: rgba(45, 55, 72, 0.8);
-  color: rgba(255, 255, 255, 0.9);
+.floating-voice-btn:hover {
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--secondary));
+  transform: scale(1.05);
 }
 
-/* Divider between control groups */
-.floating-control-divider {
-  width: 1px;
-  height: 32px;
-  background: var(--color-border);
-  opacity: 0.5;
-  margin: 0 4px;
-}
-
-.floating-voice-btn:hover:not(:disabled) {
-  transform: scale(1.1);
-  box-shadow: 0 0 0 8px rgba(255, 119, 67, 0.2);
-}
-
-.floating-voice-btn:active:not(:disabled) {
+.floating-voice-btn:active {
   transform: scale(0.95);
 }
 
@@ -446,16 +292,166 @@
   animation: pulse-ring 1.5s ease-out infinite;
 }
 
-@keyframes pulse-ring {
-  0% {
-    box-shadow: 0 0 0 0 rgba(255, 119, 67, 0.7);
-  }
-  70% {
-    box-shadow: 0 0 0 16px rgba(255, 119, 67, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(255, 119, 67, 0);
-  }
+.floating-control-divider {
+  width: 1px;
+  height: 2rem;
+  margin-left: 0.25rem;
+  margin-right: 0.25rem;
+  background-color: hsl(var(--border) / 0.5);
+}
+
+/* Animations */
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+.animate-pulse-glow {
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+/* React Flow Graph Styles */
+.graph-viewer-container {
+  background-color: hsl(var(--graph-bg));
+}
+
+.start-node {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  box-shadow: 0 0 20px hsl(var(--primary) / 0.4),
+    0 0 40px hsl(var(--primary) / 0.2);
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+}
+
+.start-node:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 30px hsl(var(--primary) / 0.6),
+    0 0 60px hsl(var(--primary) / 0.3);
+}
+
+.start-node-inner {
+  color: hsl(var(--primary-foreground));
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.task-node {
+  min-width: 140px;
+  max-width: 200px;
+  padding: 12px 20px;
+  background-color: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  border: 1px solid;
+  border-color: hsl(var(--border));
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.task-node:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+.task-node-label {
+  color: hsl(var(--secondary-foreground));
+  font-weight: 500;
+  font-size: 0.875rem;
+  text-align: center;
+  word-wrap: break-word;
+  line-height: 1.4;
+}
+
+.handle-hidden {
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  min-width: 1px;
+  min-height: 1px;
+  background: transparent;
+  border: none;
+}
+
+.react-flow__edge-path {
+  stroke: hsl(var(--graph-edge));
+  stroke-width: 2;
+  stroke-dasharray: 6, 4;
+}
+
+.react-flow__edge-text {
+  fill: hsl(var(--muted-foreground));
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.react-flow__edge-textbg {
+  fill: hsl(var(--card));
+  fill-opacity: 0.95;
+  rx: 4;
+  ry: 4;
+}
+
+.react-flow__controls {
+  background-color: hsl(var(--card));
+  border: 1px solid;
+  border-color: hsl(var(--border));
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+.react-flow__controls button {
+  background-color: hsl(var(--card));
+  border-bottom: 1px solid;
+  border-color: hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+}
+
+.react-flow__controls button:hover {
+  background-color: hsl(var(--secondary));
+}
+
+.react-flow__controls button svg {
+  fill: hsl(var(--muted-foreground));
+}
+
+.react-flow__controls button:last-child {
+  border-bottom: none;
+}
+
+.react-flow__minimap {
+  background-color: hsl(var(--card));
+  border: 1px solid;
+  border-color: hsl(var(--border));
+  border-radius: 0.5rem;
+}
+
+.react-flow__minimap-mask {
+  fill: hsl(var(--card) / 0.7);
+}
+
+.react-flow__minimap-node {
+  fill: hsl(var(--border));
+  stroke: hsl(var(--card));
+  stroke-width: 1;
+}
+
+.react-flow__background {
+  background-color: hsl(var(--graph-bg));
+}
+
+.react-flow__background pattern circle {
+  fill: hsl(var(--border));
+}
+
+.react-flow__attribution {
+  display: none;
 }
 
 @keyframes fade-in {
@@ -469,43 +465,14 @@
   }
 }
 
-/* ============================================
-   Utility Classes
-   ============================================ */
-
-/* Glass Panel Effect */
-.glass-panel {
-  @apply bg-surface/50 backdrop-blur-xl border border-border/30 rounded-2xl shadow-lg;
-}
-
-/* Chat Bubbles */
-.chat-bubble-user {
-  @apply bg-primary text-primary-foreground px-4 py-3 rounded-2xl rounded-tr-md;
-}
-
-.chat-bubble-assistant {
-  @apply bg-surface-hover text-text-primary px-4 py-3 rounded-2xl rounded-tl-md border border-border/30;
-}
-
-/* Control Button Base */
-.control-button {
-  @apply flex items-center justify-center transition-all duration-200 border-none;
-}
-
-.control-button:active:not(:disabled) {
-  @apply scale-95;
-}
-
-.control-button:disabled {
-  @apply opacity-40 cursor-not-allowed;
-}
-
-/* Fade In Animation */
-.animate-fade-in {
-  animation: fade-in 0.3s ease-out;
-}
-
-/* Pulse Glow Animation for Start Node */
-.animate-pulse-glow {
-  animation: pulse-ring 2s ease-out infinite;
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 16px hsl(var(--primary) / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
+  }
 }
