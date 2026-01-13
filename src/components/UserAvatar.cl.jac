@@ -2,6 +2,7 @@
 # Displays user avatar with name and role (no dropdown interaction)
 
 import from react { memo, useState, useEffect }
+import from "lucide-react" { ChevronDown }
 
 def UserAvatarComponent() -> any {
     [username, setUsername] = useState("User");
@@ -35,15 +36,16 @@ def UserAvatarComponent() -> any {
         []
     );
 
-    return <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
-            <span className="text-white font-semibold text-sm">{initials}</span>
+    return <button className="flex items-center gap-3 px-3 py-2 rounded-xl bg-secondary/50 border border-border/50 hover:bg-secondary/70 transition-colors group">
+        <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center ring-2 ring-primary/20">
+            <span className="text-white font-semibold text-xs">{initials}</span>
         </div>
-        <div className="flex flex-col">
-            <span className="text-sm font-semibold text-text-primary">{username}</span>
-            <span className="text-xs text-text-secondary">{"Pro Member"}</span>
+        <div className="text-left">
+            <p className="text-sm font-medium text-foreground">{username}</p>
+            <p className="text-[10px] text-muted-foreground">{"Pro Member"}</p>
         </div>
-    </div>;
+        <ChevronDown className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+    </button>;
 }
 
 glob:pub UserAvatar = memo(UserAvatarComponent);

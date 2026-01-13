@@ -2,7 +2,7 @@
 # Floating pill-shaped control bar with icon-only buttons
 
 import from react { memo, useEffect, useRef }
-import from "lucide-react" { Mic, MicOff, Volume2, VolumeX, Radio, Save, RotateCcw }
+import from "lucide-react" { Mic, MicOff, Volume2, VolumeX, Hand, Save, RotateCcw }
 import from ..utils.mergeCls { cn }
 
 def FloatingControlBarComponent(
@@ -67,7 +67,7 @@ def FloatingControlBarComponent(
             className={micBtnClass}
             title={("Unmute microphone") if isMicMuted else ("Mute microphone")}
         >
-            {(<MicOff className="w-5 h-5" />) if isMicMuted else (<Mic className="w-5 h-5" />)}
+            {(<MicOff className="w-4 h-4" />) if isMicMuted else (<Mic className="w-4 h-4" />)}
         </button>
 
         <button
@@ -76,7 +76,7 @@ def FloatingControlBarComponent(
             className={audioBtnClass}
             title={("Enable audio") if not isAudioPlaybackEnabled else ("Disable audio")}
         >
-            {(<VolumeX className="w-5 h-5" />) if not isAudioPlaybackEnabled else (<Volume2 className="w-5 h-5" />)}
+            {(<VolumeX className="w-4 h-4" />) if not isAudioPlaybackEnabled else (<Volume2 className="w-4 h-4" />)}
         </button>
 
         <button
@@ -86,10 +86,12 @@ def FloatingControlBarComponent(
             onTouchEnd={onTalkUp}
             disabled={not isConnected}
             className={voiceBtnClass}
-            title="Hold to talk"
+            title="Push to talk"
         >
-            <Radio className="w-6 h-6" />
+            <Hand className="w-4 h-4" />
         </button>
+
+        <div className="floating-control-divider" />
 
         <button
             onClick={onSaveAndRestart}
@@ -97,7 +99,7 @@ def FloatingControlBarComponent(
             className={actionBtnClass}
             title="Save"
         >
-            <Save className="w-5 h-5" />
+            <Save className="w-4 h-4" />
         </button>
 
         <button
@@ -106,7 +108,7 @@ def FloatingControlBarComponent(
             className={actionBtnClass}
             title="Restart"
         >
-            <RotateCcw className="w-5 h-5" />
+            <RotateCcw className="w-4 h-4" />
         </button>
     </div>;
 }

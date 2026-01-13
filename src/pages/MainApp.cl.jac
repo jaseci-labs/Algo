@@ -128,8 +128,9 @@ def:pub MainApp() -> any {
         <div className="flex flex-col h-screen bg-background">
             <Header isDarkMode={isDarkMode} onToggleTheme={toggleTheme} />
 
-            <div className="flex-1 flex gap-2 p-2 overflow-hidden">
-                <TranscriptPanel
+            <div className="flex-1 flex gap-4 p-4 overflow-hidden">
+                <div className="w-1/2">
+                    <TranscriptPanel
                     transcriptItems={transcriptItems}
                     transcriptEndRef={transcriptEndRef}
                     userText={userText}
@@ -139,12 +140,15 @@ def:pub MainApp() -> any {
                     onToggleConnection={onToggleConnection}
                     onShowControlBar={handleShowControlBar}
                     onHideControlBar={handleHideControlBar}
-                />
+                    />
+                </div>
 
-                <GraphPanel
-                    graphEdges={graphEdges}
-                    onClearGraph={handleClearGraph}
-                />
+                <div className="w-1/2">
+                        <GraphPanel
+                        graphEdges={graphEdges}
+                        onClearGraph={handleClearGraph}
+                    />
+                </div>
             </div>
 
             <FloatingControlBar
@@ -181,8 +185,8 @@ def TranscriptPanel(
     onShowControlBar: any,
     onHideControlBar: any
 ) -> any {
-    return <div className="w-1/2 bg-surface rounded-xl flex flex-col min-h-0 shadow-sm">
-        <div className="flex items-center gap-2 px-6 py-3 border-b border-border font-semibold text-text-primary">
+    return <div className="glass-panel flex flex-col h-full">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-border/30">
             <MessageSquare className="w-5 h-5 text-primary" />
             {"Transcript"}
         </div>
@@ -206,13 +210,13 @@ def TranscriptPanel(
 
 # Graph Panel - right side showing task visualization
 def GraphPanel(graphEdges: str, onClearGraph: any) -> any {
-    return <div className="w-1/2 bg-surface rounded-xl flex flex-col min-h-0 shadow-sm">
-        <div className="flex items-center justify-between px-6 py-3 border-b border-border font-semibold text-text-primary">
+    return <div className="glass-panel flex flex-col h-full">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border/30">
             <div className="flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-primary" />
-                {"Task Graph"}
+                <BarChart3 className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-semibold text-foreground">{"Task Graph"}</h2>
             </div>
-            <span className="text-xs text-text-secondary font-normal">
+            <span className="text-xs text-muted-foreground">
                 {"Real-time visualization"}
             </span>
         </div>
@@ -229,9 +233,9 @@ def GraphPanel(graphEdges: str, onClearGraph: any) -> any {
 def ClearGraphButton(onClick: any) -> any {
     return <button
         onClick={onClick}
-        className="absolute bottom-4 right-4 px-3 py-2 bg-error/90 text-error-foreground border-none rounded-lg cursor-pointer text-sm font-medium shadow-md transition-all hover:bg-error hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2"
+        className="absolute bottom-4 right-4 flex items-center gap-2 px-3 py-2 bg-destructive/10 text-destructive rounded-lg text-xs font-medium hover:bg-destructive/20 transition-colors"
     >
-        <Trash2 className="w-4 h-4" />
+        <Trash2 className="w-3.5 h-3.5" />
         {"Clear Graph"}
     </button>;
 }

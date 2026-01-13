@@ -21,19 +21,19 @@ def:pub TranscriptItem(item: any) -> any {
     
     # Message bubble styling based on role
     bubbleClass = cn(
-        "max-w-lg px-4 py-3 rounded-2xl",
-        (("bg-primary text-white") if isUser else (
-            ("bg-warning/20 text-text-primary") if isSystem else 
-            "bg-surface-hover text-text-primary"
+        "max-w-[80%]",
+        (("chat-bubble-user") if isUser else (
+            ("bg-warning/20 text-text-primary px-4 py-3 rounded-2xl border border-border/30") if isSystem else 
+            "chat-bubble-assistant"
         ))
     );
     
-    return <div className={containerClass}>
-        <div className="text-[10px] uppercase font-semibold tracking-wide px-2 text-text-secondary/60">
+    return <div className={cn(containerClass, "animate-fade-in")}>
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block px-2">
             {labelText}
-        </div>
+        </span>
         <div className={bubbleClass}>
-            <div className="text-sm leading-relaxed">{content}</div>
+            <p className="text-sm leading-relaxed">{content}</p>
         </div>
     </div>;
 }

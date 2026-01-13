@@ -1,7 +1,7 @@
 # MessageInput Component
 # Text input field with send button, voice call button (with hover trigger for floating control bar)
 
-import from "lucide-react" { Phone, Send }
+import from "lucide-react" { Phone, PhoneOff, Send }
 import from ..utils.mergeCls { cn }
 
 def:pub MessageInput(
@@ -18,28 +18,28 @@ def:pub MessageInput(
     isConnected = sessionStatus == "CONNECTED";
     isConnecting = sessionStatus == "CONNECTING";
 
-    # Voice button styling - coral/primary color
+    # Voice button styling - solid colors for better visibility
     voiceBtnClass = cn(
-        "w-10 h-10 rounded-full border-none flex items-center justify-center transition-all",
+        "control-button w-9 h-9 rounded-lg",
         (
-            "bg-primary text-white cursor-pointer hover:opacity-90" if isConnected else (
+            "bg-destructive text-white hover:bg-destructive/90" if isConnected else (
                 "bg-gray-300 text-gray-500 cursor-not-allowed opacity-70" if isConnecting else
-                "bg-primary text-white cursor-pointer hover:opacity-90"
+                "bg-primary text-white hover:bg-primary/90"
             )
         )
     );
 
     buttonLabel = ("End voice session" if isConnected else ("Connecting..." if isConnecting else "Start voice session"));
 
-    return <div className="p-4 flex flex-col gap-3">
-        <div className="flex gap-2 items-center">
+    return <div className="p-4 border-t border-border/30">
+        <div className="flex items-center gap-2 bg-secondary/50 rounded-xl p-1.5 border border-border/30 focus-within:border-primary/50 transition-colors">
             <input
                 type="text"
                 value={userText}
                 onChange={lambda e: any -> None { setUserText(e.target.value); }}
                 onKeyPress={lambda e: any -> None { if e.key == "Enter" { onSend(); } }}
                 placeholder="Type a message..."
-                className="flex-1 px-4 py-3 border border-border rounded-lg text-base bg-surface text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                className="flex-1 bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
             <button
                 onClick={onToggleConnection}
@@ -49,18 +49,15 @@ def:pub MessageInput(
                 title={buttonLabel}
                 className={voiceBtnClass}
             >
-                <Phone className="w-5 h-5" />
+                {(<PhoneOff className="w-4 h-4" />) if isConnected else (<Phone className="w-4 h-4" />)}
             </button>
             <button
                 onClick={onSend}
-                className="w-10 h-10 bg-primary text-white border-none rounded-full cursor-pointer flex items-center justify-center transition-all hover:opacity-90"
+                className="control-button w-9 h-9 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg"
                 title="Send message"
             >
-                <Send className="w-5 h-5" />
+                <Send className="w-4 h-4" />
             </button>
         </div>
-        {isConnected and <div className="text-sm text-text-secondary text-center">
-            {buttonLabel}
-        </div>}
     </div>;
 }
