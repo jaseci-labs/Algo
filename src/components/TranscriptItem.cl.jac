@@ -12,30 +12,27 @@ def:pub TranscriptItem(item: any) -> any {
     
     # Container alignment based on role
     containerClass = cn(
-        "flex flex-col",
+        "flex flex-col gap-1",
         ("items-end" if isUser else "items-start")
     );
     
+    # Role label - small text above or inside bubble
+    labelText = ("YOU" if isUser else ("SYSTEM" if isSystem else "ASSISTANT"));
+    
     # Message bubble styling based on role
     bubbleClass = cn(
-        "max-w-lg px-3 py-2 rounded-xl",
-        (("bg-secondary text-secondary-foreground") if isUser else (
+        "max-w-lg px-4 py-3 rounded-2xl",
+        (("bg-primary text-white") if isUser else (
             ("bg-warning/20 text-text-primary") if isSystem else 
             "bg-surface-hover text-text-primary"
         ))
     );
     
-    # Role label styling
-    labelClass = cn(
-        "text-xs mb-1 uppercase font-semibold",
-        ("text-text-secondary/70" if isUser else "text-text-secondary")
-    );
-    
     return <div className={containerClass}>
+        <div className="text-[10px] uppercase font-semibold tracking-wide px-2 text-text-secondary/60">
+            {labelText}
+        </div>
         <div className={bubbleClass}>
-            <div className={labelClass}>
-                {role}
-            </div>
             <div className="text-sm leading-relaxed">{content}</div>
         </div>
     </div>;

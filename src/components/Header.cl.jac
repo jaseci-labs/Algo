@@ -2,22 +2,17 @@
 # Application header with logo, user info, and controls
 
 import from react { memo }
-import from "@jac-client/utils" { jacLogout, useNavigate }
+import from "lucide-react" { Briefcase, LogOut }
 import from .ThemeToggle { ThemeToggle }
 import from .UserAvatar { UserAvatar }
 
 def HeaderComponent(isDarkMode: bool, onToggleTheme: any) -> any {
-    navigate = useNavigate();
-
-    def handleLogout(e: any) -> None {
-        e.preventDefault();
-        jacLogout();
-        navigate("/login");
-    }
-
-    return <header className="px-5 py-3 flex justify-between items-center border-b border-border bg-surface">
+    return <header className="px-6 py-3 flex justify-between items-center border-b border-border bg-surface">
         <div className="flex items-center gap-3">
-            <div className="header-logo-icon">
+            # <div className="text-primary">
+            #     <Briefcase className="w-7 h-7" />
+            # </div>
+             <div className="header-logo-icon">
                 <svg
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 24 24"
@@ -33,22 +28,11 @@ def HeaderComponent(isDarkMode: bool, onToggleTheme: any) -> any {
             </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
             <ThemeToggle isDarkMode={isDarkMode} onToggle={onToggleTheme} />
             <UserAvatar />
-            <button
-                onClick={handleLogout}
-                className="header-logout-btn"
-                title="Logout"
-            >
-                <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    className="w-5 h-5"
-                >
-                    <path fillRule="evenodd" d="M7.5 3.75A1.5 1.5 0 006 5.25v13.5a1.5 1.5 0 001.5 1.5h6a1.5 1.5 0 001.5-1.5V15a.75.75 0 011.5 0v3.75a3 3 0 01-3 3h-6a3 3 0 01-3-3V5.25a3 3 0 013-3h6a3 3 0 013 3V9A.75.75 0 0115 9V5.25a1.5 1.5 0 00-1.5-1.5h-6zm10.72 4.72a.75.75 0 011.06 0l3 3a.75.75 0 010 1.06l-3 3a.75.75 0 11-1.06-1.06l1.72-1.72H9a.75.75 0 010-1.5h10.94l-1.72-1.72a.75.75 0 010-1.06z" clipRule="evenodd" />
-                </svg>
+            <button className="control-button w-9 h-9 bg-destructive/10 text-destructive hover:bg-destructive/20">
+                <LogOut className="w-4 h-4" />
             </button>
         </div>
     </header>;

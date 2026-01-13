@@ -1,6 +1,7 @@
 # ControlBar Component
 # Bottom control bar with connection, PTT, and audio controls
 
+import from "lucide-react" { Mic, MicOff }
 import from ..utils.mergeCls { cn }
 
 def:pub ControlBar(
@@ -27,45 +28,6 @@ def:pub ControlBar(
     );
     
     micBtnTitle = "Mute microphone" if not isMicMuted else "Unmute microphone";
-
-    # Mic icon SVG - unmuted
-    micIconUnmuted = <svg
-        width="20"
-        height="20"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="block"
-    >
-        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-        <line x1="12" x2="12" y1="19" y2="22" />
-        <line x1="8" x2="16" y1="22" y2="22" />
-    </svg>;
-
-    # Mic icon SVG - muted
-    micIconMuted = <svg
-        width="20"
-        height="20"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="block"
-    >
-        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-        <line x1="12" x2="12" y1="19" y2="22" />
-        <line x1="2" x2="22" y1="2" y2="22" />
-    </svg>;
-
-    # Choose the correct icon based on mute state
-    micIcon = micIconMuted if isMicMuted else micIconUnmuted;
     
     # Talk button class
     talkBtnClass = cn(
@@ -89,7 +51,7 @@ def:pub ControlBar(
             title={micBtnTitle}
             className={micBtnClass}
         >
-            {micIcon}
+            {(<MicOff className="w-5 h-5" />) if isMicMuted else (<Mic className="w-5 h-5" />)}
         </button>
 
         <div className="flex flex-row items-center gap-2">
