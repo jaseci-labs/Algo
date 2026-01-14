@@ -17,16 +17,9 @@ Algo is a voice-enabled personal AI assistant with calendar, email, and GitHub i
    export OPENAI_API_KEY='your-api-key-here'
    ```
 
-3. **Install client-side dependencies**
-
-   Install the required packages using Jac CLI:
-   ```bash
-   jac add --cl
-   ```
-
 4. **Start the application**
    ```bash
-   jac serve src/app.jac
+   jac start main.jac
    ```
 
 5. **Open your browser**
