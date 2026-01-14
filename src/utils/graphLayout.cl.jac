@@ -8,6 +8,24 @@ glob NODE_WIDTH = 180;
 glob NODE_HEIGHT = 50;
 glob START_NODE_SIZE = 70;
 
+# Helper function to add spaces before capital letters in camelCase strings
+
+def addSpacesToCamelCase(word:str) -> str{
+    
+   result = '';
+
+  for i = 0 to i < word.length by i+=1{
+    char = word[i];
+    if (i > 0 && char == char.toUpperCase() && char != char.toLowerCase()) {
+      result += ' ';
+    }
+
+    result += char;
+  }
+
+  return result;
+}
+
 # Transform raw edge data to React Flow nodes and edges format
 def:pub transformGraphData(graphEdges: list) -> dict {
     nodeSet = Reflect.construct(Set, []);
@@ -25,13 +43,14 @@ def:pub transformGraphData(graphEdges: list) -> dict {
         }
     }
 
-    # Create nodes array
+    # Create nodes array with formatted labels
     nodes = [];
     for nodeId in nodeSet {
+        displayLabel = addSpacesToCamelCase(nodeId) or nodeId;
         nodes.push({
             "id": nodeId,
             "type": "startNode" if nodeId == "Start" else "taskNode",
-            "data": { "label": nodeId },
+            "data": { "label": displayLabel },
             "position": { "x": 0, "y": 0 }
         });
     }

@@ -186,7 +186,7 @@ def TranscriptPanel(
     onHideControlBar: any
 ) -> any {
     return <div className="glass-panel flex flex-col h-full">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border/30">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-border/30 text-sm font-semibold text-foreground">
             <MessageSquare className="w-5 h-5 text-primary" />
             {"Transcript"}
         </div>
@@ -221,7 +221,7 @@ def GraphPanel(graphEdges: str, onClearGraph: any) -> any {
             </span>
         </div>
 
-        <div className="flex-1 overflow-hidden bg-background relative">
+        <div className="flex-1 overflow-hidden bg-background relative rounded-[0.75rem]">
             <GraphViewer graphEdges={graphEdges} />
 
             <ClearGraphButton onClick={onClearGraph} />

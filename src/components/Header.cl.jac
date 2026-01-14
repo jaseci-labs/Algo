@@ -5,8 +5,16 @@ import from react { memo }
 import from "lucide-react" { Bot, LogOut, ChevronDown }
 import from .ThemeToggle { ThemeToggle }
 import from .UserAvatar { UserAvatar }
+import from "@jac-client/utils" { jacLogout, useNavigate }
 
 def HeaderComponent(isDarkMode: bool, onToggleTheme: any) -> any {
+    navigate = useNavigate();
+    
+    def handleLogout(e: any) -> None {
+        e.preventDefault();
+        jacLogout();
+        navigate("/login");
+    }
     return <header className="h-16 px-6 flex items-center justify-between border-b border-border/50 bg-card/50 backdrop-blur-xl">
         <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -21,8 +29,8 @@ def HeaderComponent(isDarkMode: bool, onToggleTheme: any) -> any {
         <div className="flex items-center gap-3">
             <ThemeToggle isDarkMode={isDarkMode} onToggle={onToggleTheme} />
             <UserAvatar />
-            <button className="control-button w-9 h-9 bg-destructive/10 text-destructive hover:bg-destructive/20">
-                <LogOut className="w-4 h-4" />
+            <button onClick={lambda e:any -> None {handleLogout(e);}} className="control-button w-9 h-9 bg-destructive/10 text-destructive hover:bg-destructive/20">
+                <LogOut  className="w-4 h-4" />
             </button>
         </div>
     </header>;

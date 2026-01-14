@@ -104,7 +104,7 @@ def:pub GraphViewer(graphEdges: list) -> any {
         if node.type == "startNode" {
             return "hsl(var(--primary))";
         }
-        return "hsl(var(--muted-foreground))";
+        return "hsl(var(--foreground))";
     }
 
     # Rendered graph with React Flow
@@ -130,7 +130,7 @@ def:pub GraphViewer(graphEdges: list) -> any {
             maxZoom={2}
         >
             <Background
-                gap={20}
+                gap={12}
                 size={1}
                 variant="dots"
             />
