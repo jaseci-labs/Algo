@@ -612,15 +612,38 @@ impl call_supervisor.call {
                     }
                 }
                 
-                # Start with existing edges, then add/override with new ones
+                # Start with existing edges
                 edge_map = {};
-                
-                # Add all existing edges first
                 for edge in current_edges {
                     from_task = edge.get("from", "");
                     to_task = edge.get("to", "");
                     edge_key = f"{from_task}->{to_task}";
                     edge_map[edge_key] = edge;
+                }
+                
+                # Detect edges that should be removed (task insertion cases)
+                # If we're adding A->B->C, we should remove A->C if it exists
+                edges_to_remove = {};
+                for rel in relationships {
+                    # Check if this relationship represents an insertion
+                    # Look for pattern: if we have A->B and B->C, remove A->C
+                    for other_rel in relationships {
+                        if rel.to_task == other_rel.from_task {
+                            # Found chain: rel.from_task -> rel.to_task -> other_rel.to_task
+                            # Remove direct edge from rel.from_task -> other_rel.to_task if it exists
+                            direct_edge_key = f"{rel.from_task}->{other_rel.to_task}";
+                            if direct_edge_key in edge_map {
+                                edges_to_remove[direct_edge_key] = True;
+                            }
+                        }
+                    }
+                }
+                
+                # Remove the identified edges
+                for edge_key in edges_to_remove {
+                    if edge_key in edge_map {
+                        del edge_map[edge_key];
+                    }
                 }
                 
                 # Add/override with new relationships

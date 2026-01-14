@@ -4,7 +4,7 @@
 import from react { useState, useRef }
 import from "@openai/agents/realtime" { RealtimeAgent, RealtimeSession, tool }
 
-import from ..constants.index { CHAT_AGENT_INSTRUCTIONS }
+import from ..constants.constants { CHAT_AGENT_INSTRUCTIONS }
 import from ..service.mainAppService {
     getSessionToken,
     callSupervisor,
