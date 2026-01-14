@@ -1,7 +1,7 @@
 # useRealtimeSession Hook
 # Custom hook for managing OpenAI Realtime API connection and session
 
-import from react { useState, useRef }
+import from react { useRef }
 import from "@openai/agents/realtime" { RealtimeAgent, RealtimeSession, tool }
 
 import from ..constants.constants { CHAT_AGENT_INSTRUCTIONS }
@@ -10,36 +10,37 @@ import from ..service.mainAppService {
     callSupervisor,
     getUsernameFromToken
 }
-# import from .utils.messageUtils { extractMessageText }
 
 def extractMessageText(content: any) -> str {
-        if not content or not content.length {
-            return "";
-        }
-        text = "";
-        for c in content {
-            if c and c.type == "input_text" {
-                text = text + (c.text or "");
-            } elif c and c.type == "audio" {
-                text = text + (c.transcript or "");
-            } elif c and c.type == "text" {
-                text = text + (c.text or "");
-            }
-        }
-        return text;
+    if not content or not content.length {
+        return "";
     }
-    # Hook for managing OpenAI Realtime session
-    # @param transcriptHelpers - Object containing transcript manipulation functions
-    # @param refreshGraphState - Function to refresh graph state after supervisor calls
-    # @param setSuggestions - Function to update suggestions state in parent
-    def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSuggestions: any) -> any {
-        # Connection state
-        [sessionStatus, setSessionStatus] = useState("DISCONNECTED");
-        sessionRef = useRef(None);
-        
-        # Computed values
-        isConnected = sessionStatus == "CONNECTED";
-        isConnecting = sessionStatus == "CONNECTING";
+    text = "";
+    for c in content {
+        if c and c.type == "input_text" {
+            text = text + (c.text or "");
+        } elif c and c.type == "audio" {
+            text = text + (c.transcript or "");
+        } elif c and c.type == "text" {
+            text = text + (c.text or "");
+        }
+    }
+    return text;
+}
+
+# Hook for managing OpenAI Realtime session
+# @param transcriptHelpers - Object containing transcript manipulation functions
+# @param refreshGraphState - Function to refresh graph state after supervisor calls
+# @param setSuggestions - Function to update suggestions state in parent
+def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSuggestions: any) -> any {
+    # Reactive state using has variables
+    has sessionStatus: str = "DISCONNECTED";
+
+    sessionRef = useRef(None);
+
+    # Computed values
+    isConnected = sessionStatus == "CONNECTED";
+    isConnecting = sessionStatus == "CONNECTING";
         
         # Destructure transcript helpers
         addMessage = transcriptHelpers.addMessage;
@@ -242,18 +243,18 @@ def extractMessageText(content: any) -> str {
                 return;
             }
             
-            setSessionStatus("CONNECTING");
+            sessionStatus = "CONNECTING";
             
             try {
                 if not window.isSecureContext {
                     addMessage("error", "Microphone requires secure context. Access via http://localhost:8000");
-                    setSessionStatus("DISCONNECTED");
+                    sessionStatus = "DISCONNECTED";
                     return;
                 }
                 
                 if not navigator.mediaDevices {
                     addMessage("error", "MediaDevices API not available.");
-                    setSessionStatus("DISCONNECTED");
+                    sessionStatus = "DISCONNECTED";
                     return;
                 }
                 
@@ -261,7 +262,7 @@ def extractMessageText(content: any) -> str {
                 
                 if not api_key {
                     console.error("No ephemeral key received");
-                    setSessionStatus("DISCONNECTED");
+                    sessionStatus = "DISCONNECTED";
                     return;
                 }
                 
@@ -292,7 +293,7 @@ def extractMessageText(content: any) -> str {
                 
                 console.log("Successfully connected to OpenAI Realtime API with multi-agent setup!");
                 sessionRef.current = session;
-                setSessionStatus("CONNECTED");
+                sessionStatus = "CONNECTED";
 
                 # Load user's existing graph when they connect
                 username = getUsernameFromToken();
@@ -306,7 +307,7 @@ def extractMessageText(content: any) -> str {
                 if e and e.message {
                     console.error("Error message:", e.message);
                 }
-                setSessionStatus("DISCONNECTED");
+                sessionStatus = "DISCONNECTED";
             }
         }
         
@@ -317,7 +318,7 @@ def extractMessageText(content: any) -> str {
                 sessionRef.current.close();
                 sessionRef.current = None;
             }
-            setSessionStatus("DISCONNECTED");
+            sessionStatus = "DISCONNECTED";
             if resetPTTState {
                 resetPTTState();
             }

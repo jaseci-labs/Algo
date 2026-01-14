@@ -1,30 +1,30 @@
 # useAudioControls Hook
 # Custom hook for managing audio, microphone, and push-to-talk controls
 
-import from react { useState, useEffect, useRef }
+import from react { useEffect, useRef }
 
 def:pub useAudioControls(sessionRef: any, sessionStatus: str) -> any {
     # Audio element ref
     audioElementRef = useRef(None);
-    
-    # UI state
-    [isPTTActive, setIsPTTActive] = useState(False);
-    [isPTTUserSpeaking, setIsPTTUserSpeaking] = useState(False);
-    [isAudioPlaybackEnabled, setIsAudioPlaybackEnabled] = useState(True);
-    [isMicMuted, setIsMicMuted] = useState(False);
-    
+
+    # Reactive state using has variables
+    has isPTTActive: bool = False;
+    has isPTTUserSpeaking: bool = False;
+    has isAudioPlaybackEnabled: bool = True;
+    has isMicMuted: bool = False;
+
     # Toggle mic mute state
     def toggleMicMute() -> None {
-        setIsMicMuted(lambda prev: bool -> bool { return not prev; });
+        isMicMuted = not isMicMuted;
     }
-    
+
     # Push-to-Talk: Button down handler
     def handleTalkButtonDown() -> None {
         if sessionStatus != "CONNECTED" {
             return;
         }
-        setIsPTTUserSpeaking(True);
-        
+        isPTTUserSpeaking = True;
+
         if sessionRef.current {
             try {
                 sessionRef.current.interrupt();
@@ -33,20 +33,29 @@ def:pub useAudioControls(sessionRef: any, sessionStatus: str) -> any {
             }
         }
     }
-    
+
     # Push-to-Talk: Button up handler
     def handleTalkButtonUp() -> None {
         if sessionStatus != "CONNECTED" or not isPTTUserSpeaking {
             return;
         }
-        setIsPTTUserSpeaking(False);
+        isPTTUserSpeaking = False;
     }
-    
+
     # Reset PTT state (called on disconnect)
     def resetPTTState() -> None {
-        setIsPTTUserSpeaking(False);
+        isPTTUserSpeaking = False;
     }
-    
+
+    # Setter wrapper functions for parent components
+    def updatePTTActive(value: bool) -> None {
+        isPTTActive = value;
+    }
+
+    def updateAudioPlaybackEnabled(value: bool) -> None {
+        isAudioPlaybackEnabled = value;
+    }
+
     # Create audio element on mount
     useEffect(
         lambda -> None {
@@ -87,15 +96,15 @@ def:pub useAudioControls(sessionRef: any, sessionStatus: str) -> any {
     return {
         # State
         "isPTTActive": isPTTActive,
-        "setIsPTTActive": setIsPTTActive,
+        "setIsPTTActive": updatePTTActive,
         "isPTTUserSpeaking": isPTTUserSpeaking,
         "isAudioPlaybackEnabled": isAudioPlaybackEnabled,
-        "setIsAudioPlaybackEnabled": setIsAudioPlaybackEnabled,
+        "setIsAudioPlaybackEnabled": updateAudioPlaybackEnabled,
         "isMicMuted": isMicMuted,
-        
+
         # Refs
         "audioElementRef": audioElementRef,
-        
+
         # Handlers
         "toggleMicMute": toggleMicMute,
         "handleTalkButtonDown": handleTalkButtonDown,
