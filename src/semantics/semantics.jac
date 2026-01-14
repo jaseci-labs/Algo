@@ -152,9 +152,17 @@ def extract_task_sequence(
 sem extract_task_sequence = """
 Extract ALL task relationships with CORRECT sequencing and attachment points:
 
+⚠️ CRITICAL: last_task may contain MULTIPLE tasks separated by "|" (e.g., "GoToGym|GoForRun").
+This indicates divergent branches (leaf nodes) that should CONVERGE to the next task unless explicitly stated otherwise.
+
+⚠️ DUPLICATE HANDLING: The system prevents duplicate edges (same task from same parent).
+If user repeats the same instruction, the LLM can return the same relationship - the system will skip it automatically.
+
 1. IDENTIFY ALL TASKS mentioned (new and existing)
    - Check if task name exists in existing_nodes list
    - Match existing names EXACTLY (case-sensitive)
+   - IMPORTANT: Same task can appear multiple times in different parts of the graph
+   - Example: "CheckMessages" at 9am and "CheckMessages" again at 3pm = TWO separate nodes
 
 2. DETERMINE SEQUENCING from keywords:
    - "X then Y": X→Y (sequence_order: 1,2)
@@ -163,25 +171,32 @@ Extract ALL task relationships with CORRECT sequencing and attachment points:
    - "X and Y": Parallel from same point
    - "if C, X otherwise Y": Conditional branches
 
-3. ANALYZE GRAPH STRUCTURE (use current_edges):
+3. HANDLE CONVERGENCE (when last_task contains "|"):
+   - Split last_task by "|" to get all leaf nodes: ["TaskA", "TaskB", "TaskC"]
+   - When user says "then X", "afterwards X", or just adds "X" WITHOUT naming a specific task:
+     → Create edges from ALL leaf nodes to X
+     → Example: last_task="GoToGym|GoForRun", message="then protein shake"
+     → Result: [GoToGym→ProteinShake (1), GoForRun→ProteinShake (2)]
+   - If user explicitly names a task: "after GoToGym, do X"
+     → Create edge ONLY from GoToGym to X: [GoToGym→X]
+   - Default behavior for ambiguous statements: CONVERGE from all leaf nodes
+
+4. ANALYZE GRAPH STRUCTURE (use current_edges):
    - Identify recent conditional branches (edges with "if", "otherwise" labels)
    - Find sibling branches (multiple nodes with edges from same parent)
    - Detect convergence opportunities
 
-4. CONNECTION TYPES:
+5. CONNECTION TYPES:
    - SEQUENTIAL: Linear chain with "then"/"after"
    - PARALLEL: Same source, different branches (and/also)
    - CONDITIONAL: Branches with if/otherwise labels
    - CONVERGENT: Multiple sources→one target
-     * AUTOMATIC DETECTION: When message says "afterwards", "then", or adds task after last_task:
-       1. Check if last_task has siblings (other nodes from same parent in current_edges)
-       2. If siblings exist with conditional labels ("if", "otherwise"), assume convergence
-       3. Create edges from ALL sibling branches to new task
      * EXPLICIT: "either way", "regardless", "in both cases"
-     * Example: last_task=GoToOffice, sibling=WorkFromHome (both from Breakfast)
-     * Message: "then have lunch" → WorkFromHome→HaveLunch AND GoToOffice→HaveLunch
+     * IMPLICIT: When last_task contains "|" and user adds next task without specifying
+     * Example: last_task="GoToGym|GoForRun", message="then shower"
+     * Result: [GoToGym→Shower (1), GoForRun→Shower (2)]
 
-4. CRITICAL ATTACHMENT RULES:
+6. CRITICAL ATTACHMENT RULES:
    
    A. For FIRST MESSAGE (existing_nodes only has "Start"):
       - First task connects from "Start"
