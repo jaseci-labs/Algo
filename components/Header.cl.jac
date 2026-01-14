@@ -1,14 +1,16 @@
 # Header Component
 # Application header with title and username display
 
-import from react { useState, useEffect }
+import from react { useEffect }
 import from "@jac-client/utils" { jacLogout, useNavigate }
 import from ..utils.mergeCls { cn }
 
 def:pub Header() -> any {
     navigate = useNavigate();
-    [username, setUsername] = useState("User");
-    
+
+    # Reactive state using has variables
+    has username: str = "User";
+
     # Extract username from JWT token on mount
     useEffect(
         lambda -> None {
@@ -19,7 +21,7 @@ def:pub Header() -> any {
                     if parts.length > 1 {
                         payload = JSON.parse(atob(parts[1]));
                         if payload.username {
-                            setUsername(payload.username);
+                            username = payload.username;
                         }
                     }
                 } except Exception as decode_error {
