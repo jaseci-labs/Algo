@@ -219,12 +219,20 @@ impl get_task_graph.get_graph {
 
     # Generate styled DOT code
     dot_code = generate_dot_code_from_lists(node_list, edge_list);
+    
+    # Find all leaf nodes (tasks with no outgoing edges)
+    leaf_nodes = find_leaf_nodes(edge_list, node_list);
+    # Use the stored last_task as fallback, or first leaf node
+    last_task_to_report = here.last_task;
+    if len(leaf_nodes) > 0 {
+        last_task_to_report = leaf_nodes[0] if len(leaf_nodes) == 1 else "|".join(leaf_nodes);
+    }
 
     report {
         "nodes": node_list,
         "edges": edge_list,
         "dotCode": dot_code,
-        "lastTask": here.last_task
+        "lastTask": last_task_to_report
     };
 }
 
@@ -521,6 +529,7 @@ impl call_supervisor.call {
         current_nodes = [];
         current_edges = [];
         last_task = "Start";
+        leaf_nodes = [];  # Track all leaf nodes for convergence detection
 
         # Find user-specific graph data
         all_graphs = [-->](`?user_graph_data);
@@ -547,6 +556,14 @@ impl call_supervisor.call {
                     result = parse_printgraph_output(dot_output);
                     current_nodes = result[0];
                     current_edges = result[1];
+                    # Find all leaf nodes for convergence detection
+                    leaf_nodes = find_leaf_nodes(current_edges, current_nodes);
+                    # If there are multiple leaf nodes, use them for last_task
+                    if len(leaf_nodes) > 1 {
+                        last_task = "|".join(leaf_nodes);
+                    } elif len(leaf_nodes) == 1 {
+                        last_task = leaf_nodes[0];
+                    }
                 } else {
                     # No Start node found, empty graph
                     current_nodes = ["Start"];
@@ -877,4 +894,31 @@ def generate_dot_code_from_lists(node_list: list, edge_list: list) -> str {
 
     lines.append("}");
     return "\n".join(lines);
+}
+
+# Helper function to find all leaf nodes (nodes with no outgoing edges)
+def find_leaf_nodes(edge_list: list, node_list: list) -> list {
+    # Find all nodes that have outgoing edges
+    nodes_with_outgoing = {};
+    for edge in edge_list {
+        from_task = edge.get("from", "");
+        if from_task {
+            nodes_with_outgoing[from_task] = True;
+        }
+    }
+    
+    # Leaf nodes are those without outgoing edges (excluding Start)
+    leaf_nodes = [];
+    for node in node_list {
+        if node != "Start" and node not in nodes_with_outgoing {
+            leaf_nodes.append(node);
+        }
+    }
+    
+    # If no leaf nodes found, return the last node (shouldn't happen in practice)
+    if len(leaf_nodes) == 0 and len(node_list) > 1 {
+        return [node_list[-1]];
+    }
+    
+    return leaf_nodes;
 }
