@@ -9,41 +9,48 @@ def:pub useTranscript() -> any {
     def addMessage(role: str, content: str) -> None {
         itemId = "msg-" + String(Date.now());
         newItem = {"itemId": itemId, "role": role, "content": content, "timestamp": Date.now()};
-        transcript = transcript.concat([newItem]);
+        transcript = lambda prev: any -> any { return prev.concat([newItem]); };
     }
 
     # Add a transcript item by itemId (for realtime messages)
     def addTranscriptItem(itemId: str, role: str, content: str) -> None {
         newItem = {"itemId": itemId, "role": role, "content": content, "timestamp": Date.now()};
-        exists = transcript.some(lambda item: any -> bool { return item.itemId == itemId; });
-        if not exists {
-            transcript = transcript.concat([newItem]);
-        }
+        transcript = lambda prev: any -> any {
+            exists = prev.some(lambda item: any -> bool { return item.itemId == itemId; });
+            if exists {
+                return prev;
+            }
+            return prev.concat([newItem]);
+        };
     }
 
     # Update a transcript item by itemId
     def updateTranscriptItem(itemId: str, content: str) -> None {
-        transcript = transcript.map(lambda item: any -> any {
-            if item.itemId == itemId {
-                return {"itemId": item.itemId, "role": item.role, "content": content, "timestamp": item.timestamp};
-            }
-            return item;
-        });
+        transcript = lambda prev: any -> any {
+            return prev.map(lambda item: any -> any {
+                if item.itemId == itemId {
+                    return {"itemId": item.itemId, "role": item.role, "content": content, "timestamp": item.timestamp};
+                }
+                return item;
+            });
+        };
     }
 
     # Append text to a transcript item by itemId (for streaming)
     def appendTranscriptItem(itemId: str, deltaText: str) -> None {
-        transcript = transcript.map(lambda item: any -> any {
-            if item.itemId == itemId {
-                currentContent = item.content or "";
-                newContent = currentContent + deltaText;
-                if currentContent == "..." or currentContent == "" {
-                    newContent = deltaText;
+        transcript = lambda prev: any -> any {
+            return prev.map(lambda item: any -> any {
+                if item.itemId == itemId {
+                    currentContent = item.content or "";
+                    newContent = currentContent + deltaText;
+                    if currentContent == "..." or currentContent == "" {
+                        newContent = deltaText;
+                    }
+                    return {"itemId": item.itemId, "role": item.role, "content": newContent, "timestamp": item.timestamp};
                 }
-                return {"itemId": item.itemId, "role": item.role, "content": newContent, "timestamp": item.timestamp};
-            }
-            return item;
-        });
+                return item;
+            });
+        };
     }
 
     # Clear transcript
