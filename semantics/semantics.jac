@@ -18,7 +18,7 @@ sem EmotionalState.reasoning = "Brief explanation of why this state was detected
 """Detect the user's emotional state from their message and conversation context"""
 def detect_emotional_state(
     user_message: str,
-    conversation_history: list[dict]
+    conversation_history: list[dict[str, str]]
 ) -> EmotionalState by llm();
 
 sem detect_emotional_state = """
@@ -84,7 +84,7 @@ sem IntentAnalysis.confidence = "Confidence 0.0-1.0 in the intent classification
 """Analyze conversation intent and determine if user is committing, correcting, or clarifying"""
 def analyze_conversation_intent(
     user_message: str,
-    conversation_history: list[dict],
+    conversation_history: list[dict[str, str]],
     existing_nodes: list[str],
     last_task: str
 ) -> IntentAnalysis by llm();
@@ -97,16 +97,29 @@ Default to COMMIT_ACTION when user mentions tasks/actions.
 Check last 2-3 conversation turns for context.
 """;
 
+"""Maps raw task name to unique task name with count"""
+obj TaskNameMapping {
+    has raw: str;
+    has unique: str;
+    has count: int;
+}
+
+sem TaskNameMapping.raw = "Base task name extracted from message";
+sem TaskNameMapping.unique = "Unique task name with number appended if duplicate";
+sem TaskNameMapping.count = "How many times this raw name appeared in existing_nodes";
+
 """Extracted task names from user message"""
 obj ExtractedTasks {
     has raw_names: list[str];
     has unique_names: list[str];
-    has name_mappings: list[dict];
+    has name_mappings: list[TaskNameMapping];
+    has duplicate_counts: list[int];
 }
 
-sem ExtractedTasks.raw_names = "Task names extracted from user message in CamelCase";
-sem ExtractedTasks.unique_names = "Unique task names with number suffixes if duplicates exist";
-sem ExtractedTasks.name_mappings = "List of {raw: str, unique: str} mappings";
+sem ExtractedTasks.raw_names = "Base task names in CamelCase extracted from message (e.g., CheckEmail, MakeCoffee)";
+sem ExtractedTasks.unique_names = "NEW unique task names to create. For each raw name, count occurrences in existing_nodes and append number. Formula: if count>0 then raw_name+str(count+1) else raw_name. Example: CheckEmail appears 2 times in existing_nodes → unique name is CheckEmail3";
+sem ExtractedTasks.name_mappings = "List of {raw: str, unique: str, count: int} showing transformation for each task";
+sem ExtractedTasks.duplicate_counts = "For each raw_name, how many times it appears in existing_nodes. Used to calculate unique_names";
 
 """Extract raw task names from user message in CamelCase format"""
 def extract_raw_task_names(
@@ -116,16 +129,8 @@ def extract_raw_task_names(
 ) -> ExtractedTasks by llm();
 
 sem extract_raw_task_names = """
-Extract all task mentions from user message, convert to CamelCase, and ensure uniqueness.
-
-1. Extract tasks: "make coffee" → "MakeCoffee"
-2. Check each against existing_nodes for duplicates
-3. If duplicate exists, append number suffix (Coffee → Coffee2 → Coffee3)
-4. Return both raw_names and unique_names
-
-Examples:
-- "make coffee", existing=[] → raw_names=["MakeCoffee"], unique_names=["MakeCoffee"]
-- "check emails", existing=["CheckEmails"] → raw_names=["CheckEmails"], unique_names=["CheckEmails2"]
+Extract task names and generate unique names using the counting formula defined in ExtractedTasks semantics.
+Populate all fields including duplicate_counts to show the calculation.
 """;
 
 """Determine where new tasks should attach in the graph"""
@@ -176,7 +181,7 @@ sem ConvergenceIntent.trigger_phrase = "The phrase that triggered convergence de
 def detect_convergence_intent(
     user_message: str,
     last_task: str,
-    current_edges: list[dict]
+    current_edges: list[dict[str, str]]
 ) -> ConvergenceIntent by llm();
 
 sem detect_convergence_intent = """
@@ -214,7 +219,7 @@ obj TaskRelationship {
     has sequence_order: int;
 }
 
-sem TaskRelationship.connection_type = "SEQUENTIAL: then/after | PARALLEL: and/also | CONDITIONAL: if/otherwise | CONVERGENT: merge point";
+sem TaskRelationship.connection_type = "SEQUENTIAL: then/after | PARALLEL: and/also/while/same time | CONDITIONAL: if/otherwise | CONVERGENT: merge point";
 sem TaskRelationship.from_task = "Task name in CamelCase (previous task in sequence)";
 sem TaskRelationship.to_task = "Next task name in CamelCase (e.g., MakeCoffee, BrushTeeth)";
 sem TaskRelationship.edge_label = "Edge label: 'then', 'if raining', 'otherwise', etc.";
@@ -223,7 +228,7 @@ sem TaskRelationship.sequence_order = "Sequence number (1, 2, 3...) to preserve 
 """Build task relationships using pre-analyzed context"""
 def build_task_relationships(
     user_message: str,
-    unique_task_names: list[str],
+    extracted_tasks: ExtractedTasks,
     attachment_analysis: AttachmentPointAnalysis,
     convergence_intent: ConvergenceIntent,
     conversation_context: ConversationContext
@@ -232,31 +237,17 @@ def build_task_relationships(
 sem build_task_relationships = """
 Build TaskRelationship list using pre-analyzed inputs.
 
+CRITICAL: Use extracted_tasks.unique_names for ALL to_task values.
+- to_task MUST come from extracted_tasks.unique_names (these are NEW nodes being created)
+- from_task MUST come from attachment_analysis.attachment_nodes
+- Check extracted_tasks.name_mappings to see raw→unique transformation
+- Check extracted_tasks.duplicate_counts to understand why names were modified
+
 If needs_graph_rebuild=True: Reconstruct FULL graph with ALL existing nodes
-If needs_graph_rebuild=False: Use attachment_nodes as from_task(s), create edges to unique_task_names
+If needs_graph_rebuild=False: Create edges from attachment_nodes to extracted_tasks.unique_names
 
-If convergence_intent.should_converge: Create edges from ALL source_nodes to target
+If convergence_intent.should_converge: Create edges from ALL source_nodes to first unique task
 Number relationships sequentially (1, 2, 3...) in execution order.
-""";
-
-"""Extract complete task sequence using decomposed semantic functions"""
-def extract_task_sequence(
-    user_message: str,
-    conversation_context: ConversationContext,
-    existing_nodes: list[str],
-    last_task: str,
-    current_edges: list[dict]
-) -> list[TaskRelationship] by llm();
-
-sem extract_task_sequence = """
-Orchestrate task extraction by calling specialized sub-functions in sequence:
-
-1. extract_raw_task_names() - Get task names and ensure uniqueness
-2. determine_attachment_points() - Find where to connect
-3. detect_convergence_intent() - Check for parallel branch merging
-4. build_task_relationships() - Create final relationships
-
-Pass results from each step to the next. Return the TaskRelationship list from step 4.
 """;
 
 """Generate 2 contextual suggestions for what the user might do next"""

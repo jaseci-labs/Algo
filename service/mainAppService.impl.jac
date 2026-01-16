@@ -596,18 +596,44 @@ impl call_supervisor.call {
         # Step 3: Extract task sequence if creating tasks
         relationships = [];
         if intent_analysis.should_create_tasks {
-            relationships = extract_task_sequence(
+            # Orchestrate the task extraction using decomposed functions
+            
+            # 3.1: Extract raw task names and generate unique names
+            extracted_tasks = extract_raw_task_names(
                 user_message=self.context_from_user,
                 conversation_context=intent_analysis.conversation_context,
+                existing_nodes=current_nodes
+            );
+            
+            # 3.2: Determine where tasks should attach
+            attachment_analysis = determine_attachment_points(
+                user_message=self.context_from_user,
+                last_task=last_task,
                 existing_nodes=current_nodes,
+                conversation_context=intent_analysis.conversation_context
+            );
+            
+            # 3.3: Detect convergence intent
+            convergence_intent = detect_convergence_intent(
+                user_message=self.context_from_user,
                 last_task=last_task,
                 current_edges=current_edges
+            );
+            
+            # 3.4: Build relationships using all analyzed data
+            relationships = build_task_relationships(
+                user_message=self.context_from_user,
+                extracted_tasks=extracted_tasks,
+                attachment_analysis=attachment_analysis,
+                convergence_intent=convergence_intent,
+                conversation_context=intent_analysis.conversation_context
             );
             
             # DEBUG: Print what LLM returned
             print(f"DEBUG - User message: {self.context_from_user}");
             print(f"DEBUG - Last task: {last_task}");
             print(f"DEBUG - Existing nodes: {current_nodes}");
+            print(f"DEBUG - Extracted tasks: raw={extracted_tasks.raw_names}, unique={extracted_tasks.unique_names}, counts={extracted_tasks.duplicate_counts}");
             print(f"DEBUG - LLM returned {len(relationships)} relationships:");
             for rel in relationships {
                 print(f"  - {rel.from_task} → {rel.to_task} (label: {rel.edge_label}, order: {rel.sequence_order})");
