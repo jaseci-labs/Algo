@@ -111,50 +111,24 @@ sem ExtractedTasks.name_mappings = "List of {raw: str, unique: str} mappings";
 """Extract raw task names from user message in CamelCase format"""
 def extract_raw_task_names(
     user_message: str,
-    conversation_context: ConversationContext
+    conversation_context: ConversationContext,
+    existing_nodes: list[str]
 ) -> ExtractedTasks by llm();
 
 sem extract_raw_task_names = """
-Extract all task mentions from user message and convert to CamelCase.
-- "make coffee" → "MakeCoffee"
-- "check emails" → "CheckEmails"
-- "have breakfast then brush teeth" → ["HaveBreakfast", "BrushTeeth"]
-""";
+Extract all task mentions from user message, convert to CamelCase, and ensure uniqueness.
 
-"""Strategy for generating unique task names"""
-obj TaskNamingStrategy {
-    has base_name: str;
-    has unique_name: str;
-    has counter: int;
-    has already_exists: bool;
-}
-
-sem TaskNamingStrategy.base_name = "Original task name extracted from user message";
-sem TaskNamingStrategy.unique_name = "Final unique name with number suffix if needed";
-sem TaskNamingStrategy.counter = "Number suffix used (0 if no suffix needed)";
-sem TaskNamingStrategy.already_exists = "Whether base_name already existed in graph";
-
-"""Generate unique task name by checking existing nodes and appending number suffix"""
-def generate_unique_task_name(
-    desired_name: str,
-    existing_nodes: list[str]
-) -> TaskNamingStrategy by llm();
-
-sem generate_unique_task_name = """
-Given a desired task name and existing nodes, generate a unique name.
-
-Rules:
-- Count occurrences of desired_name in existing_nodes
-- If name doesn't exist: return as-is (counter=0)
-- If exists once: append "2" (counter=2)
-- If "Name2" exists: append "3" (counter=3), etc.
+1. Extract tasks: "make coffee" → "MakeCoffee"
+2. Check each against existing_nodes for duplicates
+3. If duplicate exists, append number suffix (Coffee → Coffee2 → Coffee3)
+4. Return both raw_names and unique_names
 
 Examples:
-- desired="Coffee", existing=["Start","Lunch"] → unique="Coffee", counter=0
-- desired="Coffee", existing=["Coffee","Lunch"] → unique="Coffee2", counter=2
+- "make coffee", existing=[] → raw_names=["MakeCoffee"], unique_names=["MakeCoffee"]
+- "check emails", existing=["CheckEmails"] → raw_names=["CheckEmails"], unique_names=["CheckEmails2"]
 """;
 
-"""Analysis of where new tasks should attach in the graph"""
+"""Determine where new tasks should attach in the graph"""
 obj AttachmentPointAnalysis {
     has attachment_nodes: list[str];
     has is_convergent: bool;
@@ -277,14 +251,12 @@ def extract_task_sequence(
 sem extract_task_sequence = """
 Orchestrate task extraction by calling specialized sub-functions in sequence:
 
-1. extract_raw_task_names() - Get task names from message
-2. generate_unique_task_name() - Ensure no duplicates (for each task)
-3. determine_attachment_points() - Find where to connect
-4. detect_convergence_intent() - Check for parallel branch merging
-5. build_task_relationships() - Create final relationships
+1. extract_raw_task_names() - Get task names and ensure uniqueness
+2. determine_attachment_points() - Find where to connect
+3. detect_convergence_intent() - Check for parallel branch merging
+4. build_task_relationships() - Create final relationships
 
-Pass results from each step to the next. All complexity is handled by sub-functions.
-Return the TaskRelationship list from step 5.
+Pass results from each step to the next. Return the TaskRelationship list from step 4.
 """;
 
 """Generate 2 contextual suggestions for what the user might do next"""
