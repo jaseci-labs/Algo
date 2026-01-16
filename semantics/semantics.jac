@@ -15,6 +15,39 @@ sem EmotionalState.state = "User's current emotional state: stressed, excited, i
 sem EmotionalState.confidence = "Confidence score between 0.0 and 1.0";
 sem EmotionalState.reasoning = "Brief explanation of why this state was detected";
 
+"""Detect the user's emotional state from their message and conversation context"""
+def detect_emotional_state(
+    user_message: str,
+    conversation_history: list[dict[str, str]]
+) -> EmotionalState by llm();
+
+sem detect_emotional_state = """
+Detect emotional state from message:
+- stressed: frustration, overwhelm
+- excited: enthusiasm, accomplishments  
+- indecisive: uncertainty, questions
+- fatigued: tired, exhausted
+- neutral: normal tone
+
+Confidence 0.0-1.0.
+""";
+
+"""Generate a natural, conversational response matching user's emotional state"""
+def generate_friendly_response(
+    user_message: str,
+    emotional_state: EmotionalState,
+    action_taken: str,
+    task_names: list[str]
+) -> str by llm();
+
+sem generate_friendly_response = """
+Generate warm, natural response as Algo:
+
+Match emotional_state tone (stressed→supportive, excited→enthusiastic, etc.)
+Acknowledge action naturally ("Got it!" not "Task added")
+Brief 1-3 sentences, use contractions, no tech jargon.
+""";
+
 """Conversation intent classification"""
 enum ConversationIntent {
     COMMIT_ACTION,
@@ -37,6 +70,138 @@ sem ConversationContext.referring_to_task = "Which existing task is user referri
 sem ConversationContext.correction_type = "For CORRECT_PREVIOUS: 'insert_before', 'reorder', 'replace' | For CLARIFY_PREVIOUS: 'attachment_point', 'sequence_order' | Empty otherwise";
 sem ConversationContext.needs_graph_rebuild = "TRUE for CORRECT_PREVIOUS or CLARIFY_PREVIOUS with existing tasks, FALSE for COMMIT_ACTION on empty/simple graphs";
 
+"""Intent and commitment analysis result"""
+obj IntentAnalysis {
+    has should_create_tasks: bool;
+    has conversation_context: ConversationContext;
+    has confidence: float;
+}
+
+sem IntentAnalysis.should_create_tasks = "TRUE only if user committed to action, FALSE for questions/thinking/uncertain";
+sem IntentAnalysis.conversation_context = "Context about what user is doing: correcting, clarifying, committing new";
+sem IntentAnalysis.confidence = "Confidence 0.0-1.0 in the intent classification";
+
+"""Analyze conversation intent and determine if user is committing, correcting, or clarifying"""
+def analyze_conversation_intent(
+    user_message: str,
+    conversation_history: list[dict[str, str]],
+    existing_nodes: list[str],
+    last_task: str
+) -> IntentAnalysis by llm();
+
+sem analyze_conversation_intent = """
+Analyze user's message and recent conversation history to classify their intent.
+Populate IntentAnalysis with appropriate values based on semantic definitions.
+
+Default to COMMIT_ACTION when user mentions tasks/actions.
+Check last 2-3 conversation turns for context.
+""";
+
+"""Maps raw task name to unique task name with count"""
+obj TaskNameMapping {
+    has raw: str;
+    has unique: str;
+    has count: int;
+}
+
+sem TaskNameMapping.raw = "Base task name extracted from message";
+sem TaskNameMapping.unique = "Unique task name with number appended if duplicate";
+sem TaskNameMapping.count = "How many times this raw name appeared in existing_nodes";
+
+"""Extracted task names from user message"""
+obj ExtractedTasks {
+    has raw_names: list[str];
+    has unique_names: list[str];
+    has name_mappings: list[TaskNameMapping];
+    has duplicate_counts: list[int];
+}
+
+sem ExtractedTasks.raw_names = "Base task names in CamelCase extracted from message (e.g., CheckEmail, MakeCoffee)";
+sem ExtractedTasks.unique_names = "NEW unique task names to create. For each raw name, count occurrences in existing_nodes and append number. Formula: if count>0 then raw_name+str(count+1) else raw_name. Example: CheckEmail appears 2 times in existing_nodes → unique name is CheckEmail3";
+sem ExtractedTasks.name_mappings = "List of {raw: str, unique: str, count: int} showing transformation for each task";
+sem ExtractedTasks.duplicate_counts = "For each raw_name, how many times it appears in existing_nodes. Used to calculate unique_names";
+
+"""Extract raw task names from user message in CamelCase format"""
+def extract_raw_task_names(
+    user_message: str,
+    conversation_context: ConversationContext,
+    existing_nodes: list[str]
+) -> ExtractedTasks by llm();
+
+sem extract_raw_task_names = """
+Extract task names and generate unique names using the counting formula defined in ExtractedTasks semantics.
+Populate all fields including duplicate_counts to show the calculation.
+""";
+
+"""Determine where new tasks should attach in the graph"""
+obj AttachmentPointAnalysis {
+    has attachment_nodes: list[str];
+    has is_convergent: bool;
+    has reasoning: str;
+    has user_specified: bool;
+}
+
+sem AttachmentPointAnalysis.attachment_nodes = "List of node(s) to attach from. Usually [last_task] or multiple for convergence";
+sem AttachmentPointAnalysis.is_convergent = "TRUE if attaching from multiple nodes (convergent edge)";
+sem AttachmentPointAnalysis.reasoning = "Explanation of why these attachment points were chosen";
+sem AttachmentPointAnalysis.user_specified = "TRUE if user explicitly named a task (e.g., 'after X'), FALSE if using default last_task";
+
+"""Determine where new tasks should attach in the graph"""
+def determine_attachment_points(
+    user_message: str,
+    last_task: str,
+    existing_nodes: list[str],
+    conversation_context: ConversationContext
+) -> AttachmentPointAnalysis by llm();
+
+sem determine_attachment_points = """
+Analyze where new tasks should connect in the graph.
+
+If conversation_context.needs_graph_rebuild = True:
+   - Return empty attachment_nodes (will rebuild full graph)
+   - reasoning explains the correction/clarification
+
+Always provide clear reasoning for transparency.
+""";
+
+"""Detection of convergence patterns in user intent"""
+obj ConvergenceIntent {
+    has should_converge: bool;
+    has source_nodes: list[str];
+    has convergence_type: str;
+    has trigger_phrase: str;
+}
+
+sem ConvergenceIntent.should_converge = "TRUE if user intends parallel branches to merge";
+sem ConvergenceIntent.source_nodes = "List of nodes to converge from (leaf nodes)";
+sem ConvergenceIntent.convergence_type = "explicit (keywords like 'either way') | implicit (last_task has '|' and no specific task named) | none (no convergence)";
+sem ConvergenceIntent.trigger_phrase = "The phrase that triggered convergence detection";
+
+"""Detect if user intends to converge parallel branches"""
+def detect_convergence_intent(
+    user_message: str,
+    last_task: str,
+    current_edges: list[dict[str, str]]
+) -> ConvergenceIntent by llm();
+
+sem detect_convergence_intent = """
+Detect convergence patterns from user message.
+
+Types:
+1. EXPLICIT convergence (should_converge=True):
+   - Keywords: "either way", "regardless", "in both cases", "afterwards" (after branches)
+
+2. IMPLICIT convergence (should_converge=True):
+   - last_task contains "|" (e.g., "GoToGym|GoForRun")
+   - User adds task WITHOUT naming specific source
+
+3. NO convergence (should_converge=False):
+   - User names specific task: "after GoToGym"
+   - Linear flow: normal "then X" when last_task is single
+
+Extract source_nodes by splitting last_task by "|" if convergence detected.
+""";
+
 """Represents a task connection type in the graph"""
 enum ConnectionType {
     SEQUENTIAL,
@@ -54,245 +219,48 @@ obj TaskRelationship {
     has sequence_order: int;
 }
 
-sem TaskRelationship.connection_type = "SEQUENTIAL: then/after | PARALLEL: and/also | CONDITIONAL: if/otherwise | CONVERGENT: merge point";
-sem TaskRelationship.from_task = "Exact task name from existing_nodes OR new task name in CamelCase";
+sem TaskRelationship.connection_type = "SEQUENTIAL: then/after | PARALLEL: and/also/while/same time | CONDITIONAL: if/otherwise | CONVERGENT: merge point";
+sem TaskRelationship.from_task = "Task name in CamelCase (previous task in sequence)";
 sem TaskRelationship.to_task = "Next task name in CamelCase (e.g., MakeCoffee, BrushTeeth)";
 sem TaskRelationship.edge_label = "Edge label: 'then', 'if raining', 'otherwise', etc.";
 sem TaskRelationship.sequence_order = "Sequence number (1, 2, 3...) to preserve order when multiple relationships";
 
-"""Intent and commitment analysis result"""
-obj IntentAnalysis {
-    has should_create_tasks: bool;
-    has conversation_context: ConversationContext;
-    has confidence: float;
-}
-
-sem IntentAnalysis.should_create_tasks = "TRUE only if user committed to action, FALSE for questions/thinking/uncertain";
-sem IntentAnalysis.conversation_context = "Context about what user is doing: correcting, clarifying, committing new";
-sem IntentAnalysis.confidence = "Confidence 0.0-1.0 in the intent classification";
-
-"""Detect the user's emotional state from their message and conversation context"""
-def detect_emotional_state(
+"""Build task relationships using pre-analyzed context"""
+def build_task_relationships(
     user_message: str,
-    conversation_history: list[dict]
-) -> EmotionalState by llm();
-
-sem detect_emotional_state = """
-Detect emotional state from message:
-- stressed: frustration, overwhelm
-- excited: enthusiasm, accomplishments  
-- indecisive: uncertainty, questions
-- fatigued: tired, exhausted
-- neutral: normal tone
-
-Confidence 0.0-1.0.
-""";
-
-"""Analyze conversation intent and determine if user is committing, correcting, or clarifying"""
-def analyze_conversation_intent(
-    user_message: str,
-    conversation_history: list[dict],
-    existing_nodes: list[str],
-    last_task: str
-) -> IntentAnalysis by llm();
-
-sem analyze_conversation_intent = """
-Classify user's intent by analyzing RECENT conversation context:
-
-COMMIT_ACTION: Definite statements about tasks/actions
-- Patterns: "I'll X", "I'm going to X", "I need to X", "then X", "X afterwards"
-- Conditionals: "if X then Y", "either way Z"
-- Simple statements: "make coffee", "brush teeth", "have lunch"
-- should_create_tasks: TRUE ✓
-- needs_graph_rebuild: FALSE (unless correcting)
-
-CORRECT_PREVIOUS: Corrections/reorganizations
-- Keywords: "actually", "before", "first", "instead", "wait"
-- Patterns: "I need to X before Y" when Y exists
-- should_create_tasks: TRUE ✓
-- needs_graph_rebuild: TRUE ✓
-- referring_to_task: what they're correcting
-- correction_type: "insert_before" | "reorder" | "replace"
-
-CLARIFY_PREVIOUS: Clarifications after assistant response
-- Keywords: "no i meant", "I meant Y not Z"
-- Patterns: "after X" (when clarifying attachment)
-- should_create_tasks: TRUE ✓ (if adding tasks)
-- needs_graph_rebuild: TRUE ✓ (if existing tasks involved)
-- referring_to_task: what they're clarifying about
-- correction_type: "attachment_point" | "sequence_order"
-
-ASK_QUESTION: Questions about what to do
-- Patterns: "Should I?", "Is it better?", "Would you?", "What do you think?"
-- Seeking advice, not committing to action
-- should_create_tasks: FALSE ✗
-
-THINK_ALOUD: Thinking/uncertain/considering options
-- Keywords: "maybe", "I might", "wondering if", "possibly"
-- Uncertain, not committing
-- should_create_tasks: FALSE ✗
-
-CRITICAL RULES:
-1. DEFAULT to COMMIT_ACTION if message mentions any task/action
-2. Only use ASK_QUESTION if it's clearly a question (ends with ?)
-3. Only use THINK_ALOUD if there's clear uncertainty ("maybe", "might")
-4. When in doubt between COMMIT and others → choose COMMIT
-5. Check last 2-3 conversation turns for context
-""";
-
-"""Extract complete task sequence from user message with correct ordering"""
-def extract_task_sequence(
-    user_message: str,
-    conversation_context: ConversationContext,
-    existing_nodes: list[str],
-    last_task: str,
-    current_edges: list[dict]
+    extracted_tasks: ExtractedTasks,
+    attachment_analysis: AttachmentPointAnalysis,
+    convergence_intent: ConvergenceIntent,
+    conversation_context: ConversationContext
 ) -> list[TaskRelationship] by llm();
 
-sem extract_task_sequence = """
-Extract ALL task relationships with CORRECT sequencing and attachment points:
+sem build_task_relationships = """
+Build TaskRelationship list using pre-analyzed inputs.
 
-⚠️ CRITICAL: last_task may contain MULTIPLE tasks separated by "|" (e.g., "GoToGym|GoForRun").
-This indicates divergent branches (leaf nodes) that should CONVERGE to the next task unless explicitly stated otherwise.
+CRITICAL CONNECTION TYPE DETECTION:
+Analyze user_message for parallel keywords:
+- PARALLEL: "while", "as", "during", "at the same time", "simultaneously", "and" (when tasks happen together)
+    - Create N relationships, ALL with SAME from_task (attachment_nodes[0])
+    - ALL relationships use connection_type = PARALLEL
+    - Each relationship goes to a different unique task
+    - sequence_order: 1, 2, 3... for each parallel branch
+  
+- SEQUENTIAL: "then", "after", "next", "before", "first" (tasks happen one after another)
+    - Create N relationships chained together
+    - First: from attachment_nodes[0] to unique_names[0]
+    - Second: from unique_names[0] to unique_names[1]
+    - Continue chaining: each new task's from_task is the previous to_task
 
-⚠️ DUPLICATE HANDLING: The system prevents duplicate edges (same task from same parent).
-If user repeats the same instruction, the LLM can return the same relationship - the system will skip it automatically.
-
-1. IDENTIFY ALL TASKS mentioned (new and existing)
-   - Check if task name exists in existing_nodes list
-   - Match existing names EXACTLY (case-sensitive)
-   - IMPORTANT: Same task can appear multiple times in different parts of the graph
-   - Example: "CheckMessages" at 9am and "CheckMessages" again at 3pm = TWO separate nodes
-
-2. DETERMINE SEQUENCING from keywords:
-   - "X then Y": X→Y (sequence_order: 1,2)
-   - "X before Y": Create X→Y (Y might exist)
-   - "after X do Y": X→Y  
-   - "X and Y": Parallel from same point
-   - "if C, X otherwise Y": Conditional branches
-
-3. HANDLE CONVERGENCE (when last_task contains "|"):
-   - Split last_task by "|" to get all leaf nodes: ["TaskA", "TaskB", "TaskC"]
-   - When user says "then X", "afterwards X", or just adds "X" WITHOUT naming a specific task:
-     → Create edges from ALL leaf nodes to X
-     → Example: last_task="GoToGym|GoForRun", message="then protein shake"
-     → Result: [GoToGym→ProteinShake (1), GoForRun→ProteinShake (2)]
-   - If user explicitly names a task: "after GoToGym, do X"
-     → Create edge ONLY from GoToGym to X: [GoToGym→X]
-   - Default behavior for ambiguous statements: CONVERGE from all leaf nodes
-
-4. ANALYZE GRAPH STRUCTURE (use current_edges):
-   - Identify recent conditional branches (edges with "if", "otherwise" labels)
-   - Find sibling branches (multiple nodes with edges from same parent)
-   - Detect convergence opportunities
-
-5. CONNECTION TYPES:
-   - SEQUENTIAL: Linear chain with "then"/"after"
-   - PARALLEL: Same source, different branches (and/also)
-   - CONDITIONAL: Branches with if/otherwise labels
-   - CONVERGENT: Multiple sources→one target
-     * EXPLICIT: "either way", "regardless", "in both cases"
-     * IMPLICIT: When last_task contains "|" and user adds next task without specifying
-     * Example: last_task="GoToGym|GoForRun", message="then shower"
-     * Result: [GoToGym→Shower (1), GoForRun→Shower (2)]
-
-6. CRITICAL ATTACHMENT RULES:
-   
-   A. For FIRST MESSAGE (existing_nodes only has "Start"):
-      - First task connects from "Start"
-      - All other tasks chain sequentially
-   
-   B. For NORMAL ADDITIONS (conversation_context.needs_graph_rebuild = False):
-      - Use last_task as attachment point
-      - Example: last_task="BrushTeeth", message="then shower"
-      - Result: [BrushTeeth→Shower]
-   
-   C. For CORRECTIONS/CLARIFICATIONS (conversation_context.needs_graph_rebuild = True):
-      ⚠️ CRITICAL: Return COMPLETE graph structure with ALL tasks!
-      - Analyze the correction and reconstruct the FULL intended graph
-      - Include ALL existing nodes and their correct relationships
-      - Example: existing=[Start,Coffee,Breakfast], message="actually brush teeth before coffee"
-      - Result: [Start→BrushTeeth, BrushTeeth→Coffee, Coffee→Breakfast]
-      - NOT just: [Start→BrushTeeth, BrushTeeth→Coffee] ❌
-
-5. EXAMPLES:
-   
-   Example 1 - Normal addition:
-   - existing_nodes: ["Start", "Coffee", "Breakfast"]
-   - last_task: "Breakfast"
-   - message: "then clean dishes"
-   - needs_graph_rebuild: False
-   - Result: [Breakfast→CleanDishes]
-   
-   Example 2 - Correction (FULL GRAPH):
-   - existing_nodes: ["Start", "Coffee", "Breakfast", "Shower"]
-   - last_task: "Shower"
-   - message: "actually brush teeth before coffee"
-   - needs_graph_rebuild: True
-   - Result: [Start→BrushTeeth (1), BrushTeeth→Coffee (2), Coffee→Breakfast (3), Breakfast→Shower (4)]
-   - ⚠️ Must include ALL tasks in correct order!
-   
-   Example 3 - Clarification (FULL GRAPH):
-   - existing_nodes: ["Start", "Coffee", "Breakfast", "Shower"]
-   - message: "no i meant shower after coffee"
-   - needs_graph_rebuild: True
-   - Result: [Start→Coffee (1), Coffee→Shower (2), Shower→Breakfast (3)]
-   
-   Example 4 - Convergent (MULTIPLE SOURCES):
-   - existing_nodes: ["Start", "Breakfast", "WorkFromHome", "GoToOffice"]
-   - last_task: "GoToOffice"
-   - message: "either way i need to have lunch afterwards"
-   - needs_graph_rebuild: False
-   - Analysis: "either way" refers to BOTH branches (WorkFromHome and GoToOffice)
-   - Result: [WorkFromHome→HaveLunch (1), GoToOffice→HaveLunch (2)]
-   - ⚠️ Both branches converge to the same target!
-
-CRITICAL: 
-- When needs_graph_rebuild=True: Return COMPLETE graph with ALL existing nodes
-- Use existing_nodes names EXACTLY as provided
-- Return relationships in sequence_order
-- NEVER create edges from "Start" unless it's truly the first task
-- "either way"/"regardless"/"in both cases" → convergent edges from ALL recent branches
-""";
-
-"""Generate a natural, conversational response matching user's emotional state"""
-def generate_friendly_response(
-    user_message: str,
-    emotional_state: EmotionalState,
-    action_taken: str,
-    task_names: list[str]
-) -> str by llm();
-
-sem generate_friendly_response = """
-Generate warm, natural response as Algo:
-
-Match emotional_state tone (stressed→supportive, excited→enthusiastic, etc.)
-Acknowledge action naturally ("Got it!" not "Task added")
-Brief 1-3 sentences, use contractions, no tech jargon.
-""";
-
-"""Generate structured reasoning explanation for complex decisions"""
-def generate_decision_reasoning(
-    user_message: str,
-    context_considered: list[str],
-    options: list[str],
-    recommendation: str,
-    tradeoffs: list[str]
-) -> str by llm();
-
-sem generate_decision_reasoning = """
-Structured reasoning with emoji markers:
-🤔 Context → 💡 Options → ⚖️ Tradeoffs → ✅ Recommendation
-
-Use for advice/complex decisions, not simple tracking.
+If needs_graph_rebuild=True: Reconstruct FULL graph with ALL existing nodes
+If convergence_intent.should_converge: Create edges from ALL source_nodes to first unique task
 """;
 
 """Generate 2 contextual suggestions for what the user might do next"""
 def generate_next_suggestions(
     last_task: str,
     recent_tasks: list[str],
-    conversation_context: str,
-    emotional_state: str
+    conversation_context: ConversationContext,
+    emotional_state: EmotionalState
 ) -> list[str] by llm();
 
 sem generate_next_suggestions = """

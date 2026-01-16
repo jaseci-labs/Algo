@@ -10,11 +10,16 @@ import from semantics.semantics {
     ConnectionType,
     TaskRelationship,
     IntentAnalysis,
+    ExtractedTasks,
+    AttachmentPointAnalysis,
+    ConvergenceIntent,
     detect_emotional_state,
     analyze_conversation_intent,
-    extract_task_sequence,
+    extract_raw_task_names,
+    determine_attachment_points,
+    detect_convergence_intent,
+    build_task_relationships,
     generate_friendly_response,
-    generate_decision_reasoning,
     generate_next_suggestions
 }
 

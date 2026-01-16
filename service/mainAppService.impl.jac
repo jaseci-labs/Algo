@@ -77,20 +77,24 @@ impl update_task_graph.navigate_to_graph {
 }
 
 impl update_task_graph.update_graph {
-    # Find or create the previous task node
+    # Find the most recent node with the previous task name
     prev_node = None;
     
-    # Search ALL TaskState nodes in the graph, not just those connected to user_graph_data
+    # Search ALL TaskState nodes in the graph
     all_task_nodes = [-->](`?TaskState);
-    visited_for_search = {};
     nodes_to_check = all_task_nodes.copy();
+    all_nodes = [];
     
+    # Collect all nodes via traversal
+    visited_ids = {};
     while len(nodes_to_check) > 0 {
         current = nodes_to_check.pop(0);
         if hasattr(current, 'task_name') {
-            node_id = current.task_name;
-            if node_id not in visited_for_search {
-                visited_for_search[node_id] = current;
+            # Use object id to track unique nodes (not task_name)
+            node_id = id(current);
+            if node_id not in visited_ids {
+                visited_ids[node_id] = True;
+                all_nodes.append(current);
                 # Get successors via TaskFlow edges
                 successors = [current-->](`?TaskState);
                 for succ in successors {
@@ -100,12 +104,22 @@ impl update_task_graph.update_graph {
         }
     }
     
-    # Now search for the previous task in all found nodes
-    for node_name in visited_for_search {
-        nodex = visited_for_search[node_name];
-        if nodex.task_name == self.previous_task {
-            prev_node = nodex;
-            break;
+    # Now find the MOST RECENT node with the previous task name
+    most_recent_time = None;
+    for node in all_nodes {
+        if node.task_name == self.previous_task {
+            # Get the created_at timestamp
+            if hasattr(node, 'created_at') and node.created_at {
+                if most_recent_time == None or node.created_at > most_recent_time {
+                    most_recent_time = node.created_at;
+                    prev_node = node;
+                }
+            } else {
+                # No timestamp (e.g., Start node) - use it if no other found
+                if prev_node == None {
+                    prev_node = node;
+                }
+            }
         }
     }
 
@@ -117,23 +131,11 @@ impl update_task_graph.update_graph {
         }
     }
 
-    # Find or create the new task node
-    new_node = None;
-    for node_name in visited_for_search {
-        nodex = visited_for_search[node_name];
-        if nodex.task_name == self.task_name {
-            new_node = nodex;
-            break;
-        }
-    }
-
-    if new_node == None {
-        # Create new task node
-        new_node = TaskState(
-            task_name=self.task_name,
-            created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        );
-    }
+    # Always create a new task node (even if task name was used before)
+    new_node = TaskState(
+        task_name=self.task_name,
+        created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    );
 
     # Always create the edge to support branching
     prev_node +>:TaskFlow(label=self.edge_label):+> new_node;
@@ -594,13 +596,48 @@ impl call_supervisor.call {
         # Step 3: Extract task sequence if creating tasks
         relationships = [];
         if intent_analysis.should_create_tasks {
-            relationships = extract_task_sequence(
+            # Orchestrate the task extraction using decomposed functions
+            
+            # 3.1: Extract raw task names and generate unique names
+            extracted_tasks = extract_raw_task_names(
                 user_message=self.context_from_user,
                 conversation_context=intent_analysis.conversation_context,
+                existing_nodes=current_nodes
+            );
+            
+            # 3.2: Determine where tasks should attach
+            attachment_analysis = determine_attachment_points(
+                user_message=self.context_from_user,
+                last_task=last_task,
                 existing_nodes=current_nodes,
+                conversation_context=intent_analysis.conversation_context
+            );
+            
+            # 3.3: Detect convergence intent
+            convergence_intent = detect_convergence_intent(
+                user_message=self.context_from_user,
                 last_task=last_task,
                 current_edges=current_edges
             );
+            
+            # 3.4: Build relationships using all analyzed data
+            relationships = build_task_relationships(
+                user_message=self.context_from_user,
+                extracted_tasks=extracted_tasks,
+                attachment_analysis=attachment_analysis,
+                convergence_intent=convergence_intent,
+                conversation_context=intent_analysis.conversation_context
+            );
+            
+            # DEBUG: Print what LLM returned
+            print(f"DEBUG - User message: {self.context_from_user}");
+            print(f"DEBUG - Last task: {last_task}");
+            print(f"DEBUG - Existing nodes: {current_nodes}");
+            print(f"DEBUG - Extracted tasks: raw={extracted_tasks.raw_names}, unique={extracted_tasks.unique_names}, counts={extracted_tasks.duplicate_counts}");
+            print(f"DEBUG - LLM returned {len(relationships)} relationships:");
+            for rel in relationships {
+                print(f"  - {rel.from_task} → {rel.to_task} (label: {rel.edge_label}, order: {rel.sequence_order})");
+            }
             
             # Execute the graph updates
             if intent_analysis.conversation_context.needs_graph_rebuild and len(current_nodes) > 1 {
