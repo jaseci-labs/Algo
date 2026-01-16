@@ -595,6 +595,10 @@ impl call_supervisor.call {
         
         # Step 3: Extract task sequence if creating tasks
         relationships = [];
+        extracted_tasks = None;
+        attachment_analysis = None;
+        convergence_intent = None;
+        
         if intent_analysis.should_create_tasks {
             # Orchestrate the task extraction using decomposed functions
             
@@ -749,7 +753,17 @@ impl call_supervisor.call {
             }
         }
         
-        # Step 4: Generate friendly response
+        # Step 4: Generate thinking summary for transparency
+        thinking_summary = generate_thinking_summary(
+            user_message=self.context_from_user,
+            emotional_state=emotional_state,
+            intent_analysis=intent_analysis,
+            extracted_tasks=extracted_tasks,
+            attachment_analysis=attachment_analysis,
+            convergence_intent=convergence_intent
+        );
+        
+        # Step 5: Generate friendly response
         task_names = [];
         for rel in relationships {
             if rel.to_task not in task_names {
@@ -764,7 +778,7 @@ impl call_supervisor.call {
             task_names=task_names
         );
         
-        # Step 5: Generate suggestions for next actions
+        # Step 6: Generate suggestions for next actions
         suggestions = [];
         try {
             # Get recent tasks (last 3 tasks from current_nodes, excluding Start)
@@ -789,7 +803,20 @@ impl call_supervisor.call {
             suggestions = [];
         }
         
-        report {"response": response, "emotional_state": emotional_state.state, "suggestions": suggestions};
+        # Build thinking insights for frontend (convert to dict)
+        thinking = {
+            "emotional": thinking_summary.emotional_insight if thinking_summary.emotional_insight else "",
+            "intent": thinking_summary.intent_insight if thinking_summary.intent_insight else "",
+            "tasks": thinking_summary.task_insight if thinking_summary.task_insight else "",
+            "pattern": thinking_summary.pattern_insight if thinking_summary.pattern_insight else ""
+        };
+        
+        report {
+            "response": response,
+            "emotional_state": emotional_state.state,
+            "suggestions": suggestions,
+            "thinking": thinking
+        };
     } except Exception as e {
         report {"error": "Supervisor error", "details": str(e)};
     }

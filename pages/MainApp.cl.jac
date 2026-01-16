@@ -1,7 +1,7 @@
 # MainApp Component (UI Only)
 # Pure presentation component - all business logic extracted to useMainApp hook
 
-import from react { Fragment }
+import from react { Fragment, useState }
 
 import from ..components.TranscriptItem { TranscriptItem }
 import from ..components.Header { Header }
@@ -18,6 +18,13 @@ import from ..utils.mergeCls { cn }
 # ============================================
 
 def:pub MainApp() -> any {
+    # Thinking insights toggle state (local to UI)
+    [showThinking, setShowThinking] = useState(True);
+    
+    def toggleThinking() -> None {
+        setShowThinking(not showThinking);
+    }
+    
     # Get all state and handlers from the hook
     hook = useMainApp();
     
@@ -50,14 +57,14 @@ def:pub MainApp() -> any {
     transcriptItems = [];
     idx = 0;
     for item in transcript {
-        transcriptItems.push(<TranscriptItem key={idx} item={item} />);
+        transcriptItems.push(<TranscriptItem key={idx} item={item} showThinking={showThinking} />);
         idx = idx + 1;
     }
     
     # ========== Render ==========
     return <Layout meta={{"title": "Dashboard | Algo", "description": "Your AI assistant dashboard with voice interface"}}>
         <div className="flex flex-col h-screen">
-            <Header />
+            <Header showThinking={showThinking} onToggleThinking={toggleThinking} />
             
             <div className="flex-1 flex gap-2 p-2 overflow-hidden">
                 <TranscriptPanel 

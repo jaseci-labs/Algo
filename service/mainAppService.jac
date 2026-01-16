@@ -13,6 +13,7 @@ import from semantics.semantics {
     ExtractedTasks,
     AttachmentPointAnalysis,
     ConvergenceIntent,
+    ThinkingSummary,
     detect_emotional_state,
     analyze_conversation_intent,
     extract_raw_task_names,
@@ -20,7 +21,8 @@ import from semantics.semantics {
     detect_convergence_intent,
     build_task_relationships,
     generate_friendly_response,
-    generate_next_suggestions
+    generate_next_suggestions,
+    generate_thinking_summary
 }
 
 node TaskState {

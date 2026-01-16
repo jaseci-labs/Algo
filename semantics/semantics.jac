@@ -281,3 +281,43 @@ After "Dinner" → ["I'll watch TV", "I'll read a book"]
 
 Return as a simple list of 2 strings, nothing else.
 """;
+
+"""Thinking insights to show user (transparency feature)"""
+obj ThinkingSummary {
+    has emotional_insight: str;
+    has intent_insight: str;
+    has task_insight: str;
+    has pattern_insight: str;
+}
+
+sem ThinkingSummary.emotional_insight = "Short bullet about user's emotional state. Empty string if confidence < 0.7. Format: 'You seem [state] right now'";
+sem ThinkingSummary.intent_insight = "Short bullet about what user is doing. Empty string for simple COMMIT_ACTION. Format: 'You're [correcting/clarifying/asking about] [context]'";
+sem ThinkingSummary.task_insight = "Short bullet about tasks extracted. Use friendly names not CamelCase. Format: 'I'm extracting: [list of tasks]' or 'I'm adding: [task description]'";
+sem ThinkingSummary.pattern_insight = "Short bullet about special patterns. Empty if none. Format: 'These will happen [at the same time/one after another/either way]' or 'This is task number [X]' for duplicates";
+
+"""Generate user-friendly thinking insights for transparency"""
+def generate_thinking_summary(
+    user_message: str,
+    emotional_state: EmotionalState,
+    intent_analysis: IntentAnalysis,
+    extracted_tasks: ExtractedTasks,
+    attachment_analysis: AttachmentPointAnalysis,
+    convergence_intent: ConvergenceIntent
+) -> ThinkingSummary by llm();
+
+sem generate_thinking_summary = """
+Generate short, friendly bullet points showing Algo's understanding.
+
+RULES:
+1. emotional_insight: Be empathetic and natural
+
+2. intent_insight: Format - "You're correcting [task]" or "You're clarifying where [task] goes"
+
+3. task_insight: For duplicates, mention the count naturally
+
+4. pattern_insight: Only for special patterns, otherwise empty string
+   - PARALLEL: "These will happen at the same time"
+   - Duplicates (check extracted_tasks.duplicate_counts): "This is your [X]th time doing this"
+
+Keep all bullets under 10 words. Be conversational and natural.
+""";
