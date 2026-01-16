@@ -237,17 +237,22 @@ def build_task_relationships(
 sem build_task_relationships = """
 Build TaskRelationship list using pre-analyzed inputs.
 
-CRITICAL: Use extracted_tasks.unique_names for ALL to_task values.
-- to_task MUST come from extracted_tasks.unique_names (these are NEW nodes being created)
-- from_task MUST come from attachment_analysis.attachment_nodes
-- Check extracted_tasks.name_mappings to see raw→unique transformation
-- Check extracted_tasks.duplicate_counts to understand why names were modified
+CRITICAL CONNECTION TYPE DETECTION:
+Analyze user_message for parallel keywords:
+- PARALLEL: "while", "as", "during", "at the same time", "simultaneously", "and" (when tasks happen together)
+    - Create N relationships, ALL with SAME from_task (attachment_nodes[0])
+    - ALL relationships use connection_type = PARALLEL
+    - Each relationship goes to a different unique task
+    - sequence_order: 1, 2, 3... for each parallel branch
+  
+- SEQUENTIAL: "then", "after", "next", "before", "first" (tasks happen one after another)
+    - Create N relationships chained together
+    - First: from attachment_nodes[0] to unique_names[0]
+    - Second: from unique_names[0] to unique_names[1]
+    - Continue chaining: each new task's from_task is the previous to_task
 
 If needs_graph_rebuild=True: Reconstruct FULL graph with ALL existing nodes
-If needs_graph_rebuild=False: Create edges from attachment_nodes to extracted_tasks.unique_names
-
 If convergence_intent.should_converge: Create edges from ALL source_nodes to first unique task
-Number relationships sequentially (1, 2, 3...) in execution order.
 """;
 
 """Generate 2 contextual suggestions for what the user might do next"""
