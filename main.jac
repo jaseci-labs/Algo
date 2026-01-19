@@ -10,3 +10,12 @@ import from service.mainAppService {
     rebuild_graph,
     call_supervisor
 }
+
+cl import from .client { app as ClientApp }
+
+
+cl {
+    def:pub app() -> any {
+        return <ClientApp />;
+    }
+}

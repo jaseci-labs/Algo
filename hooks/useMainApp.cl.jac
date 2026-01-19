@@ -12,7 +12,7 @@ import from .useRealtimeSession { useRealtimeSession }
 import from .useAudioControls { useAudioControls }
 
 # Import services
-import from ..service.mainAppService {
+import from ..service.mainApp {
     callSupervisor,
     saveRoutine,
     getUsernameFromToken
