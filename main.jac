@@ -11,7 +11,7 @@ import from service.mainAppService {
     call_supervisor
 }
 
-cl import from .client { app as ClientApp }
+cl import from .index { app as ClientApp }
 
 
 cl {
