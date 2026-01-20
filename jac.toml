@@ -14,6 +14,7 @@ base_route_app = "app"
 react = "^18.2.0"
 "react-dom" = "^18.2.0"
 "react-router-dom" = "^6.22.0"
+"react-error-boundary" = "^4.0.0"
 "@openai/agents" = "latest"
 zod = "^4.0.0"
 "@hpcc-js/wasm" = "latest"
@@ -40,5 +41,5 @@ lib_imports = ["import tailwindcss from '@tailwindcss/vite'"]
 
 
 [plugins.scale]
-kubernetes.app_name = "algo-test2"
-kubernetes.namespace = "algo-test2"
+kubernetes.app_name = "algo-test"
+kubernetes.namespace = "algo-test"
