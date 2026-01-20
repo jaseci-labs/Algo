@@ -630,17 +630,14 @@ impl call_supervisor.call {
                 extracted_tasks=extracted_tasks,
                 attachment_analysis=attachment_analysis,
                 convergence_intent=convergence_intent,
-                conversation_context=intent_analysis.conversation_context
+                conversation_context=intent_analysis.conversation_context,
+                current_edges=current_edges
             );
             
-            # DEBUG: Print what LLM returned
-            print(f"DEBUG - User message: {self.context_from_user}");
-            print(f"DEBUG - Last task: {last_task}");
-            print(f"DEBUG - Existing nodes: {current_nodes}");
-            print(f"DEBUG - Extracted tasks: raw={extracted_tasks.raw_names}, unique={extracted_tasks.unique_names}, counts={extracted_tasks.duplicate_counts}");
-            print(f"DEBUG - LLM returned {len(relationships)} relationships:");
+            # Log what LLM returned
+            print(f"\n[DEBUG call_supervisor] LLM returned {len(relationships)} relationships:");
             for rel in relationships {
-                print(f"  - {rel.from_task} → {rel.to_task} (label: {rel.edge_label}, order: {rel.sequence_order})");
+                print(f"  - from_task='{rel.from_task}' to_task='{rel.to_task}' label='{rel.edge_label}' order={rel.sequence_order}");
             }
             
             # Execute the graph updates
@@ -670,37 +667,66 @@ impl call_supervisor.call {
                     }
                 }
                 
-                # Start with existing edges
+                # Build edge map - strategy depends on whether tasks are being moved
                 edge_map = {};
-                for edge in current_edges {
-                    from_task = edge.get("from", "");
-                    to_task = edge.get("to", "");
-                    edge_key = f"{from_task}->{to_task}";
-                    edge_map[edge_key] = edge;
-                }
+                tasks_to_move = intent_analysis.conversation_context.tasks_to_move if hasattr(intent_analysis.conversation_context, 'tasks_to_move') else [];
                 
-                # Detect edges that should be removed (task insertion cases)
-                # If we're adding A->B->C, we should remove A->C if it exists
-                edges_to_remove = {};
-                for rel in relationships {
-                    # Check if this relationship represents an insertion
-                    # Look for pattern: if we have A->B and B->C, remove A->C
-                    for other_rel in relationships {
-                        if rel.to_task == other_rel.from_task {
-                            # Found chain: rel.from_task -> rel.to_task -> other_rel.to_task
-                            # Remove direct edge from rel.from_task -> other_rel.to_task if it exists
-                            direct_edge_key = f"{rel.from_task}->{other_rel.to_task}";
-                            if direct_edge_key in edge_map {
-                                edges_to_remove[direct_edge_key] = True;
+                if len(tasks_to_move) > 0 {
+                    # REORDERING MODE: Remove ALL edges involving moved tasks
+                    print(f"\n[DEBUG] Reordering mode: tasks_to_move = {tasks_to_move}");
+                    
+                    # Start with existing edges, but exclude any involving moved tasks
+                    for edge in current_edges {
+                        from_task = edge.get("from", "");
+                        to_task = edge.get("to", "");
+                        
+                        # Skip edges that involve any of the tasks being moved
+                        involves_moved_task = False;
+                        for moved_task in tasks_to_move {
+                            if from_task == moved_task or to_task == moved_task {
+                                involves_moved_task = True;
+                                print(f"[DEBUG] Removing old edge: {from_task} -> {to_task} (involves {moved_task})");
+                                break;
+                            }
+                        }
+                        
+                        if not involves_moved_task {
+                            edge_key = f"{from_task}->{to_task}";
+                            edge_map[edge_key] = edge;
+                        }
+                    }
+                } else {
+                    # NORMAL MODE: Start with all existing edges
+                    for edge in current_edges {
+                        from_task = edge.get("from", "");
+                        to_task = edge.get("to", "");
+                        edge_key = f"{from_task}->{to_task}";
+                        edge_map[edge_key] = edge;
+                    }
+                    
+                    # Detect edges that should be removed (task insertion cases)
+                    # If we're adding A->B->C, we should remove A->C if it exists
+                    edges_to_remove = {};
+                    for rel in relationships {
+                        # Check if this relationship represents an insertion
+                        # Look for pattern: if we have A->B and B->C, remove A->C
+                        for other_rel in relationships {
+                            if rel.to_task == other_rel.from_task {
+                                # Found chain: rel.from_task -> rel.to_task -> other_rel.to_task
+                                # Remove direct edge from rel.from_task -> other_rel.to_task if it exists
+                                direct_edge_key = f"{rel.from_task}->{other_rel.to_task}";
+                                if direct_edge_key in edge_map {
+                                    edges_to_remove[direct_edge_key] = True;
+                                }
                             }
                         }
                     }
-                }
-                
-                # Remove the identified edges
-                for edge_key in edges_to_remove {
-                    if edge_key in edge_map {
-                        del edge_map[edge_key];
+                    
+                    # Remove the identified edges
+                    for edge_key in edges_to_remove {
+                        if edge_key in edge_map {
+                            del edge_map[edge_key];
+                        }
                     }
                 }
                 
