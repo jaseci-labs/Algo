@@ -1,7 +1,7 @@
 # useGraph Hook
 # Custom hook for managing task graph state and operations
 
-import from ..service.mainAppService {
+import from ..api.api {
     getTaskGraph,
     clearTaskGraph,
     getUsernameFromToken

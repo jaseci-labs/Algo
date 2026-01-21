@@ -1,7 +1,7 @@
 import from datetime { datetime }
 import from time { time }
 
-impl get_session_token.fetch {
+impl get_session_token.fetch{
     try {
         api_key = getenv("OPENAI_API_KEY");
 
@@ -34,7 +34,7 @@ impl get_session_token.fetch {
             report {"error": "Failed to fetch key", "details": data} ;
         }
     } except HTTPError as e {
-        error_msg = e.read().decode('utf-8') if hasattr(e, 'read') else str(e);
+        error_msg = e.read().decode('utf-8') if e?.read else str(e);
         report {"error": f"HTTP Error: {e.code}", "details": error_msg} ;
     } except URLError as e {
         report {"error": "URL Error", "details": str(e.reason)} ;
@@ -44,7 +44,7 @@ impl get_session_token.fetch {
 }
 
 #WALKER: init_user_graph
-impl init_user_graph.initialize {
+impl init_user_graph.initialize{
     visit [-->](`?user_graph_data) else {
         graph_cont = here ++> user_graph_data();
         start_node = TaskState(task_name="Start");
@@ -56,23 +56,20 @@ impl init_user_graph.initialize {
 }
 
 # WALKER: update_task_graph
-impl update_task_graph.navigate_to_graph {
+impl update_task_graph.navigate_to_graph{
     # Find or create user-specific graph based on username
     all_graphs = [-->](`?user_graph_data);
-    
     user_graph = None;
     for graph in all_graphs {
-        if hasattr(graph, 'username') and graph.username == self.username {
+        if graph?.username and graph.username == self.username {
             user_graph = graph;
             break;
         }
     }
-    
     if user_graph == None {
         # Create new graph for this user
         user_graph = here ++> user_graph_data(username=self.username);
     }
-    
     visit user_graph;
 }
 
@@ -122,7 +119,6 @@ impl update_task_graph.update_graph {
             }
         }
     }
-
     # If previous task doesn't exist, create it (shouldn't happen normally, but safe fallback)
     if prev_node == None {
         prev_node = TaskState(task_name=self.previous_task);
@@ -138,20 +134,17 @@ impl update_task_graph.update_graph {
     );
 
     # Always create the edge to support branching
-    prev_node +>:TaskFlow(label=self.edge_label):+> new_node;
-
+    prev_node +>: TaskFlow(label=self.edge_label) :+> new_node;
     here.last_task = self.task_name;
-
     # Use printgraph() to get graph structure, then apply custom styling
     all_task_nodes = [-->](`?TaskState);
     start_node = None;
     for node in all_task_nodes {
-        if hasattr(node, 'task_name') and node.task_name == "Start" {
+        if node?.task_name and node.task_name == "Start" {
             start_node = node;
             break;
         }
     }
-
     node_list = [];
     edge_list = [];
     if start_node {
@@ -160,56 +153,45 @@ impl update_task_graph.update_graph {
         node_list = result[0];
         edge_list = result[1];
     }
-
     # Generate styled DOT code
     dot_code = generate_dot_code_from_lists(node_list, edge_list);
-
     report {
         "success": True,
         "message": f"Added task '{self.task_name}' connected from '{self.previous_task}'",
         "dotCode": dot_code,
         "nodes": node_list,
         "edges": edge_list
-    };
+    } ;
 }
 
 # WALKER: get_task_graph
-impl get_task_graph.navigate_to_graph {
+impl get_task_graph.navigate_to_graph{
     all_graphs = [-->](`?user_graph_data);
-    
     user_graph = None;
     for graph in all_graphs {
-        if hasattr(graph, 'username') and graph.username == self.username {
+        if graph?.username and graph.username == self.username {
             user_graph = graph;
             break;
         }
     }
-    
     if user_graph == None {
         # No graph yet, return empty
-        report {
-            "nodes": [],
-            "edges": [],
-            "dotCode": "",
-            "lastTask": "Start"
-        };
+        report {"nodes": [], "edges": [], "dotCode": "", "lastTask": "Start"} ;
         disengage;
     }
-    
     visit user_graph;
 }
 
-impl get_task_graph.get_graph {
+impl get_task_graph.get_graph{
     # Use printgraph() to get graph structure, then apply custom styling
     all_task_nodes = [-->](`?TaskState);
     start_node = None;
     for node in all_task_nodes {
-        if hasattr(node, 'task_name') and node.task_name == "Start" {
+        if node?.task_name and node.task_name == "Start" {
             start_node = node;
             break;
         }
     }
-
     node_list = [];
     edge_list = [];
     if start_node {
@@ -218,113 +200,95 @@ impl get_task_graph.get_graph {
         node_list = result[0];
         edge_list = result[1];
     }
-
     # Generate styled DOT code
     dot_code = generate_dot_code_from_lists(node_list, edge_list);
-    
     # Find all leaf nodes (tasks with no outgoing edges)
     leaf_nodes = find_leaf_nodes(edge_list, node_list);
     # Use the stored last_task as fallback, or first leaf node
     last_task_to_report = here.last_task;
     if len(leaf_nodes) > 0 {
-        last_task_to_report = leaf_nodes[0] if len(leaf_nodes) == 1 else "|".join(leaf_nodes);
+        last_task_to_report = leaf_nodes[0]
+        if len(leaf_nodes) == 1
+        else "|".join(leaf_nodes);
     }
-
     report {
         "nodes": node_list,
         "edges": edge_list,
         "dotCode": dot_code,
         "lastTask": last_task_to_report
-    };
+    } ;
 }
 
 # WALKER: clear_graph
-impl clear_graph.navigate_to_graph {
+impl clear_graph.navigate_to_graph{
     # Find user-specific graph
     print(f"DEBUG CLEAR_GRAPH: Looking for graph for user: {self.username}");
-    
     all_graphs = [-->](`?user_graph_data);
-    
     user_graph = None;
     for graph in all_graphs {
-        if hasattr(graph, 'username') and graph.username == self.username {
+        if graph?.username and graph.username == self.username {
             user_graph = graph;
             break;
         }
     }
-    
     if user_graph == None {
-        report {"success": True, "message": "No graph to clear"};
+        report {"success": True, "message": "No graph to clear"} ;
         disengage;
     }
-    
     visit user_graph;
 }
 
-impl clear_graph.clear_data {
+impl clear_graph.clear_data{
     # Delete all TaskState nodes connected to this graph
     all_task_nodes = [-->](`?TaskState);
-
     for node in all_task_nodes {
         # Delete the node
-        del node;
+        del node ;
     }
-
     # Recreate the Start node
     start_node = TaskState(task_name="Start");
     here ++> start_node;
-
     # Reset last task
     here.last_task = "Start";
-
-    report {
-        "success": True,
-        "message": "Graph cleared successfully"
-    };
+    report {"success": True, "message": "Graph cleared successfully"} ;
 }
 
 # WALKER: save_routine
-impl save_routine.navigate_to_graph {
+impl save_routine.navigate_to_graph{
     # Find user-specific graph
     all_graphs = [-->](`?user_graph_data);
-    
     user_graph = None;
     for graph in all_graphs {
-        if hasattr(graph, 'username') and graph.username == self.username {
+        if graph?.username and graph.username == self.username {
             user_graph = graph;
             break;
         }
     }
-    
     if user_graph == None {
-        report {"error": "No graph to save", "success": False};
+        report {"error": "No graph to save", "success": False} ;
         disengage;
     }
-    
     visit user_graph;
 }
 
-impl save_routine.save_routine_data {
+impl save_routine.save_routine_data{
     # Store routine directly in the user_graph_data node
 
     # Initialize saved_routines dict if needed
-    if not hasattr(here, 'saved_routines') or here.saved_routines == None {
+    if not here?.saved_routines or here.saved_routines == None {
         here.saved_routines = {};
     }
-
     # Get current timestamp
     timestamp = str(time());
-
     # Use printgraph() to get graph structure (same approach as other walkers)
     all_task_nodes = [-->](`?TaskState);
     start_node = None;
     for node in all_task_nodes {
-        if hasattr(node, 'task_name') and node.task_name == "Start" {
+        if node?.task_name and node.task_name == "Start" {
             start_node = node;
             break;
         }
     }
-
     node_list = [];
     edge_list = [];
     if start_node {
@@ -333,142 +297,118 @@ impl save_routine.save_routine_data {
         node_list = result[0];
         edge_list = result[1];
     }
-
     # Save the routine as dict for compatibility
     here.saved_routines[self.routine_name] = {
         "nodes": node_list.copy(),
         "edges": edge_list.copy(),
         "saved_at": timestamp
     };
-
     # Count nodes manually
     node_count = 0;
     for _ in node_list {
         node_count = node_count + 1;
     }
-
     report {
         "success": True,
         "message": f"Saved routine with {node_count} tasks",
         "routine": here.saved_routines[self.routine_name]
-    };
+    } ;
 }
 
 # WALKER: load_past_routines
-impl load_past_routines.navigate_to_routines {
+impl load_past_routines.navigate_to_routines{
     # Find user-specific routines
     all_routines = [-->](`?user_routines);
-    
     user_routines_node = None;
     for r in all_routines {
-        if hasattr(r, 'username') and r.username == self.username {
+        if r?.username and r.username == self.username {
             user_routines_node = r;
             break;
         }
     }
-    
     if user_routines_node == None {
         # No routines yet
-        report {"routines": {}, "count": 0, "message": "No past routines saved yet"};
+        report {"routines": {}, "count": 0, "message": "No past routines saved yet"} ;
         disengage;
     }
-    
     visit user_routines_node;
 }
 
-impl load_past_routines.load_routines {
+impl load_past_routines.load_routines{
     # Count routines manually
     routine_count = 0;
     for _ in here.routines {
         routine_count = routine_count + 1;
     }
-
     if routine_count == 0 {
-        report {"routines": {}, "count": 0, "message": "No past routines saved yet"};
+        report {"routines": {}, "count": 0, "message": "No past routines saved yet"} ;
     } else {
         report {
             "routines": here.routines,
             "count": routine_count,
             "message": f"Loaded {routine_count} saved routine(s)"
-        };
+        } ;
     }
 }
 
 # WALKER: reset_session
-impl reset_session.navigate_to_graph {
+impl reset_session.navigate_to_graph{
     # Find user-specific graph
     all_graphs = [-->](`?user_graph_data);
-    
     user_graph = None;
     for graph in all_graphs {
-        if hasattr(graph, 'username') and graph.username == self.username {
+        if graph?.username and graph.username == self.username {
             user_graph = graph;
             break;
         }
     }
-    
     if user_graph == None {
-        report {
-            "success": True,
-            "message": "Session already empty."
-        };
+        report {"success": True, "message": "Session already empty."} ;
         disengage;
     }
-    
     visit user_graph;
 }
 
-impl reset_session.reset_graph {
+impl reset_session.reset_graph{
     # Delete all TaskState nodes
     all_task_nodes = [-->](`?TaskState);
     for node in all_task_nodes {
-        del node;
+        del node ;
     }
-
     # Recreate the Start node
     start_node = TaskState(task_name="Start");
     here ++> start_node;
-
     # Reset last task
     here.last_task = "Start";
-
-    report {
-        "success": True,
-        "message": "Session reset. Ready for a new conversation."
-    };
+    report {"success": True, "message": "Session reset. Ready for a new conversation."} ;
 }
 
 # WALKER: rebuild_graph
-impl rebuild_graph.navigate_to_graph {
+impl rebuild_graph.navigate_to_graph{
     # Find user-specific graph
     all_graphs = [-->](`?user_graph_data);
-    
     user_graph = None;
     for graph in all_graphs {
-        if hasattr(graph, 'username') and graph.username == self.username {
+        if graph?.username and graph.username == self.username {
             user_graph = graph;
             break;
         }
     }
-    
     if user_graph == None {
         # Create new graph if doesn't exist
         user_graph = here ++> user_graph_data(username=self.username);
     }
-    
     visit user_graph;
 }
 
-impl rebuild_graph.rebuild {
+impl rebuild_graph.rebuild{
     # Delete all existing TaskState nodes
     all_task_nodes = [-->](`?TaskState);
     for node in all_task_nodes {
-        del node;
+        del node ;
     }
-
     # Create a map to store created nodes
     node_map = {};
-
     # Create all nodes first
     for node_name in self.new_nodes {
         new_task = TaskState(
@@ -482,7 +422,6 @@ impl rebuild_graph.rebuild {
             here ++> new_task;
         }
     }
-
     # Create all edges
     for edge_spec in self.new_edges {
         from_name = edge_spec.get("from", "");
@@ -492,41 +431,37 @@ impl rebuild_graph.rebuild {
         if from_name in node_map and to_name in node_map {
             from_node = node_map[from_name];
             to_node = node_map[to_name];
-
             # Create typed edge with label
-            from_node +>:TaskFlow(label=edge_label):+> to_node;
+            from_node +>: TaskFlow(label=edge_label) :+> to_node;
         }
     }
-
     # Update last task to the last node in the new list
     if self.new_nodes and len(self.new_nodes) > 0 {
         here.last_task = self.new_nodes[-1];
     } else {
         here.last_task = "Start";
     }
-
     # Generate DOT code with custom styling
     dot_code = generate_dot_code_from_lists(self.new_nodes, self.new_edges);
-
     report {
         "success": True,
         "message": "Graph rebuilt successfully",
         "dotCode": dot_code,
         "nodes": self.new_nodes,
         "edges": self.new_edges
-    };
+    } ;
 }
 
 # WALKER: call_supervisor
-impl call_supervisor.call {
+impl call_supervisor.call{
     try {
         api_key = getenv("OPENAI_API_KEY");
-        
+
         if not api_key {
-            report {"error": "OPENAI_API_KEY not set"};
+            report {"error": "OPENAI_API_KEY not set"} ;
             return;
         }
-        
+
         # Load user's current graph state
         current_nodes = [];
         current_edges = [];
@@ -538,20 +473,18 @@ impl call_supervisor.call {
         user_graph = None;
 
         for graph in all_graphs {
-            if hasattr(graph, 'username') and graph.username == self.username {
+            if graph?.username and graph.username == self.username {
                 user_graph = graph;
-                last_task = graph.last_task if hasattr(graph, 'last_task') else "Start";
-                
+                last_task = graph?.last_task or "Start";
                 # Find Start node (only node directly connected to graph)
                 all_task_nodes = [graph-->](`?TaskState);
                 start_node = None;
                 for node in all_task_nodes {
-                    if hasattr(node, 'task_name') and node.task_name == "Start" {
+                    if node?.task_name and node.task_name == "Start" {
                         start_node = node;
                         break;
                     }
                 }
-                
                 # Use printgraph() to get graph structure
                 if start_node != None {
                     dot_output = printgraph(node=start_node);
@@ -570,7 +503,6 @@ impl call_supervisor.call {
                     # No Start node found, empty graph
                     current_nodes = ["Start"];
                 }
-                
                 break;
             }
         }
@@ -578,13 +510,13 @@ impl call_supervisor.call {
         # ============================================
         # NEW SEMANTIC APPROACH (Multi-Step Analysis)
         # ============================================
-        
+
         # Step 1: Detect emotional state
         emotional_state = detect_emotional_state(
             user_message=self.context_from_user,
             conversation_history=self.conversation_history
         );
-        
+
         # Step 2: Analyze conversation intent (commit, correct, clarify, question, think)
         intent_analysis = analyze_conversation_intent(
             user_message=self.context_from_user,
@@ -592,7 +524,7 @@ impl call_supervisor.call {
             existing_nodes=current_nodes,
             last_task=last_task
         );
-        
+
         # Step 3: Extract task sequence if creating tasks
         relationships = [];
         extracted_tasks = None;
@@ -641,12 +573,11 @@ impl call_supervisor.call {
             }
             
             # Execute the graph updates
-            if intent_analysis.conversation_context.needs_graph_rebuild and len(current_nodes) > 1 {
-                
+            if intent_analysis.conversation_context.needs_graph_rebuild
+            and len(current_nodes) > 1 {
                 # Collect all nodes (existing + new)
                 all_nodes = ["Start"];
                 added_nodes = {"Start": True};
-                
                 # Add nodes from new relationships
                 for rel in relationships {
                     if rel.from_task not in added_nodes {
@@ -658,7 +589,6 @@ impl call_supervisor.call {
                         added_nodes[rel.to_task] = True;
                     }
                 }
-                
                 # Add existing nodes that weren't mentioned (preserve them)
                 for node in current_nodes {
                     if node not in added_nodes and node != "Start" {
@@ -729,7 +659,6 @@ impl call_supervisor.call {
                         }
                     }
                 }
-                
                 # Add/override with new relationships
                 for rel in relationships {
                     edge_key = f"{rel.from_task}->{rel.to_task}";
@@ -739,17 +668,13 @@ impl call_supervisor.call {
                         "label": rel.edge_label
                     };
                 }
-                
                 # Convert edge map back to list
                 new_edges = [];
                 for edge_key in edge_map {
                     new_edges.append(edge_map[edge_key]);
                 }
-                
                 here spawn rebuild_graph(
-                    username=self.username,
-                    new_nodes=all_nodes,
-                    new_edges=new_edges
+                    username=self.username, new_nodes=all_nodes, new_edges=new_edges
                 );
             } else {
                 # Normal updates - execute each relationship in sequence order
@@ -767,7 +692,6 @@ impl call_supervisor.call {
                         sorted_rels.append(rel);
                     }
                 }
-                
                 for rel in sorted_rels {
                     here spawn update_task_graph(
                         task_name=rel.to_task,
@@ -796,11 +720,13 @@ impl call_supervisor.call {
                 task_names.append(rel.to_task);
             }
         }
-        
+
         response = generate_friendly_response(
             user_message=self.context_from_user,
             emotional_state=emotional_state,
-            action_taken="task_added" if intent_analysis.should_create_tasks else "none",
+            action_taken="task_added"
+            if intent_analysis.should_create_tasks
+            else "none",
             task_names=task_names
         );
         
@@ -816,7 +742,7 @@ impl call_supervisor.call {
                     task_count = task_count + 1;
                 }
             }
-            
+
             suggestions = generate_next_suggestions(
                 last_task=last_task,
                 recent_tasks=recent_tasks,
@@ -844,7 +770,7 @@ impl call_supervisor.call {
             "thinking": thinking
         };
     } except Exception as e {
-        report {"error": "Supervisor error", "details": str(e)};
+        report {"error": "Supervisor error", "details": str(e)} ;
     }
 }
 
@@ -853,32 +779,33 @@ impl call_supervisor.call {
 #===========================================================
 
 # Simple parser to extract TaskState nodes and TaskFlow edges from printgraph() output
-def parse_printgraph_output(dot_output: str) -> tuple {
+def parse_printgraph_output(
+    dot_output: str
+) -> tuple {
     node_list = [];
     edge_list = [];
     node_map = {};  # id -> task_name
-    
+
     if not dot_output {
         return (node_list, edge_list);
     }
-    
+
     # Replace HTML entities with actual characters
     dot_output = dot_output.replace("&#x27;", "'");
     dot_output = dot_output.replace("&quot;", '"');
-    
+
     lines = dot_output.split("\n");
-    
+
     # FIRST PASS: Parse all node definitions
     for line in lines {
         line = line.strip();
-        
+
         # Parse node: 0 [label="TaskState(task_name='Start', ...)"]
         if "[label=" in line and "->" not in line {
             parts = line.split("[label=");
             if len(parts) == 2 {
                 node_id = parts[0].strip();
                 label = parts[1];
-                
                 # Only process TaskState nodes
                 if "TaskState(task_name=" in label {
                     # Extract task name: TaskState(task_name='Start', ...)
@@ -893,18 +820,17 @@ def parse_printgraph_output(dot_output: str) -> tuple {
             }
         }
     }
-    
+
     # SECOND PASS: Parse edges (now that we have all nodes)
     for line in lines {
         line = line.strip();
-        
+
         # Parse edge: 0 -> 2  [label="TaskFlow(label='then')"]
         if "->" in line and not line.startswith("//") {
             parts = line.split("->");
             if len(parts) == 2 {
                 from_id = parts[0].strip();
                 to_part = parts[1].strip();
-                
                 # Extract to_id (handle spaces before [)
                 to_id = "";
                 if "[" in to_part {
@@ -912,7 +838,6 @@ def parse_printgraph_output(dot_output: str) -> tuple {
                 } else {
                     to_id = to_part.strip().rstrip(";");
                 }
-                
                 # Extract edge label from TaskFlow
                 edge_label = "";
                 if "TaskFlow(label=" in to_part {
@@ -929,19 +854,20 @@ def parse_printgraph_output(dot_output: str) -> tuple {
                         }
                     }
                 }
-                
                 # Only add edges between TaskState nodes
                 if from_id in node_map and to_id in node_map {
-                    edge_list.append({
-                        "from": node_map[from_id],
-                        "to": node_map[to_id],
-                        "label": edge_label
-                    });
+                    edge_list.append(
+                        {
+                            "from": node_map[from_id],
+                            "to": node_map[to_id],
+                            "label": edge_label
+                        }
+                    );
                 }
             }
         }
     }
-    
+
     return (node_list, edge_list);
 }
 
@@ -962,9 +888,13 @@ def generate_dot_code_from_lists(node_list: list, edge_list: list) -> str {
     # Add nodes with styling
     for task_node in node_list {
         if task_node == "Start" {
-            lines.append("  " + task_node + " [shape=circle, style=filled, fillcolor=\"#22c55e\", fontcolor=white];");
+            lines.append(
+                "  " + task_node + " [shape=circle, style=filled, fillcolor=\"#22c55e\", fontcolor=white];"
+            );
         } else {
-            lines.append("  " + task_node + " [style=\"rounded,filled\", fillcolor=\"#3b82f6\", fontcolor=white];");
+            lines.append(
+                "  " + task_node + " [style=\"rounded,filled\", fillcolor=\"#3b82f6\", fontcolor=white];"
+            );
         }
     }
 
@@ -976,7 +906,9 @@ def generate_dot_code_from_lists(node_list: list, edge_list: list) -> str {
         to_task = conn.get("to", "");
         conn_label = conn.get("label", "");
         if conn_label {
-            lines.append("  " + from_task + " -> " + to_task + " [label=\"" + conn_label + "\"];");
+            lines.append(
+                "  " + from_task + " -> " + to_task + " [label=\"" + conn_label + "\"];"
+            );
         } else {
             lines.append("  " + from_task + " -> " + to_task + ";");
         }
@@ -987,7 +919,9 @@ def generate_dot_code_from_lists(node_list: list, edge_list: list) -> str {
 }
 
 # Helper function to find all leaf nodes (nodes with no outgoing edges)
-def find_leaf_nodes(edge_list: list, node_list: list) -> list {
+def find_leaf_nodes(
+    edge_list: list, node_list: list
+) -> list {
     # Find all nodes that have outgoing edges
     nodes_with_outgoing = {};
     for edge in edge_list {
@@ -996,7 +930,7 @@ def find_leaf_nodes(edge_list: list, node_list: list) -> list {
             nodes_with_outgoing[from_task] = True;
         }
     }
-    
+
     # Leaf nodes are those without outgoing edges (excluding Start)
     leaf_nodes = [];
     for node in node_list {
@@ -1004,11 +938,11 @@ def find_leaf_nodes(edge_list: list, node_list: list) -> list {
             leaf_nodes.append(node);
         }
     }
-    
+
     # If no leaf nodes found, return the last node (shouldn't happen in practice)
     if len(leaf_nodes) == 0 and len(node_list) > 1 {
         return [node_list[-1]];
     }
-    
+
     return leaf_nodes;
 }

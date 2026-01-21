@@ -49,15 +49,15 @@ with entry {
     load_dotenv();
 }
 
-walker get_session_token {
+walker :pub get_session_token {
     can fetch with `root entry;
 }
 
-walker init_user_graph {
+walker :pub init_user_graph {
     can initialize with `root entry;
 }
 
-walker update_task_graph {
+walker :pub update_task_graph {
     has task_name: str;
     has previous_task: str = "Start";
     has edge_label: str = "";
@@ -67,21 +67,21 @@ walker update_task_graph {
     can update_graph with user_graph_data entry;
 }
 
-walker get_task_graph {
+walker :pub get_task_graph {
     has username: str = "anonymous";
 
     can navigate_to_graph with `root entry;
     can get_graph with user_graph_data entry;
 }
 
-walker clear_graph {
+walker :pub clear_graph {
     has username: str = "anonymous";
-    
+
     can navigate_to_graph with `root entry;
     can clear_data with user_graph_data entry;
 }
 
-walker save_routine {
+walker :pub save_routine {
     has routine_name: str = "daily_routine";
     has username: str = "anonymous";
 
@@ -89,33 +89,33 @@ walker save_routine {
     can save_routine_data with user_graph_data entry;
 }
 
-walker load_past_routines {
+walker :pub load_past_routines {
     has username: str = "anonymous";
-    
+
     can navigate_to_routines with `root entry;
     can load_routines with user_routines entry;
 }
 
-walker reset_session {
+walker :pub reset_session {
     has username: str = "anonymous";
-    
+
     can navigate_to_graph with `root entry;
     can reset_graph with user_graph_data entry;
 }
 
-walker rebuild_graph {
+walker :pub rebuild_graph {
     has new_nodes: list;
     has new_edges: list;
     has username: str = "anonymous";
-    
+
     can navigate_to_graph with `root entry;
     can rebuild with user_graph_data entry;
 }
 
-walker call_supervisor {
+walker :pub call_supervisor {
     has conversation_history: list;
     has context_from_user: str;
     has username: str = "anonymous";
-    
+
     can call with `root entry;
 }
