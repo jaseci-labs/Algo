@@ -13,8 +13,13 @@ def:pub useTranscript() -> any {
     }
 
     # Add a transcript item by itemId (for realtime messages)
+<<<<<<< Updated upstream
     def addTranscriptItem(itemId: str, role: str, content: str) -> None {
         newItem = {"itemId": itemId, "role": role, "content": content, "timestamp": Date.now()};
+=======
+    def addTranscriptItem(itemId: str, role: str, content: str, thinking: any = None) -> None {
+        newItem = {"itemId": itemId, "role": role, "content": content, "thinking": thinking, "timestamp": Date.now()};
+>>>>>>> Stashed changes
         transcript = lambda prev: any -> any {
             exists = prev.some(lambda item: any -> bool { return item.itemId == itemId; });
             if exists {
@@ -25,7 +30,11 @@ def:pub useTranscript() -> any {
     }
 
     # Update a transcript item by itemId
+<<<<<<< Updated upstream
     def updateTranscriptItem(itemId: str, content: str) -> None {
+=======
+    def updateTranscriptItem(itemId: str, content: str, thinking: any = None) -> None {
+>>>>>>> Stashed changes
         transcript = lambda prev: any -> any {
             return prev.map(lambda item: any -> any {
                 if item.itemId == itemId {
