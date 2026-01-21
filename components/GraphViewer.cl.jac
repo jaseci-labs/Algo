@@ -1,50 +1,52 @@
 # GraphViewer Component - Renders GraphViz DOT code
-import from react { useState, useEffect, useRef }
+import from react { useEffect, useRef }
 import from "@hpcc-js/wasm/graphviz" { Graphviz }
 import from ..utils.mergeCls { cn }
 
 def:pub GraphViewer(dotCode: str) -> any {
-    [svgContent, setSvgContent] = useState("");
-    [isLoading, setIsLoading] = useState(True);
-    [renderKey, setRenderKey] = useState(0);
+    # Reactive state using has variables
+    has svgContent: str = "";
+    has isLoading: bool = True;
+    has renderKey: int = 0;
+
     prevDotCodeRef = useRef("");
-    
+
     # Render DOT code to SVG whenever it changes
     useEffect(
         lambda -> None {
             console.log("GraphViewer useEffect triggered");
             console.log("Current dotCode:", dotCode);
             console.log("Previous dotCode:", prevDotCodeRef.current);
-            
+
             # Check if dotCode actually changed
             if dotCode == prevDotCodeRef.current {
                 console.log("DotCode unchanged, skipping render");
                 return;
             }
-            
+
             prevDotCodeRef.current = dotCode;
-            
+
             async def renderGraph() -> None {
                 if dotCode and dotCode.length > 0 {
                     try {
                         console.log("Rendering new graph...");
-                        setIsLoading(True);
+                        isLoading = True;
                         graphviz = await Graphviz.load();
                         svg = graphviz.dot(dotCode);
                         console.log("Graph rendered, SVG length:", svg.length);
-                        setSvgContent(svg);
-                        setRenderKey(renderKey + 1);
-                        setIsLoading(False);
+                        svgContent = svg;
+                        renderKey = renderKey + 1;
+                        isLoading = False;
                     } except Exception as e {
                         console.error("Error rendering graph:", e);
-                        setIsLoading(False);
+                        isLoading = False;
                     }
                 } else {
                     console.log("No dotCode to render");
-                    setIsLoading(False);
+                    isLoading = False;
                 }
             }
-            
+
             renderGraph();
         },
         [dotCode]

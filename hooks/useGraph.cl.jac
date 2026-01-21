@@ -1,8 +1,6 @@
 # useGraph Hook
 # Custom hook for managing task graph state and operations
 
-import from react { useState }
-
 import from ..service.mainAppService {
     getTaskGraph,
     clearTaskGraph,
@@ -10,11 +8,11 @@ import from ..service.mainAppService {
 }
 
 def:pub useGraph(addMessage: any) -> any {
-    # Graph state for task visualization
-    [graphDotCode, setGraphDotCode] = useState("");
-    [graphEdges, setGraphEdges] = useState([]);
-    [lastTask, setLastTask] = useState("Start");
-    
+    # Reactive state using has variables
+    has graphDotCode: str = "";
+    has graphEdges: list = [];
+    has lastTask: str = "Start";
+
     # Fetch and update graph state from backend using service layer
     async def refreshGraphState(username: str) -> None {
         try {
@@ -28,15 +26,15 @@ def:pub useGraph(addMessage: any) -> any {
                 if graph_data.dotCode != None {
                     newDotCode = String(graph_data.dotCode);
                     console.log("Setting new DOT code, length:", newDotCode.length);
-                    setGraphDotCode(newDotCode);
+                    graphDotCode = newDotCode;
                 }
                 if graph_data.edges != None {
                     newEdges = Array.from(graph_data.edges);
                     console.log("Setting new edges, count:", newEdges.length);
-                    setGraphEdges(newEdges);
+                    graphEdges = newEdges;
                 }
                 if graph_data.lastTask {
-                    setLastTask(graph_data.lastTask);
+                    lastTask = graph_data.lastTask;
                 }
             } else {
                 console.error("Failed to fetch graph:", result.error);
@@ -45,21 +43,21 @@ def:pub useGraph(addMessage: any) -> any {
             console.error("Failed to fetch updated graph:", graph_error);
         }
     }
-    
+
     # Clear the task graph using service layer
     async def handleClearGraph() -> None {
         try {
             username = getUsernameFromToken();
-            
+
             result = await clearTaskGraph(username);
             console.log("Clear graph response:", result);
-            
+
             if result.success {
                 data = result.data;
-                setGraphDotCode(data.dotCode or "");
-                setGraphEdges(data.edges or []);
-                setLastTask(data.lastTask or "Start");
-                
+                graphDotCode = data.dotCode or "";
+                graphEdges = data.edges or [];
+                lastTask = data.lastTask or "Start";
+
                 addMessage("system", "Graph cleared! Starting fresh.");
             } else {
                 addMessage("error", "Failed to clear graph");
@@ -69,7 +67,7 @@ def:pub useGraph(addMessage: any) -> any {
             addMessage("error", "Error clearing graph");
         }
     }
-        
+
     return {
         "graphDotCode": graphDotCode,
         "graphEdges": graphEdges,
