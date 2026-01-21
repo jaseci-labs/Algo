@@ -452,6 +452,78 @@ impl rebuild_graph.rebuild{
     } ;
 }
 
+# WALKER: rename_task
+impl rename_task.navigate_to_graph{
+    # Find user-specific graph
+    all_graphs = [-->](`?user_graph_data);
+    user_graph = None;
+    for graph in all_graphs {
+        if graph?.username and graph.username == self.username {
+            user_graph = graph;
+            break;
+        }
+    }
+    if user_graph == None {
+        report {"success": False, "error": "No graph found to rename tasks in"} ;
+        disengage;
+    }
+    visit user_graph;
+}
+
+impl rename_task.rename{
+    # Find the node with old name
+    all_task_nodes = [-->](`?TaskState);
+    target_node = None;
+    
+    for node in all_task_nodes {
+        if node?.task_name and node.task_name == self.old_name {
+            target_node = node;
+            break;
+        }
+    }
+    
+    if target_node == None {
+        report {"success": False, "error": f"Task '{self.old_name}' not found in graph"} ;
+        return;
+    }
+    
+    # Rename the node
+    target_node.task_name = self.new_name;
+    
+    # Update last_task if it matches the old name
+    if here.last_task == self.old_name {
+        here.last_task = self.new_name;
+    }
+    
+    # Get updated graph
+    start_node = None;
+    for node in all_task_nodes {
+        if node?.task_name and node.task_name == "Start" {
+            start_node = node;
+            break;
+        }
+    }
+    
+    node_list = [];
+    edge_list = [];
+    if start_node {
+        dot_output = printgraph(node=start_node);
+        result = parse_printgraph_output(dot_output);
+        node_list = result[0];
+        edge_list = result[1];
+    }
+    
+    dot_code = generate_dot_code_from_lists(node_list, edge_list);
+    
+    report {
+        "success": True,
+        "message": f"Renamed '{self.old_name}' to '{self.new_name}'",
+        "dotCode": dot_code,
+        "nodes": node_list,
+        "edges": edge_list
+    } ;
+}
+
 # WALKER: call_supervisor
 impl call_supervisor.call{
     try {
@@ -525,23 +597,92 @@ impl call_supervisor.call{
             last_task=last_task
         );
 
-        # Step 3: Extract task sequence if creating tasks
-        relationships = [];
-        extracted_tasks = None;
-        attachment_analysis = None;
-        convergence_intent = None;
-        
-        if intent_analysis.should_create_tasks {
-            # Orchestrate the task extraction using decomposed functions
+        # Step 2.5: Handle RENAME operations
+        if intent_analysis.conversation_context.correction_type == "rename" {
+            # Use LLM-identified task or fall back to last_task
+            referring_to = intent_analysis.conversation_context.referring_to_task;
+            old_name = (referring_to if referring_to and referring_to in current_nodes 
+                       else last_task.split("|")[0] if "|" in last_task else last_task);
             
-            # 3.1: Extract raw task names and generate unique names
             extracted_tasks = extract_raw_task_names(
                 user_message=self.context_from_user,
                 conversation_context=intent_analysis.conversation_context,
                 existing_nodes=current_nodes
             );
             
-            # 3.2: Determine where tasks should attach
+            if old_name != "Start" and len(extracted_tasks.unique_names) > 0 {
+                new_name = extracted_tasks.unique_names[0];
+                print(f"[DEBUG] RENAME: '{old_name}' -> '{new_name}'");
+                
+                # Rebuild graph with renamed node
+                new_nodes = [new_name if n == old_name else n for n in current_nodes];
+                new_edges = [
+                    {
+                        "from": new_name if e.get("from") == old_name else e.get("from"),
+                        "to": new_name if e.get("to") == old_name else e.get("to"),
+                        "label": e.get("label", "")
+                    }
+                    for e in current_edges
+                ];
+                
+                here spawn rebuild_graph(username=self.username, new_nodes=new_nodes, new_edges=new_edges);
+                
+                report {
+                    "response": generate_friendly_response(self.context_from_user, emotional_state, "task_renamed", [new_name]),
+                    "emotional_state": emotional_state.state,
+                    "suggestions": [],
+                    "thinking": {
+                        "emotional": f"You seem {emotional_state.state} right now",
+                        "intent": "You're renaming a task",
+                        "tasks": f"Renamed: {old_name} → {new_name}",
+                        "pattern": ""
+                    }
+                };
+                return;
+            }
+        }
+
+        # Step 3: Extract task sequence if creating tasks
+        relationships = [];
+        extracted_tasks = None;
+        attachment_analysis = None;
+        convergence_intent = None;
+        edge_to_split = None;
+        
+        if intent_analysis.should_create_tasks {
+            extracted_tasks = extract_raw_task_names(
+                user_message=self.context_from_user,
+                conversation_context=intent_analysis.conversation_context,
+                existing_nodes=current_nodes
+            );
+            
+            # Handle insertion corrections: adjust attachment point
+            correction_type = intent_analysis.conversation_context.correction_type;
+            referring_to = intent_analysis.conversation_context.referring_to_task;
+            
+            if correction_type in ["insert_before", "insert_after", "insert_first"] {
+                print(f"[DEBUG] Insertion: {correction_type}, referring_to={referring_to}");
+                
+                if correction_type == "insert_before" and referring_to {
+                    # Find predecessor of referring_to task
+                    for edge in current_edges {
+                        if edge.get("to") == referring_to {
+                            last_task = edge.get("from");
+                            edge_to_split = edge;
+                            print(f"[DEBUG] Insert before {referring_to}: attach from {last_task}");
+                            break;
+                        }
+                    }
+                } elif correction_type == "insert_after" and referring_to {
+                    last_task = referring_to;
+                    edge_to_split = next((e for e in current_edges if e.get("from") == referring_to), None);
+                    print(f"[DEBUG] Insert after {referring_to}");
+                } elif correction_type == "insert_first" {
+                    last_task = "Start";
+                    print(f"[DEBUG] Insert first");
+                }
+            }
+            
             attachment_analysis = determine_attachment_points(
                 user_message=self.context_from_user,
                 last_task=last_task,
@@ -549,14 +690,22 @@ impl call_supervisor.call{
                 conversation_context=intent_analysis.conversation_context
             );
             
-            # 3.3: Detect convergence intent
+            # 3.3: Determine where tasks should attach (now with corrected last_task)
+            attachment_analysis = determine_attachment_points(
+                user_message=self.context_from_user,
+                last_task=last_task,
+                existing_nodes=current_nodes,
+                conversation_context=intent_analysis.conversation_context
+            );
+            
+            # 3.4: Detect convergence intent
             convergence_intent = detect_convergence_intent(
                 user_message=self.context_from_user,
                 last_task=last_task,
                 current_edges=current_edges
             );
             
-            # 3.4: Build relationships using all analyzed data
+            # 3.5: Build relationships using all analyzed data
             relationships = build_task_relationships(
                 user_message=self.context_from_user,
                 extracted_tasks=extracted_tasks,
@@ -632,6 +781,15 @@ impl call_supervisor.call{
                         to_task = edge.get("to", "");
                         edge_key = f"{from_task}->{to_task}";
                         edge_map[edge_key] = edge;
+                    }
+                    
+                    # INSERTION MODE: Remove the edge being split
+                    if edge_to_split {
+                        split_key = f"{edge_to_split.get('from', '')}->{edge_to_split.get('to', '')}";
+                        if split_key in edge_map {
+                            print(f"[DEBUG] Removing edge for insertion: {split_key}");
+                            del edge_map[split_key];
+                        }
                     }
                     
                     # Detect edges that should be removed (task insertion cases)
