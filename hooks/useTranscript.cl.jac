@@ -13,9 +13,9 @@ def:pub useTranscript() -> any {
     }
 
     # Add a transcript item by itemId (for realtime messages)
-    def addTranscriptItem(itemId: str, role: str, content: str) -> None {
-        newItem = {"itemId": itemId, "role": role, "content": content, "timestamp": Date.now()};
-        transcript = lambda prev: any -> any {
+    def addTranscriptItem(itemId: str, role: str, content: str, thinking: any = None) -> None {
+        newItem = {"itemId": itemId, "role": role, "content": content, "thinking": thinking, "timestamp": Date.now()};
+        setTranscript(lambda prev: any -> any {
             exists = prev.some(lambda item: any -> bool { return item.itemId == itemId; });
             if exists {
                 return prev;
@@ -25,11 +25,17 @@ def:pub useTranscript() -> any {
     }
 
     # Update a transcript item by itemId
-    def updateTranscriptItem(itemId: str, content: str) -> None {
-        transcript = lambda prev: any -> any {
+    def updateTranscriptItem(itemId: str, content: str, thinking: any = None) -> None {
+        setTranscript(lambda prev: any -> any {
             return prev.map(lambda item: any -> any {
                 if item.itemId == itemId {
-                    return {"itemId": item.itemId, "role": item.role, "content": content, "timestamp": item.timestamp};
+                    updatedItem = {"itemId": item.itemId, "role": item.role, "content": content, "timestamp": item.timestamp};
+                    # Add thinking data if provided or preserve existing
+                    thinkingValue = thinking if thinking != None else (item.thinking if item.thinking else None);
+                    if thinkingValue != None {
+                        updatedItem["thinking"] = thinkingValue;
+                    }
+                    return updatedItem;
                 }
                 return item;
             });
@@ -46,7 +52,13 @@ def:pub useTranscript() -> any {
                     if currentContent == "..." or currentContent == "" {
                         newContent = deltaText;
                     }
-                    return {"itemId": item.itemId, "role": item.role, "content": newContent, "timestamp": item.timestamp};
+                    updatedItem = {"itemId": item.itemId, "role": item.role, "content": newContent, "timestamp": item.timestamp};
+                    # Preserve thinking data if it exists
+                    thinkingValue = item.thinking if item.thinking else None;
+                    if thinkingValue != None {
+                        updatedItem["thinking"] = thinkingValue;
+                    }
+                    return updatedItem;
                 }
                 return item;
             });
