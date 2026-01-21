@@ -127,9 +127,15 @@ def:pub useMainApp() -> any {
             console.log("Calling supervisor with message:", message, "username:", username);
             result = await callSupervisor(message, [], username);
             console.log("Supervisor result:", result);
-
             if result.success {
-                updateTranscriptItem(assistantItemId, result.response);
+                # Pass thinking data if available
+                thinkingData = None;
+                if result.thinking {
+                    console.log("Found thinking data:", result.thinking);
+                    thinkingData = result.thinking;
+                }
+                console.log("Updating transcript with thinking:", thinkingData);
+                updateTranscriptItem(assistantItemId, result.response, thinkingData);
                 await refreshGraphState(username);
 
                 # Update suggestions if available
@@ -168,9 +174,15 @@ def:pub useMainApp() -> any {
             addTranscriptItem(assistantItemId, "assistant", "Thinking...");
 
             result = await callSupervisor(suggestionText, [], username);
-
             if result.success {
-                updateTranscriptItem(assistantItemId, result.response);
+                # Pass thinking data if available
+                thinkingData = None;
+                if result.thinking {
+                    console.log("Found thinking data from suggestion:", result.thinking);
+                    thinkingData = result.thinking;
+                }
+                console.log("Updating transcript with thinking:", thinkingData);
+                updateTranscriptItem(assistantItemId, result.response, thinkingData);
                 await refreshGraphState(username);
 
                 # Update suggestions if available
