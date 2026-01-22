@@ -150,11 +150,18 @@ async def:pub callSupervisor(context_from_user: str, conversation_history: list,
         if "suggestions" in response_data {
             suggestions = response_data["suggestions"];
         }
+        
+        # Extract thinking insights if available
+        thinking = None;
+        if "thinking" in response_data {
+            thinking = response_data["thinking"];
+        }
 
         return {
             "success": True,
             "response": next_resp,
             "suggestions": suggestions,
+            "thinking": thinking,
             "data": response_data
         };
     } except Exception as e {

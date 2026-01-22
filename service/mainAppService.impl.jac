@@ -73,19 +73,25 @@ impl update_task_graph.navigate_to_graph{
     visit user_graph;
 }
 
-impl update_task_graph.update_graph{
-    # Find or create the previous task node
+impl update_task_graph.update_graph {
+    # Find the most recent node with the previous task name
     prev_node = None;
-    # Search ALL TaskState nodes in the graph, not just those connected to user_graph_data
+    
+    # Search ALL TaskState nodes in the graph
     all_task_nodes = [-->](`?TaskState);
-    visited_for_search = {};
     nodes_to_check = all_task_nodes.copy();
+    all_nodes = [];
+    
+    # Collect all nodes via traversal
+    visited_ids = {};
     while len(nodes_to_check) > 0 {
         current = nodes_to_check.pop(0);
-        if current?.task_name {
-            node_id = current.task_name;
-            if node_id not in visited_for_search {
-                visited_for_search[node_id] = current;
+        if hasattr(current, 'task_name') {
+            # Use object id to track unique nodes (not task_name)
+            node_id = id(current);
+            if node_id not in visited_ids {
+                visited_ids[node_id] = True;
+                all_nodes.append(current);
                 # Get successors via TaskFlow edges
                 successors = [current-->](`?TaskState);
                 for succ in successors {
@@ -94,12 +100,23 @@ impl update_task_graph.update_graph{
             }
         }
     }
-    # Now search for the previous task in all found nodes
-    for node_name in visited_for_search {
-        nodex = visited_for_search[node_name];
-        if nodex.task_name == self.previous_task {
-            prev_node = nodex;
-            break;
+    
+    # Now find the MOST RECENT node with the previous task name
+    most_recent_time = None;
+    for node in all_nodes {
+        if node.task_name == self.previous_task {
+            # Get the created_at timestamp
+            if hasattr(node, 'created_at') and node.created_at {
+                if most_recent_time == None or node.created_at > most_recent_time {
+                    most_recent_time = node.created_at;
+                    prev_node = node;
+                }
+            } else {
+                # No timestamp (e.g., Start node) - use it if no other found
+                if prev_node == None {
+                    prev_node = node;
+                }
+            }
         }
     }
     # If previous task doesn't exist, create it (shouldn't happen normally, but safe fallback)
@@ -109,22 +126,13 @@ impl update_task_graph.update_graph{
             here ++> prev_node;
         }
     }
-    # Find or create the new task node
-    new_node = None;
-    for node_name in visited_for_search {
-        nodex = visited_for_search[node_name];
-        if nodex.task_name == self.task_name {
-            new_node = nodex;
-            break;
-        }
-    }
-    if new_node == None {
-        # Create new task node
-        new_node = TaskState(
-            task_name=self.task_name,
-            created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        );
-    }
+
+    # Always create a new task node (even if task name was used before)
+    new_node = TaskState(
+        task_name=self.task_name,
+        created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    );
+
     # Always create the edge to support branching
     prev_node +>: TaskFlow(label=self.edge_label) :+> new_node;
     here.last_task = self.task_name;
@@ -519,14 +527,51 @@ impl call_supervisor.call{
 
         # Step 3: Extract task sequence if creating tasks
         relationships = [];
+        extracted_tasks = None;
+        attachment_analysis = None;
+        convergence_intent = None;
+        
         if intent_analysis.should_create_tasks {
-            relationships = extract_task_sequence(
+            # Orchestrate the task extraction using decomposed functions
+            
+            # 3.1: Extract raw task names and generate unique names
+            extracted_tasks = extract_raw_task_names(
                 user_message=self.context_from_user,
                 conversation_context=intent_analysis.conversation_context,
+                existing_nodes=current_nodes
+            );
+            
+            # 3.2: Determine where tasks should attach
+            attachment_analysis = determine_attachment_points(
+                user_message=self.context_from_user,
+                last_task=last_task,
                 existing_nodes=current_nodes,
+                conversation_context=intent_analysis.conversation_context
+            );
+            
+            # 3.3: Detect convergence intent
+            convergence_intent = detect_convergence_intent(
+                user_message=self.context_from_user,
                 last_task=last_task,
                 current_edges=current_edges
             );
+            
+            # 3.4: Build relationships using all analyzed data
+            relationships = build_task_relationships(
+                user_message=self.context_from_user,
+                extracted_tasks=extracted_tasks,
+                attachment_analysis=attachment_analysis,
+                convergence_intent=convergence_intent,
+                conversation_context=intent_analysis.conversation_context,
+                current_edges=current_edges
+            );
+            
+            # Log what LLM returned
+            print(f"\n[DEBUG call_supervisor] LLM returned {len(relationships)} relationships:");
+            for rel in relationships {
+                print(f"  - from_task='{rel.from_task}' to_task='{rel.to_task}' label='{rel.edge_label}' order={rel.sequence_order}");
+            }
+            
             # Execute the graph updates
             if intent_analysis.conversation_context.needs_graph_rebuild
             and len(current_nodes) > 1 {
@@ -551,35 +596,67 @@ impl call_supervisor.call{
                         added_nodes[node] = True;
                     }
                 }
-                # Start with existing edges
+                
+                # Build edge map - strategy depends on whether tasks are being moved
                 edge_map = {};
-                for edge in current_edges {
-                    from_task = edge.get("from", "");
-                    to_task = edge.get("to", "");
-                    edge_key = f"{from_task}->{to_task}";
-                    edge_map[edge_key] = edge;
-                }
-                # Detect edges that should be removed (task insertion cases)
-                # If we're adding A->B->C, we should remove A->C if it exists
-                edges_to_remove = {};
-                for rel in relationships {
-                    # Check if this relationship represents an insertion
-                    # Look for pattern: if we have A->B and B->C, remove A->C
-                    for other_rel in relationships {
-                        if rel.to_task == other_rel.from_task {
-                            # Found chain: rel.from_task -> rel.to_task -> other_rel.to_task
-                            # Remove direct edge from rel.from_task -> other_rel.to_task if it exists
-                            direct_edge_key = f"{rel.from_task}->{other_rel.to_task}";
-                            if direct_edge_key in edge_map {
-                                edges_to_remove[direct_edge_key] = True;
+                tasks_to_move = intent_analysis.conversation_context.tasks_to_move if hasattr(intent_analysis.conversation_context, 'tasks_to_move') else [];
+                
+                if len(tasks_to_move) > 0 {
+                    # REORDERING MODE: Remove ALL edges involving moved tasks
+                    print(f"\n[DEBUG] Reordering mode: tasks_to_move = {tasks_to_move}");
+                    
+                    # Start with existing edges, but exclude any involving moved tasks
+                    for edge in current_edges {
+                        from_task = edge.get("from", "");
+                        to_task = edge.get("to", "");
+                        
+                        # Skip edges that involve any of the tasks being moved
+                        involves_moved_task = False;
+                        for moved_task in tasks_to_move {
+                            if from_task == moved_task or to_task == moved_task {
+                                involves_moved_task = True;
+                                print(f"[DEBUG] Removing old edge: {from_task} -> {to_task} (involves {moved_task})");
+                                break;
+                            }
+                        }
+                        
+                        if not involves_moved_task {
+                            edge_key = f"{from_task}->{to_task}";
+                            edge_map[edge_key] = edge;
+                        }
+                    }
+                } else {
+                    # NORMAL MODE: Start with all existing edges
+                    for edge in current_edges {
+                        from_task = edge.get("from", "");
+                        to_task = edge.get("to", "");
+                        edge_key = f"{from_task}->{to_task}";
+                        edge_map[edge_key] = edge;
+                    }
+                    
+                    # Detect edges that should be removed (task insertion cases)
+                    # If we're adding A->B->C, we should remove A->C if it exists
+                    edges_to_remove = {};
+                    for rel in relationships {
+                        # Check if this relationship represents an insertion
+                        # Look for pattern: if we have A->B and B->C, remove A->C
+                        for other_rel in relationships {
+                            if rel.to_task == other_rel.from_task {
+                                # Found chain: rel.from_task -> rel.to_task -> other_rel.to_task
+                                # Remove direct edge from rel.from_task -> other_rel.to_task if it exists
+                                direct_edge_key = f"{rel.from_task}->{other_rel.to_task}";
+                                if direct_edge_key in edge_map {
+                                    edges_to_remove[direct_edge_key] = True;
+                                }
                             }
                         }
                     }
-                }
-                # Remove the identified edges
-                for edge_key in edges_to_remove {
-                    if edge_key in edge_map {
-                        del edge_map[edge_key] ;
+                    
+                    # Remove the identified edges
+                    for edge_key in edges_to_remove {
+                        if edge_key in edge_map {
+                            del edge_map[edge_key];
+                        }
                     }
                 }
                 # Add/override with new relationships
@@ -625,8 +702,18 @@ impl call_supervisor.call{
                 }
             }
         }
-
-        # Step 4: Generate friendly response
+        
+        # Step 4: Generate thinking summary for transparency
+        thinking_summary = generate_thinking_summary(
+            user_message=self.context_from_user,
+            emotional_state=emotional_state,
+            intent_analysis=intent_analysis,
+            extracted_tasks=extracted_tasks,
+            attachment_analysis=attachment_analysis,
+            convergence_intent=convergence_intent
+        );
+        
+        # Step 5: Generate friendly response
         task_names = [];
         for rel in relationships {
             if rel.to_task not in task_names {
@@ -642,8 +729,8 @@ impl call_supervisor.call{
             else "none",
             task_names=task_names
         );
-
-        # Step 5: Generate suggestions for next actions
+        
+        # Step 6: Generate suggestions for next actions
         suggestions = [];
         try {
             # Get recent tasks (last 3 tasks from current_nodes, excluding Start)
@@ -667,12 +754,21 @@ impl call_supervisor.call{
             print(f"Failed to generate suggestions: {str(e)}");
             suggestions = [];
         }
-
+        
+        # Build thinking insights for frontend (convert to dict)
+        thinking = {
+            "emotional": thinking_summary.emotional_insight if thinking_summary.emotional_insight else "",
+            "intent": thinking_summary.intent_insight if thinking_summary.intent_insight else "",
+            "tasks": thinking_summary.task_insight if thinking_summary.task_insight else "",
+            "pattern": thinking_summary.pattern_insight if thinking_summary.pattern_insight else ""
+        };
+        
         report {
             "response": response,
             "emotional_state": emotional_state.state,
-            "suggestions": suggestions
-        } ;
+            "suggestions": suggestions,
+            "thinking": thinking
+        };
     } except Exception as e {
         report {"error": "Supervisor error", "details": str(e)} ;
     }
