@@ -56,11 +56,15 @@ jobs:
           jac destroy main.jac || echo "No existing deployment to destroy"
           sleep 10
         continue-on-error: true
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
       # Deploy using jac-scale
       - name: Deploy Algo with jac-scale
         run: |
           jac start main.jac --scale
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
       # Get deployment status
       - name: Verify deployment
