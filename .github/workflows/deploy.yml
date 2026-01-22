@@ -50,6 +50,13 @@ jobs:
           pip install --upgrade pip
           pip install jaclang jac-client jac-scale byllm
 
+      # Destroy existing deployment
+      - name: Destroy existing deployment
+        run: |
+          jac destroy main.jac || echo "No existing deployment to destroy"
+          sleep 10
+        continue-on-error: true
+
       # Deploy using jac-scale
       - name: Deploy Algo with jac-scale
         run: |
