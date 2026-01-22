@@ -28,7 +28,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4.2.0
         with:
           aws-region: us-east-2
-          role-to-assume: arn:aws:iam::776241927220:role/GitHubActionsSharedECRRole
+          role-to-assume: arn:aws:iam::776241927220:role/GitHubActionsAlgoDeployRole
           role-session-name: GitHubActions-Algo
           audience: sts.amazonaws.com
 
