@@ -1,0 +1,80 @@
+name: Deploy Algo with jac-scale
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy-algo:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      # Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Configure AWS credentials using OIDC
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4.2.0
+        with:
+          aws-region: us-east-2
+          role-to-assume: arn:aws:iam::776241927220:role/GitHubActionsSharedECRRole
+          role-session-name: GitHubActions-Algo
+          audience: sts.amazonaws.com
+
+      # Update kubeconfig to connect to EKS cluster
+      - name: Update kubeconfig for EKS
+        run: |
+          aws eks update-kubeconfig --region us-east-2 --name jaseci-cluster
+          kubectl config current-context
+
+      # Set up Python
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Install required packages
+      - name: Install Jaseci packages
+        run: |
+          pip install --upgrade pip
+          pip install jaclang jac-client jac-scale
+
+      # Deploy using jac-scale
+      - name: Deploy Algo with jac-scale
+        run: |
+          jac start main.jac --scale
+
+      # Get deployment status
+      - name: Verify deployment
+        run: |
+          echo "Checking deployment status..."
+          kubectl get deployments -n algo-test
+          kubectl get services -n algo-test
+          kubectl get pods -n algo-test
+
+      # Output deployment summary
+      - name: Deployment Summary
+        if: always()
+        run: |
+          echo "## Algo Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "### Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **App Name**: algo-test" >> $GITHUB_STEP_SUMMARY
+          echo "- **Namespace**: algo-test" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cluster**: jaseci-cluster" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: us-east-2" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployment Status" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get all -n algo-test 2>&1 >> $GITHUB_STEP_SUMMARY || echo "Unable to fetch deployment status" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
