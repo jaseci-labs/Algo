@@ -28,7 +28,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4.2.0
         with:
           aws-region: us-east-2
-          role-to-assume: arn:aws:iam::776241927220:role/GitHubActionsAlgoDeployRole
+          role-to-assume: arn:aws:iam::776241927220:role/GitHubActionsJaseciDeployRole
           role-session-name: GitHubActions-Algo
           audience: sts.amazonaws.com
 
@@ -48,7 +48,7 @@ jobs:
       - name: Install Jaseci packages
         run: |
           pip install --upgrade pip
-          pip install jaclang jac-client jac-scale
+          pip install jaclang jac-client jac-scale byllm
 
       # Deploy using jac-scale
       - name: Deploy Algo with jac-scale
