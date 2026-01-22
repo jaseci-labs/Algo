@@ -18,16 +18,11 @@ def detect_emotional_state(
 ) -> EmotionalState by llm();
 
 sem detect_emotional_state = """
-Detect emotional state from message:
-- stressed: frustration, overwhelm
-- excited: enthusiasm, accomplishments  
-- indecisive: uncertainty, questions
-- fatigued: tired, exhausted
-- neutral: normal tone
+Detect emotional state: stressed | excited | indecisive | fatigued | neutral
 
-state = "User's current emotional state: stressed, excited, indecisive, fatigued, or neutral";
-confidence = "Confidence score between 0.0 and 1.0";
-reasoning = "Brief explanation of why this state was detected";
+state = "Current emotional state";
+confidence = "Score 0.0-1.0";
+reasoning = "Brief detection rationale";
 """;
 
 """Generate a natural, conversational response matching user's emotional state"""
@@ -39,11 +34,8 @@ def generate_friendly_response(
 ) -> str by llm();
 
 sem generate_friendly_response = """
-Generate warm, natural response as Algo:
-
-Match emotional_state tone (stressed→supportive, excited→enthusiastic, etc.)
-Acknowledge action naturally ("Got it!" not "Task added")
-Brief 1-3 sentences, use contractions, no tech jargon.
+Generate warm response matching emotional_state tone.
+Natural acknowledgment ("Got it!" not "Task added"), 1-3 sentences, contractions, no jargon.
 """;
 
 """Conversation intent classification"""
@@ -81,39 +73,27 @@ def analyze_conversation_intent(
 ) -> IntentAnalysis by llm();
 
 sem analyze_conversation_intent = """
-Analyze user's message and recent conversation history to classify their intent.
-Populate IntentAnalysis with appropriate values based on semantic definitions.
+Classify user intent from message and conversation history.
 
-should_create_tasks = "TRUE if user committed to action OR is correcting/reordering existing tasks. 
-FALSE only for questions/thinking/uncertain. CRITICAL: Corrections, reorderings and insertions NEED graph updates, 
-so should_create_tasks MUST be True";
+should_create_tasks = "TRUE if user mentions ANY action/task (even casual ones like 'check messages', 'grab lunch', 'take a walk'). 
+Only FALSE for explicit questions ('what should I do?', 'can you help?') or pure uncertainty ('maybe', 'not sure', 'wondering')";
 
-conversation_context = "Context about what user is doing: correcting, clarifying, committing new";
-Here is what you should know about the conversation context:
-ConversationContext.intent = "COMMIT_ACTION: new task commitment | CORRECT_PREVIOUS: 'actually', 'before', 
-'first' corrections | CLARIFY_PREVIOUS: 'no i meant', 'after X' clarifications | ASK_QUESTION: questions | 
-THINK_ALOUD: wondering/maybe";
-ConversationContext.referring_to_task = "Which existing task is user referring to? 
-EXAMPLES:
-- 'rename WatchNetflix to WatchMovie' → 'WatchNetflix' (task being renamed)
-- 'do X before Y' → 'Y' (reference point)
-- 'watch movie' when graph has 'WatchSomeNetflix' → 'WatchSomeNetflix' (semantic match)
-Empty if none, or EXACT task name from existing_nodes";
-ConversationContext.correction_type = "For CORRECT_PREVIOUS: 
-- 'rename': User wants to RENAME/REPHRASE an existing task keeping same intent (e.g., 'rename X to Y', 'actually call it Z', 'change WatchNetflix to WatchTheHalfOfIt')
-  CRITICAL: Use 'rename' when user is just changing HOW a task is named, not WHAT the task is
-- 'insert_before': NEW task inserted before existing task (e.g., 'wash face before gym')
-- 'insert_after': NEW task inserted after existing task  
-- 'insert_first': NEW task at the beginning ('first' keyword)
-- 'reorder': EXISTING task being repositioned to different point in sequence
-- 'replace': Replace existing task with COMPLETELY DIFFERENT task (e.g., 'watch movie' becomes 'go for run') | For CLARIFY_PREVIOUS: 'attachment_point', 'sequence_order' | Empty otherwise";
-ConversationContext.needs_graph_rebuild = "TRUE for CORRECT_PREVIOUS or CLARIFY_PREVIOUS with existing tasks, FALSE for COMMIT_ACTION on empty/simple graphs";
-ConversationContext.is_insertion = "TRUE if user wants to insert a new task BETWEEN existing tasks 
-ConversationContext.tasks_to_move = "List of existing task names that are being repositioned/reordered. Example: user says 'have coffee first' when HaveCoffee already exists → ['HaveCoffee']";
+ConversationContext.intent = "COMMIT_ACTION: ANY action mentioned (default unless clearly asking/uncertain) | CORRECT_PREVIOUS: 'actually', 'before', 'first' | CLARIFY_PREVIOUS: 'no i meant', 'after X' | ASK_QUESTION: explicit questions | THINK_ALOUD: 'maybe', 'wondering', 'not sure'";
 
-confidence = "Confidence 0.0-1.0 in the intent classification";
+ConversationContext.referring_to_task = "EXACT task name from existing_nodes user is referencing. Examples: 'rename X to Y'→'X', 'before Y'→'Y', 'watch movie' matching 'WatchSomeNetflix'→'WatchSomeNetflix'. Empty if none";
 
-Check last 2-3 conversation turns for context.
+ConversationContext.correction_type = "CORRECT_PREVIOUS types:
+- rename: Change task NAME only (same activity, different label) - 'actually call it X'
+- insert_before/insert_after/insert_first: NEW task between/before existing
+- reorder: Move EXISTING task to different position
+- replace: Swap with COMPLETELY DIFFERENT task
+CLARIFY_PREVIOUS: 'attachment_point' | 'sequence_order' | Empty otherwise";
+
+ConversationContext.needs_graph_rebuild = "TRUE for corrections/clarifications with existing tasks, FALSE for simple additions";
+ConversationContext.is_insertion = "TRUE if inserting task BETWEEN existing tasks";
+ConversationContext.tasks_to_move = "List of existing task names being repositioned (e.g., ['HaveCoffee'])";
+
+confidence = "Score 0.0-1.0";
 """;
 
 """Maps raw task name to unique task name with count"""
@@ -149,24 +129,18 @@ CRITICAL: Convert user's natural language to proper CamelCase:
 - "grab some buns" → "GrabSomeBuns"
 Remove articles (a, an, the) and convert spaces to CamelCase.
 
-raw_names = "Base task names in CamelCase extracted from message (e.g., CheckEmail, MakeCoffee). 
-MUST have conversational prefixes removed AND be converted from natural language to CamelCase";
+raw_names = "Base CamelCase task names from message";
 
-unique_names = "NEW unique task names to create. 
+unique_names = "Task names based on correction_type:
 
-CRITICAL FOR RENAME (correction_type='rename'):
-- IGNORE existing_nodes completely
-- Extract the NEW task name from user's message and convert to CamelCase
-- Example: User says 'grab some buns', existing has 'GrabSomeBreakfast' → return 'GrabSomeBuns' NOT 'GrabSomeBreakfast'
-- Example: User says 'checking whatsapp', existing has 'CheckMyPhone' → return 'CheckingWhatsapp' NOT 'CheckMyPhone'
+CRITICAL - RENAME OPERATIONS (correction_type='rename'):
+- DO NOT look at existing_nodes at all
+- Extract the NEW name from user_message only
+- Convert to CamelCase
 
-CORRECTION/INSERTION LOGIC (for insert_before, insert_after): 
-- If correction_type='insert_before' OR is_insertion=True OR user says 'before', 'after', 'instead'
-- Then use existing task names WITHOUT numbers (reusing existing tasks)
-
-NORMAL LOGIC (for new tasks):
-- Append numbers for duplicates if task already exists
-- Formula: if count>0 then raw_name+str(count+1) else raw_name";
+OTHER OPERATIONS:
+- insert_before/after: Reuse existing names WITHOUT numbers
+- normal: Append numbers for duplicates (count>0 → name+str(count+1))";
 
 name_mappings = "List of {raw: str, unique: str, count: int} showing transformation for each task";
 Here is what you should know about name mappings:
@@ -196,29 +170,16 @@ def determine_attachment_points(
 ) -> AttachmentPointAnalysis by llm();
 
 sem determine_attachment_points = """
-Analyze where new tasks should connect in the graph.
+Determine where new tasks connect.
 
-attachment_nodes = "List of node(s) to attach from. Usually [last_task] or multiple for convergence";
-is_convergent = "TRUE if attaching from multiple nodes (convergent edge)";
-reasoning = "Explanation of why these attachment points were chosen";
-user_specified = "TRUE if user explicitly named a task (e.g., 'after X'), FALSE if using default last_task";
+attachment_nodes = "Node(s) to attach from: [last_task] default, multiple for convergence, or task BEFORE referenced for 'before X' patterns";
+is_convergent = "TRUE if multiple attachment nodes";
+reasoning = "Brief explanation";
+user_specified = "TRUE if user named specific task ('after X')";
 
-INSERTION PATTERN (user says "BEFORE X"):
-Example: "wash face before heading to gym" when graph has CheckMessages->HeadToGym
-- Find the task BEFORE the referenced task in existing graph
-- attachment_nodes = [task that currently connects TO the referenced task]
-- Example result: attachment_nodes = ["CheckMessages"] (the task before HeadToGym)
-- This allows creating: CheckMessages->WashFace->HeadToGym
-
-If conversation_context.needs_graph_rebuild = True:
-   - Return empty attachment_nodes (will rebuild full graph)
-   - reasoning explains the correction/clarification
-
-Otherwise:
-- Default: attachment_nodes = [last_task]
-- User-specified: Parse user_message for "after X", "before Y", "from Z"
-
-Always provide clear reasoning for transparency.
+If needs_graph_rebuild=True: return empty attachment_nodes.
+For 'before X': find predecessor of X in current edges.
+Default: [last_task] unless user specifies 'after X', 'before Y', 'from Z'.
 """;
 
 """Detection of convergence patterns in user intent"""
@@ -237,14 +198,12 @@ def detect_convergence_intent(
 ) -> ConvergenceIntent by llm();
 
 sem detect_convergence_intent = """
-Detect convergence patterns from user message.
+Detect if parallel branches should merge.
 
-should_converge = "TRUE if user intends parallel branches to merge";
-source_nodes = "List of nodes to converge from (leaf nodes)";
-convergence_type = "explicit (keywords like 'either way') | implicit (last_task has '|' and no specific task named) | none (no convergence)";
-trigger_phrase = "The phrase that triggered convergence detection";
-
-Extract source_nodes by splitting last_task by "|" if convergence detected.
+should_converge = "TRUE if merging branches";
+source_nodes = "Leaf nodes to converge from (split last_task by '|')";
+convergence_type = "explicit ('either way') | implicit (last_task has '|') | none";
+trigger_phrase = "Detection trigger phrase";
 """;
 
 """Represents a task connection type in the graph"""

@@ -43,31 +43,18 @@ impl get_session_token.fetch{
     }
 }
 
-#WALKER: init_user_graph
+# WALKER: init_user_graph
 impl init_user_graph.initialize{
     visit [-->](`?user_graph_data) else {
-        graph_cont = here ++> user_graph_data();
-        start_node = TaskState(task_name="Start");
-        graph_cont ++> start_node;
+        (here ++> user_graph_data()) ++> TaskState(task_name="Start");
     }
-    visit [-->](`?user_routines) else {
-        routine_cont = here ++> user_routines();
-    }
+    visit [-->](`?user_routines) else { here ++> user_routines(); }
 }
 
 # WALKER: update_task_graph
 impl update_task_graph.navigate_to_graph{
-    # Find or create user-specific graph based on username
-    all_graphs = [-->](`?user_graph_data);
-    user_graph = None;
-    for graph in all_graphs {
-        if graph?.username and graph.username == self.username {
-            user_graph = graph;
-            break;
-        }
-    }
-    if user_graph == None {
-        # Create new graph for this user
+    user_graph = find_user_graph(here, self.username);
+    if not user_graph {
         user_graph = here ++> user_graph_data(username=self.username);
     }
     visit user_graph;
@@ -132,50 +119,29 @@ impl update_task_graph.update_graph {
         task_name=self.task_name,
         created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     );
+    
+    # CRITICAL: Attach new node to user_graph_data for bounded traversal
+    here ++> new_node;
 
-    # Always create the edge to support branching
+    # Create edge and update last task
     prev_node +>: TaskFlow(label=self.edge_label) :+> new_node;
     here.last_task = self.task_name;
-    # Use printgraph() to get graph structure, then apply custom styling
-    all_task_nodes = [-->](`?TaskState);
-    start_node = None;
-    for node in all_task_nodes {
-        if node?.task_name and node.task_name == "Start" {
-            start_node = node;
-            break;
-        }
-    }
-    node_list = [];
-    edge_list = [];
-    if start_node {
-        dot_output = printgraph(node=start_node);
-        result = parse_printgraph_output(dot_output);
-        node_list = result[0];
-        edge_list = result[1];
-    }
-    # Generate styled DOT code
-    dot_code = generate_dot_code_from_lists(node_list, edge_list);
+    
+    # Get graph structure
+    graph_data = get_graph_structure(here);
     report {
         "success": True,
         "message": f"Added task '{self.task_name}' connected from '{self.previous_task}'",
-        "dotCode": dot_code,
-        "nodes": node_list,
-        "edges": edge_list
+        "dotCode": graph_data[2],
+        "nodes": graph_data[0],
+        "edges": graph_data[1]
     } ;
 }
 
 # WALKER: get_task_graph
 impl get_task_graph.navigate_to_graph{
-    all_graphs = [-->](`?user_graph_data);
-    user_graph = None;
-    for graph in all_graphs {
-        if graph?.username and graph.username == self.username {
-            user_graph = graph;
-            break;
-        }
-    }
-    if user_graph == None {
-        # No graph yet, return empty
+    user_graph = find_user_graph(here, self.username);
+    if not user_graph {
         report {"nodes": [], "edges": [], "dotCode": "", "lastTask": "Start"} ;
         disengage;
     }
@@ -183,34 +149,17 @@ impl get_task_graph.navigate_to_graph{
 }
 
 impl get_task_graph.get_graph{
-    # Use printgraph() to get graph structure, then apply custom styling
-    all_task_nodes = [-->](`?TaskState);
-    start_node = None;
-    for node in all_task_nodes {
-        if node?.task_name and node.task_name == "Start" {
-            start_node = node;
-            break;
-        }
-    }
-    node_list = [];
-    edge_list = [];
-    if start_node {
-        dot_output = printgraph(node=start_node);
-        result = parse_printgraph_output(dot_output);
-        node_list = result[0];
-        edge_list = result[1];
-    }
-    # Generate styled DOT code
+    # Use bounded traversal to prevent cross-user contamination
+    result = get_user_graph_structure(here);
+    node_list = result[0];
+    edge_list = result[1];
     dot_code = generate_dot_code_from_lists(node_list, edge_list);
-    # Find all leaf nodes (tasks with no outgoing edges)
+    
     leaf_nodes = find_leaf_nodes(edge_list, node_list);
-    # Use the stored last_task as fallback, or first leaf node
-    last_task_to_report = here.last_task;
-    if len(leaf_nodes) > 0 {
-        last_task_to_report = leaf_nodes[0]
-        if len(leaf_nodes) == 1
-        else "|".join(leaf_nodes);
-    }
+    last_task_to_report = (leaf_nodes[0] if len(leaf_nodes) == 1 
+                           else "|".join(leaf_nodes) if leaf_nodes 
+                           else here.last_task);
+    
     report {
         "nodes": node_list,
         "edges": edge_list,
@@ -221,17 +170,8 @@ impl get_task_graph.get_graph{
 
 # WALKER: clear_graph
 impl clear_graph.navigate_to_graph{
-    # Find user-specific graph
-    print(f"DEBUG CLEAR_GRAPH: Looking for graph for user: {self.username}");
-    all_graphs = [-->](`?user_graph_data);
-    user_graph = None;
-    for graph in all_graphs {
-        if graph?.username and graph.username == self.username {
-            user_graph = graph;
-            break;
-        }
-    }
-    if user_graph == None {
+    user_graph = find_user_graph(here, self.username);
+    if not user_graph {
         report {"success": True, "message": "No graph to clear"} ;
         disengage;
     }
@@ -239,32 +179,16 @@ impl clear_graph.navigate_to_graph{
 }
 
 impl clear_graph.clear_data{
-    # Delete all TaskState nodes connected to this graph
-    all_task_nodes = [-->](`?TaskState);
-    for node in all_task_nodes {
-        # Delete the node
-        del node ;
-    }
-    # Recreate the Start node
-    start_node = TaskState(task_name="Start");
-    here ++> start_node;
-    # Reset last task
+    for node in [-->](`?TaskState) { del node; }
+    here ++> TaskState(task_name="Start");
     here.last_task = "Start";
     report {"success": True, "message": "Graph cleared successfully"} ;
 }
 
 # WALKER: save_routine
 impl save_routine.navigate_to_graph{
-    # Find user-specific graph
-    all_graphs = [-->](`?user_graph_data);
-    user_graph = None;
-    for graph in all_graphs {
-        if graph?.username and graph.username == self.username {
-            user_graph = graph;
-            break;
-        }
-    }
-    if user_graph == None {
+    user_graph = find_user_graph(here, self.username);
+    if not user_graph {
         report {"error": "No graph to save", "success": False} ;
         disengage;
     }
@@ -272,31 +196,10 @@ impl save_routine.navigate_to_graph{
 }
 
 impl save_routine.save_routine_data{
-    # Store routine directly in the user_graph_data node
-
-    # Initialize saved_routines dict if needed
-    if not here?.saved_routines or here.saved_routines == None {
-        here.saved_routines = {};
-    }
-    # Get current timestamp
+    if not here?.saved_routines { here.saved_routines = {}; }
+    
     timestamp = str(time());
-    # Use printgraph() to get graph structure (same approach as other walkers)
-    all_task_nodes = [-->](`?TaskState);
-    start_node = None;
-    for node in all_task_nodes {
-        if node?.task_name and node.task_name == "Start" {
-            start_node = node;
-            break;
-        }
-    }
-    node_list = [];
-    edge_list = [];
-    if start_node {
-        dot_output = printgraph(node=start_node);
-        result = parse_printgraph_output(dot_output);
-        node_list = result[0];
-        edge_list = result[1];
-    }
+    graph_data = get_graph_structure(here);
     # Save the routine as dict for compatibility
     here.saved_routines[self.routine_name] = {
         "nodes": node_list.copy(),
@@ -353,16 +256,8 @@ impl load_past_routines.load_routines{
 
 # WALKER: reset_session
 impl reset_session.navigate_to_graph{
-    # Find user-specific graph
-    all_graphs = [-->](`?user_graph_data);
-    user_graph = None;
-    for graph in all_graphs {
-        if graph?.username and graph.username == self.username {
-            user_graph = graph;
-            break;
-        }
-    }
-    if user_graph == None {
+    user_graph = find_user_graph(here, self.username);
+    if not user_graph {
         report {"success": True, "message": "Session already empty."} ;
         disengage;
     }
@@ -370,32 +265,16 @@ impl reset_session.navigate_to_graph{
 }
 
 impl reset_session.reset_graph{
-    # Delete all TaskState nodes
-    all_task_nodes = [-->](`?TaskState);
-    for node in all_task_nodes {
-        del node ;
-    }
-    # Recreate the Start node
-    start_node = TaskState(task_name="Start");
-    here ++> start_node;
-    # Reset last task
+    for node in [-->](`?TaskState) { del node; }
+    here ++> TaskState(task_name="Start");
     here.last_task = "Start";
     report {"success": True, "message": "Session reset. Ready for a new conversation."} ;
 }
 
 # WALKER: rebuild_graph
 impl rebuild_graph.navigate_to_graph{
-    # Find user-specific graph
-    all_graphs = [-->](`?user_graph_data);
-    user_graph = None;
-    for graph in all_graphs {
-        if graph?.username and graph.username == self.username {
-            user_graph = graph;
-            break;
-        }
-    }
-    if user_graph == None {
-        # Create new graph if doesn't exist
+    user_graph = find_user_graph(here, self.username);
+    if not user_graph {
         user_graph = here ++> user_graph_data(username=self.username);
     }
     visit user_graph;
@@ -417,10 +296,8 @@ impl rebuild_graph.rebuild{
         );
         node_map[node_name] = new_task;
 
-        # ONLY connect Start node to user_graph_data
-        if node_name == "Start" {
-            here ++> new_task;
-        }
+        # CRITICAL: Attach ALL nodes to user_graph_data for bounded traversal
+        here ++> new_task;
     }
     # Create all edges
     for edge_spec in self.new_edges {
@@ -454,16 +331,8 @@ impl rebuild_graph.rebuild{
 
 # WALKER: rename_task
 impl rename_task.navigate_to_graph{
-    # Find user-specific graph
-    all_graphs = [-->](`?user_graph_data);
-    user_graph = None;
-    for graph in all_graphs {
-        if graph?.username and graph.username == self.username {
-            user_graph = graph;
-            break;
-        }
-    }
-    if user_graph == None {
+    user_graph = find_user_graph(here, self.username);
+    if not user_graph {
         report {"success": False, "error": "No graph found to rename tasks in"} ;
         disengage;
     }
@@ -471,7 +340,6 @@ impl rename_task.navigate_to_graph{
 }
 
 impl rename_task.rename{
-    # Find the node with old name
     all_task_nodes = [-->](`?TaskState);
     target_node = None;
     
@@ -482,45 +350,22 @@ impl rename_task.rename{
         }
     }
     
-    if target_node == None {
+    if not target_node {
         report {"success": False, "error": f"Task '{self.old_name}' not found in graph"} ;
         return;
     }
     
-    # Rename the node
     target_node.task_name = self.new_name;
+    if here.last_task == self.old_name { here.last_task = self.new_name; }
     
-    # Update last_task if it matches the old name
-    if here.last_task == self.old_name {
-        here.last_task = self.new_name;
-    }
-    
-    # Get updated graph
-    start_node = None;
-    for node in all_task_nodes {
-        if node?.task_name and node.task_name == "Start" {
-            start_node = node;
-            break;
-        }
-    }
-    
-    node_list = [];
-    edge_list = [];
-    if start_node {
-        dot_output = printgraph(node=start_node);
-        result = parse_printgraph_output(dot_output);
-        node_list = result[0];
-        edge_list = result[1];
-    }
-    
-    dot_code = generate_dot_code_from_lists(node_list, edge_list);
+    graph_data = get_graph_structure(here);
     
     report {
         "success": True,
         "message": f"Renamed '{self.old_name}' to '{self.new_name}'",
-        "dotCode": dot_code,
-        "nodes": node_list,
-        "edges": edge_list
+        "dotCode": graph_data[2],
+        "nodes": graph_data[0],
+        "edges": graph_data[1]
     } ;
 }
 
@@ -528,55 +373,52 @@ impl rename_task.rename{
 impl call_supervisor.call{
     try {
         api_key = getenv("OPENAI_API_KEY");
-
         if not api_key {
             report {"error": "OPENAI_API_KEY not set"} ;
             return;
         }
 
-        # Load user's current graph state
+        # Load current graph state
         current_nodes = [];
         current_edges = [];
         last_task = "Start";
-        leaf_nodes = [];  # Track all leaf nodes for convergence detection
-
-        # Find user-specific graph data
-        all_graphs = [-->](`?user_graph_data);
-        user_graph = None;
-
-        for graph in all_graphs {
-            if graph?.username and graph.username == self.username {
-                user_graph = graph;
-                last_task = graph?.last_task or "Start";
-                # Find Start node (only node directly connected to graph)
-                all_task_nodes = [graph-->](`?TaskState);
-                start_node = None;
-                for node in all_task_nodes {
-                    if node?.task_name and node.task_name == "Start" {
-                        start_node = node;
-                        break;
-                    }
-                }
-                # Use printgraph() to get graph structure
-                if start_node != None {
-                    dot_output = printgraph(node=start_node);
-                    result = parse_printgraph_output(dot_output);
-                    current_nodes = result[0];
-                    current_edges = result[1];
-                    # Find all leaf nodes for convergence detection
-                    leaf_nodes = find_leaf_nodes(current_edges, current_nodes);
-                    # If there are multiple leaf nodes, use them for last_task
-                    if len(leaf_nodes) > 1 {
-                        last_task = "|".join(leaf_nodes);
-                    } elif len(leaf_nodes) == 1 {
-                        last_task = leaf_nodes[0];
-                    }
+        
+        user_graph = find_user_graph(here, self.username);
+        if not user_graph {
+            print(f"[DEBUG] No user graph found for {self.username}, creating new graph...");
+            user_graph = here ++> user_graph_data(username=self.username);
+            user_graph ++> TaskState(task_name="Start");
+            print(f"[DEBUG] Created user graph with Start node");
+        }
+        
+        if user_graph {
+            last_task = user_graph?.last_task or "Start";
+            start_node = find_start_node(user_graph);
+            
+            if start_node {
+                # Use bounded traversal to avoid crossing user boundaries
+                graph_data = get_user_graph_structure(user_graph);
+                current_nodes = graph_data[0];
+                current_edges = graph_data[1];
+                
+                print(f"[DEBUG] User {self.username} graph: nodes={current_nodes}, edges count={len(current_edges)}");
+                
+                # Find leaf nodes for convergence detection
+                leaf_nodes = find_leaf_nodes(current_edges, current_nodes);
+                if len(leaf_nodes) > 1 {
+                    last_task = "|".join(leaf_nodes);
+                } elif len(leaf_nodes) == 1 {
+                    last_task = leaf_nodes[0];
                 } else {
                     # No Start node found, empty graph
                     current_nodes = ["Start"];
                 }
-                break;
+            } else {
+                # No Start node found, initialize
+                current_nodes = ["Start"];
             }
+        } else {
+            current_nodes = ["Start"];
         }
 
         # ============================================
@@ -1103,4 +945,108 @@ def find_leaf_nodes(
     }
 
     return leaf_nodes;
+}
+
+
+"""Find user's graph or return None"""
+def find_user_graph(root_node: node, username: str) {
+    all_graphs = [root_node-->](`?user_graph_data);
+    print(f"[DEBUG find_user_graph] Found {len(all_graphs)} total user graphs");
+    for graph in all_graphs {
+        graph_username = graph?.username if graph else None;
+        print(f"[DEBUG find_user_graph] Checking graph with username: {graph_username}");
+        if graph?.username and graph.username == username {
+            print(f"[DEBUG find_user_graph] Match found for user: {username}");
+            return graph;
+        }
+    }
+    print(f"[DEBUG find_user_graph] No match found for user: {username}");
+    return None;
+}
+
+"""Find Start node in graph - only direct children of user_graph"""
+def find_start_node(graph_node: node) {
+    # Only get TaskState nodes directly connected to this graph (one hop)
+    direct_task_nodes = [graph_node-->](`?TaskState);
+    for node in direct_task_nodes {
+        if node?.task_name and node.task_name == "Start" {
+            return node;
+        }
+    }
+    return None;
+}
+
+"""Get graph structure as node/edge lists and DOT code"""
+def get_graph_structure(graph_node: node) {
+    start_node = find_start_node(graph_node);
+    node_list = [];
+    edge_list = [];
+    if start_node {
+        dot_output = printgraph(node=start_node);
+        result = parse_printgraph_output(dot_output);
+        node_list = result[0];
+        edge_list = result[1];
+    }
+    dot_code = generate_dot_code_from_lists(node_list, edge_list);
+    return (node_list, edge_list, dot_code);
+}
+
+"""Get user-specific graph structure with bounded traversal"""
+def get_user_graph_structure(user_graph_node: node) {
+    node_list = [];
+    edge_list = [];
+    
+    print(f"[DEBUG get_user_graph_structure] Starting for user: {user_graph_node?.username}");
+    
+    # Get only TaskState nodes directly connected to this user_graph (one hop from user_graph)
+    direct_nodes = [user_graph_node-->](`?TaskState);
+    
+    print(f"[DEBUG get_user_graph_structure] Found {len(direct_nodes)} direct TaskState nodes");
+    
+    # Map node IDs to task names
+    node_map = {};
+    for node in direct_nodes {
+        if node?.task_name {
+            node_id = id(node);
+            node_map[node_id] = node.task_name;
+            node_list.append(node.task_name);
+            print(f"[DEBUG get_user_graph_structure] Direct node: {node.task_name} (id: {node_id})");
+        }
+    }
+    
+    # Now traverse edges only between these specific nodes
+    for from_node in direct_nodes {
+        if from_node?.task_name {
+            # Get all outgoing TaskState nodes via TaskFlow edges
+            successors = [from_node-->](`?TaskState);
+            print(f"[DEBUG get_user_graph_structure] From {from_node.task_name}: found {len(successors)} successors");
+            
+            for to_node in successors {
+                to_node_id = id(to_node);
+                in_map = to_node_id in node_map;
+                print(f"[DEBUG get_user_graph_structure]   -> Successor: {to_node?.task_name} (id: {to_node_id}, in_map: {in_map})");
+                
+                # Only include edge if both nodes are in our user's graph
+                if to_node_id in node_map {
+                    # Get edge label from TaskFlow - simplified approach
+                    edge_label = "";
+                    # Check if there's a TaskFlow edge between these nodes
+                    all_edges = [from_node-->](`?TaskFlow);
+                    if len(all_edges) > 0 and hasattr(all_edges[0], 'label') {
+                        edge_label = all_edges[0].label;
+                    }
+                    
+                    edge_list.append({
+                        "from": from_node.task_name,
+                        "to": to_node.task_name,
+                        "label": edge_label
+                    });
+                    print(f"[DEBUG get_user_graph_structure]   Added edge: {from_node.task_name} -> {to_node.task_name}");
+                }
+            }
+        }
+    }
+    
+    print(f"[DEBUG get_user_graph_structure] Final: {len(node_list)} nodes, {len(edge_list)} edges");
+    return (node_list, edge_list);
 }
