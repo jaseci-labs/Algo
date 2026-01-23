@@ -268,7 +268,7 @@ connection_type = "SEQUENTIAL: then/after | PARALLEL: and/also/while/same time |
 CONVERGENT: merge point";
 from_task = "Task name in CamelCase (previous task in sequence)";
 to_task = "Next task name in CamelCase (e.g., MakeCoffee, BrushTeeth)";
-edge_label = "Edge label: 'then', 'if raining', 'otherwise', etc.";
+edge_label = "Edge label: 'then', 'if raining', 'otherwise', 'while', 'at the same time', etc.";
 sequence_order = "Sequence number (1, 2, 3...) to preserve order when multiple relationships";
 
 NEVER concatenate fields like: from_task='WashFace to_task=HeadToGym label=then'
@@ -279,6 +279,14 @@ CONNECTION RULES:
 - For attachment_nodes: ["Start"]
 - Create: Start -> BrushTeeth, BrushTeeth -> MakeCoffee, MakeCoffee -> GoToGym
 
+CRITICAL CONNECTION TYPE DETECTION:
+Analyze user_message for parallel keywords:
+- PARALLEL: "while", "as", "during", "at the same time", "simultaneously", "and" (when tasks happen together)
+    - Create N relationships, ALL with SAME from_task (attachment_nodes[0])
+    - ALL relationships use connection_type = PARALLEL
+    - Each relationship goes to a different unique task
+    - sequence_order: 1, 2, 3... for each parallel branch
+    
 CRITICAL: CONVERGENCE HANDLING
 If convergence_intent.should_converge=True OR attachment_nodes contains multiple nodes:
 - Create a relationship from EACH node in attachment_nodes to the FIRST extracted task
@@ -341,10 +349,13 @@ emotional_insight = "Short bullet about user's emotional state. Empty string if 
 Format: 'You seem [state] right now'";
 intent_insight = "Short bullet about what user is doing. Empty string for simple COMMIT_ACTION. 
 Format: 'You're [correcting/clarifying/asking about] [context]'";
-task_insight = "Short bullet about tasks extracted. Use friendly names not CamelCase. 
-Format: 'I'm extracting: [list of tasks]' or 'I'm adding: [task description]'";
+task_insight = "Short bullet about tasks extracted. Show the ACTUAL extracted task names from extracted_tasks.unique_names. 
+Format: 'Extracted: [TaskName1], [TaskName2]' for parallel tasks OR 'Adding: [TaskName]' for single task
+Example: 'Extracted: TalkToFriend, WalkDog' OR 'Adding: MakeCoffee'
+If multiple tasks with parallel pattern: 'Extracted: [Task1], [Task2] (parallel)'";
 pattern_insight = "Short bullet about special patterns. Empty if none. 
-Format: 'These will happen [at the same time/one after another/either way]' or 'This is task number [X]' for duplicates";
+Format: 'These will happen [at the same time/one after another/either way]' or 'This is task number [X]' for duplicates
+For parallel tasks detected: 'These happen at the same time' or 'These happen while doing each other'";
 
 Keep all bullets under 10 words. Be conversational and natural.
 """;
