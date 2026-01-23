@@ -56,15 +56,27 @@ jobs:
           jac destroy main.jac || echo "No existing deployment to destroy"
           sleep 10
         continue-on-error: true
-        # env:
-        #   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
       # Deploy using jac-scale
       - name: Deploy Algo with jac-scale
         run: |
           jac start main.jac --scale
-        # env:
-        #   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      # Create API keys secret (recreated each deploy, survives jac destroy)
+      - name: Create API keys secret
+        run: |
+          kubectl create secret generic algo-api-keys \
+            --namespace=algo-test \
+            --from-literal=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      # Inject secret into deployment
+      - name: Inject API keys into deployment
+        run: |
+          kubectl patch deployment algo-test -n algo-test --type='json' \
+            -p='[{"op": "add", "path": "/spec/template/spec/containers/0/envFrom", "value": [{"secretRef": {"name": "algo-api-keys"}}]}]'
+          echo "Waiting for rollout..."
+          kubectl rollout status deployment/algo-test -n algo-test --timeout=300s
 
       # Get deployment status
       - name: Verify deployment
