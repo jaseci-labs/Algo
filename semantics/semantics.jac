@@ -11,10 +11,6 @@ obj EmotionalState {
     has reasoning: str;
 }
 
-sem EmotionalState.state = "User's current emotional state: stressed, excited, indecisive, fatigued, or neutral";
-sem EmotionalState.confidence = "Confidence score between 0.0 and 1.0";
-sem EmotionalState.reasoning = "Brief explanation of why this state was detected";
-
 """Detect the user's emotional state from their message and conversation context"""
 def detect_emotional_state(
     user_message: str,
@@ -22,14 +18,11 @@ def detect_emotional_state(
 ) -> EmotionalState by llm();
 
 sem detect_emotional_state = """
-Detect emotional state from message:
-- stressed: frustration, overwhelm
-- excited: enthusiasm, accomplishments  
-- indecisive: uncertainty, questions
-- fatigued: tired, exhausted
-- neutral: normal tone
+Detect emotional state: stressed | excited | indecisive | fatigued | neutral
 
-Confidence 0.0-1.0.
+state = "Current emotional state";
+confidence = "Score 0.0-1.0";
+reasoning = "Brief detection rationale";
 """;
 
 """Generate a natural, conversational response matching user's emotional state"""
@@ -41,11 +34,8 @@ def generate_friendly_response(
 ) -> str by llm();
 
 sem generate_friendly_response = """
-Generate warm, natural response as Algo:
-
-Match emotional_state tone (stressed→supportive, excited→enthusiastic, etc.)
-Acknowledge action naturally ("Got it!" not "Task added")
-Brief 1-3 sentences, use contractions, no tech jargon.
+Generate warm response matching emotional_state tone.
+Natural acknowledgment ("Got it!" not "Task added"), 1-3 sentences, contractions, no jargon.
 """;
 
 """Conversation intent classification"""
@@ -67,23 +57,12 @@ obj ConversationContext {
     has tasks_to_move: list[str];
 }
 
-sem ConversationContext.intent = "COMMIT_ACTION: new task commitment | CORRECT_PREVIOUS: 'actually', 'before', 'first' corrections | CLARIFY_PREVIOUS: 'no i meant', 'after X' clarifications | ASK_QUESTION: questions | THINK_ALOUD: wondering/maybe";
-sem ConversationContext.referring_to_task = "Which existing task is user referring to? Empty if none, or task name from existing_nodes";
-sem ConversationContext.correction_type = "For CORRECT_PREVIOUS: 'insert_before', 'reorder', 'replace' | For CLARIFY_PREVIOUS: 'attachment_point', 'sequence_order' | Empty otherwise";
-sem ConversationContext.needs_graph_rebuild = "TRUE for CORRECT_PREVIOUS or CLARIFY_PREVIOUS with existing tasks, FALSE for COMMIT_ACTION on empty/simple graphs";
-sem ConversationContext.is_insertion = "TRUE if user wants to insert task BETWEEN existing tasks (keywords: 'before X', 'after Y but before Z', 'between', 'insert'). Example: 'wash face before heading to gym' when both exist";
-sem ConversationContext.tasks_to_move = "List of existing task names that are being repositioned/reordered. Example: user says 'have coffee first' when HaveCoffee already exists → ['HaveCoffee']";
-
 """Intent and commitment analysis result"""
 obj IntentAnalysis {
     has should_create_tasks: bool;
     has conversation_context: ConversationContext;
     has confidence: float;
 }
-
-sem IntentAnalysis.should_create_tasks = "TRUE if user committed to action OR is correcting/reordering existing tasks. FALSE only for questions/thinking/uncertain. CRITICAL: Corrections and reorderings NEED graph updates, so should_create_tasks MUST be True";
-sem IntentAnalysis.conversation_context = "Context about what user is doing: correcting, clarifying, committing new";
-sem IntentAnalysis.confidence = "Confidence 0.0-1.0 in the intent classification";
 
 """Analyze conversation intent and determine if user is committing, correcting, or clarifying"""
 def analyze_conversation_intent(
@@ -94,30 +73,27 @@ def analyze_conversation_intent(
 ) -> IntentAnalysis by llm();
 
 sem analyze_conversation_intent = """
-Analyze user's message and recent conversation history to classify their intent.
-Populate IntentAnalysis with appropriate values based on semantic definitions.
+Classify user intent from message and conversation history.
 
-CRITICAL: should_create_tasks MUST BE TRUE FOR:
-1. New task commitments: "I'll make coffee then check news"
-2. Corrections: "actually, have coffee before checking news"
-3. Reorderings: "take coffee first", "go to gym after washing face"
-4. Insertions: "wash face before heading to gym"
+should_create_tasks = "TRUE if user mentions ANY action/task (even casual ones like 'check messages', 'grab lunch', 'take a walk'). 
+Only FALSE for explicit questions ('what should I do?', 'can you help?') or pure uncertainty ('maybe', 'not sure', 'wondering')";
 
-should_create_tasks SHOULD BE FALSE ONLY FOR:
-- Pure questions: "what should I do next?"
-- Thinking aloud: "maybe I should..."
-- Uncertain statements: "I might go to the gym"
+ConversationContext.intent = "COMMIT_ACTION: ANY action mentioned (default unless clearly asking/uncertain) | CORRECT_PREVIOUS: 'actually', 'before', 'first' | CLARIFY_PREVIOUS: 'no i meant', 'after X' | ASK_QUESTION: explicit questions | THINK_ALOUD: 'maybe', 'wondering', 'not sure'";
 
-REORDERING DETECTION:
-If user mentions existing task with reordering keywords ('first', 'before that', 'earlier', 'after', 'then'):
-- Set should_create_tasks = True (CRITICAL!)
-- Set correction_type = 'reorder'
-- Set needs_graph_rebuild = True
-- Populate tasks_to_move with the task names being repositioned
-Example: "have coffee first" when HaveCoffee exists → tasks_to_move = ["HaveCoffee"], should_create_tasks = True
+ConversationContext.referring_to_task = "EXACT task name from existing_nodes user is referencing. Examples: 'rename X to Y'→'X', 'before Y'→'Y', 'watch movie' matching 'WatchSomeNetflix'→'WatchSomeNetflix'. Empty if none";
 
-Default to COMMIT_ACTION when user mentions tasks/actions.
-Check last 2-3 conversation turns for context.
+ConversationContext.correction_type = "CORRECT_PREVIOUS types:
+- rename: Change task NAME only (same activity, different label) - 'actually call it X'
+- insert_before/insert_after/insert_first: NEW task between/before existing
+- reorder: Move EXISTING task to different position
+- replace: Swap with COMPLETELY DIFFERENT task
+CLARIFY_PREVIOUS: 'attachment_point' | 'sequence_order' | Empty otherwise";
+
+ConversationContext.needs_graph_rebuild = "TRUE for corrections/clarifications with existing tasks, FALSE for simple additions";
+ConversationContext.is_insertion = "TRUE if inserting task BETWEEN existing tasks";
+ConversationContext.tasks_to_move = "List of existing task names being repositioned (e.g., ['HaveCoffee'])";
+
+confidence = "Score 0.0-1.0";
 """;
 
 """Maps raw task name to unique task name with count"""
@@ -127,10 +103,6 @@ obj TaskNameMapping {
     has count: int;
 }
 
-sem TaskNameMapping.raw = "Base task name extracted from message";
-sem TaskNameMapping.unique = "Unique task name with number appended if duplicate";
-sem TaskNameMapping.count = "How many times this raw name appeared in existing_nodes";
-
 """Extracted task names from user message"""
 obj ExtractedTasks {
     has raw_names: list[str];
@@ -138,11 +110,6 @@ obj ExtractedTasks {
     has name_mappings: list[TaskNameMapping];
     has duplicate_counts: list[int];
 }
-
-sem ExtractedTasks.raw_names = "Base task names in CamelCase extracted from message (e.g., CheckEmail, MakeCoffee)";
-sem ExtractedTasks.unique_names = "NEW unique task names to create. CORRECTION/INSERTION LOGIC: If correction_type='insert_before' OR is_insertion=True OR user says 'before', 'after', 'instead', 'actually', then use existing task names WITHOUT numbers (reusing existing tasks). Otherwise, append numbers for duplicates. Formula: if needs_reuse then use raw_name as-is, else if count>0 then raw_name+str(count+1) else raw_name";
-sem ExtractedTasks.name_mappings = "List of {raw: str, unique: str, count: int} showing transformation for each task";
-sem ExtractedTasks.duplicate_counts = "For each raw_name, how many times it appears in existing_nodes. Used to calculate unique_names";
 
 """Extract raw task names from user message in CamelCase format"""
 def extract_raw_task_names(
@@ -154,23 +121,34 @@ def extract_raw_task_names(
 sem extract_raw_task_names = """
 Extract task names and generate unique names.
 
-CRITICAL: ALWAYS EXTRACT TASK NAMES even when they already exist in the graph!
+Focus on the CORE ACTION only, in CamelCase format.
 
-REORDERING MODE (correction_type='reorder' OR tasks_to_move is populated):
-- Extract the task names being reordered from user_message
-- Use EXISTING names without adding numbers
-- Example: User says "have coffee before checking news" when TakeCoffee and CheckNews exist
-  → raw_names = ["TakeCoffee", "CheckNews"]
-  → unique_names = ["TakeCoffee", "CheckNews"] (no numbers added)
+CRITICAL: Convert user's natural language to proper CamelCase:
+- "checking whatsapp" → "CheckWhatsapp" or "CheckingWhatsapp"
+- "make coffee" → "MakeCoffee"
+- "grab some buns" → "GrabSomeBuns"
+Remove articles (a, an, the) and convert spaces to CamelCase.
 
-CORRECTION/INSERTION MODE (conversation_context.is_insertion=True OR correction_type='insert_before' OR keywords like 'before', 'after', 'between', 'instead'):
-- If task exists in existing_nodes, use the EXISTING name without adding numbers
-- User is correcting/modifying existing flow, not creating new duplicate tasks
-- Example: User says "wash face before heading to gym", and both WashFace and HeadToGym exist → use WashFace and HeadToGym (not WashFace2, HeadToGym2)
+raw_names = "Base CamelCase task names from message";
 
-NORMAL MODE:
-- Append numbers for duplicate task names when creating truly new occurrences
-- Formula: if count>0 then raw_name+str(count+1) else raw_name
+unique_names = "Task names based on correction_type:
+
+CRITICAL - RENAME OPERATIONS (correction_type='rename'):
+- DO NOT look at existing_nodes at all
+- Extract the NEW name from user_message only
+- Convert to CamelCase
+
+OTHER OPERATIONS:
+- insert_before/after: Reuse existing names WITHOUT numbers
+- normal: Append numbers for duplicates (count>0 → name+str(count+1))";
+
+name_mappings = "List of {raw: str, unique: str, count: int} showing transformation for each task";
+Here is what you should know about name mappings:
+TaskNameMapping.raw = "Base task name extracted from message";
+TaskNameMapping.unique = "Unique task name with number appended if duplicate (or NEW name for rename)";
+TaskNameMapping.count = "How many times this raw name appeared in existing_nodes";
+
+duplicate_counts = "For each raw_name, how many times it appears in existing_nodes. Used to calculate unique_names";
 
 Populate all fields including duplicate_counts.
 """;
@@ -183,11 +161,6 @@ obj AttachmentPointAnalysis {
     has user_specified: bool;
 }
 
-sem AttachmentPointAnalysis.attachment_nodes = "List of node(s) to attach from. Usually [last_task] or multiple for convergence";
-sem AttachmentPointAnalysis.is_convergent = "TRUE if attaching from multiple nodes (convergent edge)";
-sem AttachmentPointAnalysis.reasoning = "Explanation of why these attachment points were chosen";
-sem AttachmentPointAnalysis.user_specified = "TRUE if user explicitly named a task (e.g., 'after X'), FALSE if using default last_task";
-
 """Determine where new tasks should attach in the graph"""
 def determine_attachment_points(
     user_message: str,
@@ -197,24 +170,16 @@ def determine_attachment_points(
 ) -> AttachmentPointAnalysis by llm();
 
 sem determine_attachment_points = """
-Analyze where new tasks should connect in the graph.
+Determine where new tasks connect.
 
-INSERTION PATTERN (user says "BEFORE X"):
-Example: "wash face before heading to gym" when graph has CheckMessages->HeadToGym
-- Find the task BEFORE the referenced task in existing graph
-- attachment_nodes = [task that currently connects TO the referenced task]
-- Example result: attachment_nodes = ["CheckMessages"] (the task before HeadToGym)
-- This allows creating: CheckMessages->WashFace->HeadToGym
+attachment_nodes = "Node(s) to attach from: [last_task] default, multiple for convergence, or task BEFORE referenced for 'before X' patterns";
+is_convergent = "TRUE if multiple attachment nodes";
+reasoning = "Brief explanation";
+user_specified = "TRUE if user named specific task ('after X')";
 
-If conversation_context.needs_graph_rebuild = True:
-   - Return empty attachment_nodes (will rebuild full graph)
-   - reasoning explains the correction/clarification
-
-Otherwise:
-- Default: attachment_nodes = [last_task]
-- User-specified: Parse user_message for "after X", "before Y", "from Z"
-
-Always provide clear reasoning for transparency.
+If needs_graph_rebuild=True: return empty attachment_nodes.
+For 'before X': find predecessor of X in current edges.
+Default: [last_task] unless user specifies 'after X', 'before Y', 'from Z'.
 """;
 
 """Detection of convergence patterns in user intent"""
@@ -225,11 +190,6 @@ obj ConvergenceIntent {
     has trigger_phrase: str;
 }
 
-sem ConvergenceIntent.should_converge = "TRUE if user intends parallel branches to merge";
-sem ConvergenceIntent.source_nodes = "List of nodes to converge from (leaf nodes)";
-sem ConvergenceIntent.convergence_type = "explicit (keywords like 'either way') | implicit (last_task has '|' and no specific task named) | none (no convergence)";
-sem ConvergenceIntent.trigger_phrase = "The phrase that triggered convergence detection";
-
 """Detect if user intends to converge parallel branches"""
 def detect_convergence_intent(
     user_message: str,
@@ -238,21 +198,12 @@ def detect_convergence_intent(
 ) -> ConvergenceIntent by llm();
 
 sem detect_convergence_intent = """
-Detect convergence patterns from user message.
+Detect if parallel branches should merge.
 
-Types:
-1. EXPLICIT convergence (should_converge=True):
-   - Keywords: "either way", "regardless", "in both cases", "afterwards" (after branches)
-
-2. IMPLICIT convergence (should_converge=True):
-   - last_task contains "|" (e.g., "GoToGym|GoForRun")
-   - User adds task WITHOUT naming specific source
-
-3. NO convergence (should_converge=False):
-   - User names specific task: "after GoToGym"
-   - Linear flow: normal "then X" when last_task is single
-
-Extract source_nodes by splitting last_task by "|" if convergence detected.
+should_converge = "TRUE if merging branches";
+source_nodes = "Leaf nodes to converge from (split last_task by '|')";
+convergence_type = "explicit ('either way') | implicit (last_task has '|') | none";
+trigger_phrase = "Detection trigger phrase";
 """;
 
 """Represents a task connection type in the graph"""
@@ -272,12 +223,6 @@ obj TaskRelationship {
     has sequence_order: int;
 }
 
-sem TaskRelationship.connection_type = "SEQUENTIAL: then/after | PARALLEL: and/also/while/same time | CONDITIONAL: if/otherwise | CONVERGENT: merge point";
-sem TaskRelationship.from_task = "Task name in CamelCase (previous task in sequence)";
-sem TaskRelationship.to_task = "Next task name in CamelCase (e.g., MakeCoffee, BrushTeeth)";
-sem TaskRelationship.edge_label = "Edge label: 'then', 'if raining', 'otherwise', etc.";
-sem TaskRelationship.sequence_order = "Sequence number (1, 2, 3...) to preserve order when multiple relationships";
-
 """Build task relationships using pre-analyzed context"""
 def build_task_relationships(
     user_message: str,
@@ -291,6 +236,24 @@ def build_task_relationships(
 sem build_task_relationships = """
 Build TaskRelationship list using pre-analyzed inputs.
 
+CRITICAL: DEFAULT BEHAVIOR - INCREMENTAL ADDITION
+For normal COMMIT_ACTION with conversation_context.needs_graph_rebuild=False:
+- Return ONLY the NEW relationships being added
+- Do NOT include existing relationships from current_edges
+
+FULL REBUILD MODE (conversation_context.needs_graph_rebuild=True):
+When user is correcting/reordering existing tasks:
+- Return ALL relationships to reconstruct the complete graph INCLUDING ALL EXISTING EDGES from current_edges
+- CRITICAL: Start by INCLUDING all relationships from current_edges, then modify only the affected area
+- For INSERTION corrections (insert_before, insert_after, insert_first):
+  * Include ALL existing edges from current_edges
+  * Remove only the edge being split (e.g., if inserting between A->C, remove A->C)
+  * Add the new insertion edges (A->NewTask, NewTask->C)
+  * CRITICAL: Reconnect downstream tasks - if inserting B between A and C, return: A->B, B->C
+  * Example: Graph is Start->CheckMessages->MakeBreakfast->GoToGym, user says "wash face after breakfast"
+    Return ALL edges: Start->CheckMessages, CheckMessages->MakeBreakfast, MakeBreakfast->WashFace, WashFace->GoToGym
+- For REORDER corrections: rebuild with tasks in new positions
+
 CRITICAL: RETURN PROPER JSON STRUCTURE
 Each TaskRelationship object MUST have separate fields:
 {
@@ -301,60 +264,14 @@ Each TaskRelationship object MUST have separate fields:
   "sequence_order": 1
 }
 
+connection_type = "SEQUENTIAL: then/after | PARALLEL: and/also/while/same time | CONDITIONAL: if/otherwise | 
+CONVERGENT: merge point";
+from_task = "Task name in CamelCase (previous task in sequence)";
+to_task = "Next task name in CamelCase (e.g., MakeCoffee, BrushTeeth)";
+edge_label = "Edge label: 'then', 'if raining', 'otherwise', 'while', 'at the same time', etc.";
+sequence_order = "Sequence number (1, 2, 3...) to preserve order when multiple relationships";
+
 NEVER concatenate fields like: from_task='WashFace to_task=HeadToGym label=then'
-
-CRITICAL: USE ACTUAL TASK NAMES
-- from_task MUST be an actual task name (e.g., "Start", "BrushTeeth", "WakeUp")
-- to_task MUST be an actual task name from extracted_tasks.unique_names
-- attachment_analysis.attachment_nodes contains the ACTUAL task names to attach from
-- NEVER use placeholder text like "last_task" - use the actual task name from attachment_nodes
-
-REORDERING TASKS (correction_type='reorder', tasks_to_move is populated):
-When user wants to reposition an existing task:
-
-Example scenario:
-- User: "have coffee first, then check the news"
-- Current graph: CheckNews -> BrushTeeth -> HaveCoffee -> WashFace
-- tasks_to_move: ["HaveCoffee"]
-- current_edges: [
-    {from: "CheckNews", to: "BrushTeeth", label: "then"},
-    {from: "BrushTeeth", to: "HaveCoffee", label: "then"},
-    {from: "HaveCoffee", to: "WashFace", label: "then"}
-  ]
-
-STEP 1: Identify what to remove
-- Find ALL edges involving HaveCoffee:
-  - Incoming: BrushTeeth -> HaveCoffee (remove)
-  - Outgoing: HaveCoffee -> WashFace (remove)
-
-STEP 2: Fill the gap
-- The task BEFORE HaveCoffee was BrushTeeth
-- The task AFTER HaveCoffee was WashFace
-- Create new edge: BrushTeeth -> WashFace
-
-STEP 3: Create new position
-- User wants: HaveCoffee -> CheckNews
-- The task BEFORE CheckNews was nothing (Start implied)
-- Create edges:
-  - Start -> HaveCoffee (or from attachment point)
-  - HaveCoffee -> CheckNews
-
-RETURN ALL relationships to create the complete new graph:
-1. {from_task: "Start", to_task: "HaveCoffee", edge_label: "then", sequence_order: 1}
-2. {from_task: "HaveCoffee", to_task: "CheckNews", edge_label: "then", sequence_order: 2}
-3. {from_task: "CheckNews", to_task: "BrushTeeth", edge_label: "then", sequence_order: 3}
-4. {from_task: "BrushTeeth", to_task: "WashFace", edge_label: "then", sequence_order: 4}
-
-The rebuild process will remove all old edges and create only these new ones.
-
-INSERTION DETECTION (using current_edges):
-If user says "wash face BEFORE heading to gym":
-1. Check current_edges for edge ending at HeadToGym (e.g., CheckMessages->HeadToGym)
-2. Find the from_task of that edge (CheckMessages)
-3. Create relationships to INSERT WashFace:
-   - CheckMessages -> WashFace (label: "then")
-   - WashFace -> HeadToGym (label: "then")
-4. needs_graph_rebuild should be True to remove the old CheckMessages->HeadToGym edge
 
 CONNECTION RULES:
 - Start point: Use attachment_nodes[0] as the from_task for the FIRST relationship
@@ -369,15 +286,15 @@ Analyze user_message for parallel keywords:
     - ALL relationships use connection_type = PARALLEL
     - Each relationship goes to a different unique task
     - sequence_order: 1, 2, 3... for each parallel branch
-  
-- SEQUENTIAL: "then", "after", "next", "before", "first" (tasks happen one after another)
-    - Create N relationships chained together
-    - First: from attachment_nodes[0] to unique_names[0]
-    - Second: from unique_names[0] to unique_names[1]
-    - Continue chaining: each new task's from_task is the previous to_task
-
-If needs_graph_rebuild=True: Reconstruct FULL graph with ALL existing nodes
-If convergence_intent.should_converge: Create edges from ALL source_nodes to first unique task
+    
+CRITICAL: CONVERGENCE HANDLING
+If convergence_intent.should_converge=True OR attachment_nodes contains multiple nodes:
+- Create a relationship from EACH node in attachment_nodes to the FIRST extracted task
+- Then chain remaining tasks sequentially
+- Example: attachment_nodes=["TaskA", "TaskB"], extracted_tasks=["NewTask", "NextTask"]
+  Result: TaskA -> NewTask, TaskB -> NewTask, NewTask -> NextTask
+- Use connection_type=CONVERGENT for the converging edges
+- Edge label should be "either way" or similar convergence phrase depending on user message
 """;
 
 """Generate 2 contextual suggestions for what the user might do next"""
@@ -415,11 +332,6 @@ obj ThinkingSummary {
     has pattern_insight: str;
 }
 
-sem ThinkingSummary.emotional_insight = "Short bullet about user's emotional state. Empty string if confidence < 0.7. Format: 'You seem [state] right now'";
-sem ThinkingSummary.intent_insight = "Short bullet about what user is doing. Empty string for simple COMMIT_ACTION. Format: 'You're [correcting/clarifying/asking about] [context]'";
-sem ThinkingSummary.task_insight = "Short bullet about tasks extracted. Use friendly names not CamelCase. Format: 'I'm extracting: [list of tasks]' or 'I'm adding: [task description]'";
-sem ThinkingSummary.pattern_insight = "Short bullet about special patterns. Empty if none. Format: 'These will happen [at the same time/one after another/either way]' or 'This is task number [X]' for duplicates";
-
 """Generate user-friendly thinking insights for transparency"""
 def generate_thinking_summary(
     user_message: str,
@@ -433,16 +345,17 @@ def generate_thinking_summary(
 sem generate_thinking_summary = """
 Generate short, friendly bullet points showing Algo's understanding.
 
-RULES:
-1. emotional_insight: Be empathetic and natural
-
-2. intent_insight: Format - "You're correcting [task]" or "You're clarifying where [task] goes"
-
-3. task_insight: For duplicates, mention the count naturally
-
-4. pattern_insight: Only for special patterns, otherwise empty string
-   - PARALLEL: "These will happen at the same time"
-   - Duplicates (check extracted_tasks.duplicate_counts): "This is your [X]th time doing this"
+emotional_insight = "Short bullet about user's emotional state. Empty string if confidence < 0.7. 
+Format: 'You seem [state] right now'";
+intent_insight = "Short bullet about what user is doing. Empty string for simple COMMIT_ACTION. 
+Format: 'You're [correcting/clarifying/asking about] [context]'";
+task_insight = "Short bullet about tasks extracted. Show the ACTUAL extracted task names from extracted_tasks.unique_names. 
+Format: 'Extracted: [TaskName1], [TaskName2]' for parallel tasks OR 'Adding: [TaskName]' for single task
+Example: 'Extracted: TalkToFriend, WalkDog' OR 'Adding: MakeCoffee'
+If multiple tasks with parallel pattern: 'Extracted: [Task1], [Task2] (parallel)'";
+pattern_insight = "Short bullet about special patterns. Empty if none. 
+Format: 'These will happen [at the same time/one after another/either way]' or 'This is task number [X]' for duplicates
+For parallel tasks detected: 'These happen at the same time' or 'These happen while doing each other'";
 
 Keep all bullets under 10 words. Be conversational and natural.
 """;

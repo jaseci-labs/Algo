@@ -8,6 +8,7 @@ import from service.mainAppService {
     load_past_routines,
     reset_session,
     rebuild_graph,
+    rename_task,
     call_supervisor
 }
 

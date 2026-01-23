@@ -112,6 +112,15 @@ walker :pub rebuild_graph {
     can rebuild with user_graph_data entry;
 }
 
+walker :pub rename_task {
+    has old_name: str;
+    has new_name: str;
+    has username: str = "anonymous";
+
+    can navigate_to_graph with `root entry;
+    can rename with user_graph_data entry;
+}
+
 walker :pub call_supervisor {
     has conversation_history: list;
     has context_from_user: str;

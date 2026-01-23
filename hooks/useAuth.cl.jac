@@ -49,7 +49,11 @@ def:pub useAuth() -> any {
             }
         } except Exception as ex {
             console.error("Login error:", ex);
-            error = "An error occurred during login";
+            if ex.message {
+                error = ex.message;
+            } else {
+                error = "An error occurred during login";
+            }
         } finally {
             loading = False;
         }
@@ -84,12 +88,21 @@ def:pub useAuth() -> any {
                 # Auto-login after successful registration
                 navigate("/");
             } else {
-                errorMsg = result["error"] if result["error"] else "Registration failed";
-                error = errorMsg;
+                # Extract message from error object
+                errorData = result["error"];
+                if errorData and errorData.message {
+                    error = errorData.message;
+                } else {
+                    error = "Registration failed";
+                }
             }
         } except Exception as ex {
             console.error("Registration error:", ex);
-            error = "An error occurred during registration";
+            if ex.message {
+                error = ex.message;
+            } else {
+                error = "An error occurred during registration";
+            }
         } finally {
             loading = False;
         }
