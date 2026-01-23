@@ -54,7 +54,7 @@ jobs:
       - name: Destroy existing deployment
         run: |
           jac destroy main.jac || echo "No existing deployment to destroy"
-          sleep 10
+          sleep 15
         continue-on-error: true
 
       # Deploy using jac-scale
