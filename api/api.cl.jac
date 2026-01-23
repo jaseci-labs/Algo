@@ -118,22 +118,22 @@ async def:pub getSessionToken() -> any {
 # @param context_from_user - The relevant context from user's message
 # @param conversation_history - Array of conversation history items
 # @param username - The current user's username
-# @returns Supervisor response with nextResponse or error
-async def:pub callSupervisor(context_from_user: str, conversation_history: list, username: str) -> any {
+# @returns Manager response with nextResponse or error
+async def:pub callManager(context_from_user: str, conversation_history: list, username: str) -> any {
     try {
-        result = root spawn call_supervisor(
+        result = root spawn call_manager(
             conversation_history=conversation_history,
             context_from_user=context_from_user,
             username=username
         );
 
         response_data = result.reports[result.reports.length - 1] if result.reports and result.reports.length > 0 else {};
-        
+
         if response_data and "error" in response_data {
-            console.error("Supervisor error:", response_data);
+            console.error("Manager error:", response_data);
             return {
                 "success": False,
-                "error": response_data.error or "Supervisor error"
+                "error": response_data.error or "Manager error"
             };
         }
 
@@ -144,13 +144,13 @@ async def:pub callSupervisor(context_from_user: str, conversation_history: list,
         } else {
             next_resp = "I apologize, I couldn't get a response.";
         }
-        
+
         # Extract suggestions if available
         suggestions = [];
         if "suggestions" in response_data {
             suggestions = response_data["suggestions"];
         }
-        
+
         # Extract thinking insights if available
         thinking = None;
         if "thinking" in response_data {
@@ -165,7 +165,7 @@ async def:pub callSupervisor(context_from_user: str, conversation_history: list,
             "data": response_data
         };
     } except Exception as e {
-        console.error("callSupervisor error:", e);
+        console.error("callManager error:", e);
         return {
             "success": False,
             "error": String(e)
@@ -173,6 +173,10 @@ async def:pub callSupervisor(context_from_user: str, conversation_history: list,
     }
 }
 
+# Legacy function - redirects to callManager for backward compatibility
+async def:pub callSupervisor(context_from_user: str, conversation_history: list, username: str) -> any {
+    return await callManager(context_from_user, conversation_history, username);
+}
 # Send a text message to the supervisor (simplified version for text-only mode)
 # @param message - The user's message
 # @param username - The current user's username

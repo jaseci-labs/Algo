@@ -13,7 +13,7 @@ import from .useAudioControls { useAudioControls }
 
 # Import services
 import from ..api.api {
-    callSupervisor,
+    callManager,
     saveRoutine,
     getUsernameFromToken
 }
@@ -125,7 +125,7 @@ def:pub useMainApp() -> any {
             addTranscriptItem(assistantItemId, "assistant", "Thinking...");
 
             console.log("Calling supervisor with message:", message, "username:", username);
-            result = await callSupervisor(message, [], username);
+            result = await callManager(message, [], username);
             console.log("Supervisor result:", result);
             if result.success {
                 # Pass thinking data if available
@@ -173,7 +173,7 @@ def:pub useMainApp() -> any {
             assistantItemId = "assistant-" + String(Date.now());
             addTranscriptItem(assistantItemId, "assistant", "Thinking...");
 
-            result = await callSupervisor(suggestionText, [], username);
+            result = await callManager(suggestionText, [], username);
             if result.success {
                 # Pass thinking data if available
                 thinkingData = None;

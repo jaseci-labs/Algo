@@ -121,10 +121,18 @@ walker :pub rename_task {
     can rename with user_graph_data entry;
 }
 
-walker :pub call_supervisor {
+walker :pub call_graph_agent {
     has conversation_history: list;
     has context_from_user: str;
     has username: str = "anonymous";
 
     can call with `root entry;
+}
+
+walker :pub call_manager {
+    has conversation_history: list;
+    has context_from_user: str;
+    has username: str = "anonymous";
+
+    can orchestrate with `root entry;
 }
