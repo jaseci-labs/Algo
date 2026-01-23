@@ -65,10 +65,10 @@ jobs:
       # Create API keys secret (recreated each deploy, survives jac destroy)
       - name: Create API keys secret
         run: |
+          kubectl delete secret algo-api-keys -n algo-test --ignore-not-found=true
           kubectl create secret generic algo-api-keys \
             --namespace=algo-test \
-            --from-literal=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
-            --dry-run=client -o yaml | kubectl apply -f -
+            --from-literal=OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
 
       # Inject secret into deployment
       - name: Inject API keys into deployment
