@@ -385,10 +385,8 @@ impl call_supervisor.call{
         
         user_graph = find_user_graph(here, self.username);
         if not user_graph {
-            print(f"[DEBUG] No user graph found for {self.username}, creating new graph...");
             user_graph = here ++> user_graph_data(username=self.username);
             user_graph ++> TaskState(task_name="Start");
-            print(f"[DEBUG] Created user graph with Start node");
         }
         
         if user_graph {
@@ -400,8 +398,6 @@ impl call_supervisor.call{
                 graph_data = get_user_graph_structure(user_graph);
                 current_nodes = graph_data[0];
                 current_edges = graph_data[1];
-                
-                print(f"[DEBUG] User {self.username} graph: nodes={current_nodes}, edges count={len(current_edges)}");
                 
                 # Find leaf nodes for convergence detection
                 leaf_nodes = find_leaf_nodes(current_edges, current_nodes);
@@ -951,16 +947,12 @@ def find_leaf_nodes(
 """Find user's graph or return None"""
 def find_user_graph(root_node: node, username: str) {
     all_graphs = [root_node-->](`?user_graph_data);
-    print(f"[DEBUG find_user_graph] Found {len(all_graphs)} total user graphs");
     for graph in all_graphs {
         graph_username = graph?.username if graph else None;
-        print(f"[DEBUG find_user_graph] Checking graph with username: {graph_username}");
         if graph?.username and graph.username == username {
-            print(f"[DEBUG find_user_graph] Match found for user: {username}");
             return graph;
         }
     }
-    print(f"[DEBUG find_user_graph] No match found for user: {username}");
     return None;
 }
 
@@ -996,37 +988,27 @@ def get_user_graph_structure(user_graph_node: node) {
     node_list = [];
     edge_list = [];
     
-    print(f"[DEBUG get_user_graph_structure] Starting for user: {user_graph_node?.username}");
-    
-    # Get only TaskState nodes directly connected to this user_graph (bounded traversal)
+    # Get only TaskState nodes directly connected to this user_graph (bounded)
     direct_nodes = [user_graph_node-->](`?TaskState);
-    
-    print(f"[DEBUG get_user_graph_structure] Found {len(direct_nodes)} direct TaskState nodes");
     
     # Build node map for efficient lookup
     node_map = {};
     for node in direct_nodes {
         if node?.task_name {
-            node_id = id(node);
-            node_map[node_id] = node.task_name;
+            node_map[id(node)] = node.task_name;
             node_list.append(node.task_name);
-            print(f"[DEBUG get_user_graph_structure] Direct node: {node.task_name} (id: {node_id})");
         }
     }
     
     # Build edges only between nodes belonging to this user
     for from_node in direct_nodes {
         if from_node?.task_name {
-            # Get outgoing TaskState nodes
             successors = [from_node-->](`?TaskState);
-            print(f"[DEBUG get_user_graph_structure] From {from_node.task_name}: found {len(successors)} successors");
             
             for to_node in successors {
-                to_node_id = id(to_node);
-                
                 # Only include edge if both nodes belong to this user's graph
-                if to_node_id in node_map {
-                    # Extract edge label using printgraph on this specific node
+                if id(to_node) in node_map {
+                    # Extract edge label using printgraph
                     edge_label = extract_edge_label_via_printgraph(from_node, to_node);
                     
                     edge_list.append({
@@ -1034,46 +1016,36 @@ def get_user_graph_structure(user_graph_node: node) {
                         "to": to_node.task_name,
                         "label": edge_label
                     });
-                    print(f"[DEBUG get_user_graph_structure]   Added edge: {from_node.task_name} -> {to_node.task_name} [label='{edge_label}']");
                 }
             }
         }
     }
     
-    print(f"[DEBUG get_user_graph_structure] Final: {len(node_list)} nodes, {len(edge_list)} edges");
     return (node_list, edge_list);
 }
 
-# Extract edge label between two specific nodes using printgraph
+# Extract edge label between two nodes using printgraph
 def extract_edge_label_via_printgraph(from_node: node, to_node: node) -> str {
     try {
-        # Get printgraph output for just this node (depth=1 limits traversal)
         dot_output = printgraph(node=from_node, depth=1);
-        
-        print(f"[DEBUG extract_edge_label] from={from_node.task_name}, to={to_node.task_name}");
-        
         if not dot_output {
-            print(f"[DEBUG extract_edge_label] Empty printgraph output!");
             return "";
         }
         
         # Replace HTML entities
         dot_output = dot_output.replace("&#x27;", "'");
         dot_output = dot_output.replace("&quot;", '"');
-        
         lines = dot_output.split("\n");
-        to_task_name = to_node.task_name if hasattr(to_node, 'task_name') else None;
         
+        to_task_name = to_node.task_name if hasattr(to_node, 'task_name') else None;
         if not to_task_name {
-            print(f"[DEBUG extract_edge_label] No task_name on to_node!");
             return "";
         }
         
-        # FIRST PASS: Build node ID map (node_id -> task_name)
+        # FIRST PASS: Build node ID -> task_name map
         node_map = {};
         for line in lines {
             line = line.strip();
-            # Parse: 0 [label="TaskState(task_name='Start', ...)"]
             if "[label=" in line and "->" not in line {
                 parts = line.split("[label=");
                 if len(parts) == 2 {
@@ -1083,16 +1055,14 @@ def extract_edge_label_via_printgraph(from_node: node, to_node: node) -> str {
                         start = label.find("task_name=") + 11;
                         end = label.find("'", start + 1);
                         if end > start {
-                            task_name = label[start:end];
-                            node_map[node_id] = task_name;
-                            print(f"[DEBUG extract_edge_label] Mapped node {node_id} -> {task_name}");
+                            node_map[node_id] = label[start:end];
                         }
                     }
                 }
             }
         }
         
-        # Find the node ID for our target task
+        # Find target node ID
         target_node_id = None;
         for node_id in node_map {
             if node_map[node_id] == to_task_name {
@@ -1102,54 +1072,34 @@ def extract_edge_label_via_printgraph(from_node: node, to_node: node) -> str {
         }
         
         if not target_node_id {
-            print(f"[DEBUG extract_edge_label] Target node ID not found for {to_task_name}");
             return "";
         }
         
-        print(f"[DEBUG extract_edge_label] Looking for edge to node ID: {target_node_id}");
-        
-        # SECOND PASS: Find edge to target node and extract label
+        # SECOND PASS: Find edge to target and extract TaskFlow label
         for line in lines {
             line = line.strip();
-            # Parse: 0 -> 2  [label="TaskFlow(label='then')"]
             if "->" in line and not line.startswith("//") {
                 parts = line.split("->");
                 if len(parts) == 2 {
                     to_part = parts[1].strip();
-                    # Extract to_id
-                    to_id = "";
-                    if "[" in to_part {
-                        to_id = to_part.split("[")[0].strip();
-                    } else {
-                        to_id = to_part.strip().rstrip(";");
-                    }
+                    to_id = to_part.split("[")[0].strip() if "[" in to_part else to_part.strip().rstrip(";");
                     
-                    print(f"[DEBUG extract_edge_label] Checking edge to node {to_id}");
-                    
-                    # Check if this edge goes to our target
-                    if to_id == target_node_id {
-                        print(f"[DEBUG extract_edge_label] Found edge to target node!");
-                        # Extract TaskFlow label
-                        if "TaskFlow(label=" in to_part {
-                            label_idx = to_part.find("TaskFlow(label=");
-                            rest = to_part[label_idx + 15:];
-                            if len(rest) > 1 and rest[0] == "'" {
-                                quote_end = rest.find("'", 1);
-                                if quote_end > 1 {
-                                    label = rest[1:quote_end];
-                                    print(f"[DEBUG extract_edge_label] Extracted label: '{label}'");
-                                    return label;
-                                }
+                    if to_id == target_node_id and "TaskFlow(label=" in to_part {
+                        label_idx = to_part.find("TaskFlow(label=");
+                        rest = to_part[label_idx + 15:];
+                        if len(rest) > 1 and rest[0] == "'" {
+                            quote_end = rest.find("'", 1);
+                            if quote_end > 1 {
+                                return rest[1:quote_end];
                             }
                         }
                     }
                 }
             }
         }
-        
-        print(f"[DEBUG extract_edge_label] No matching edge found");
     } except Exception as e {
-        print(f"[DEBUG extract_edge_label] Error: {e}");
+        # Silently fail and return empty label
+        return "";
     }
     
     return "";
