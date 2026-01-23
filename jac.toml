@@ -43,4 +43,3 @@ lib_imports = ["import tailwindcss from '@tailwindcss/vite'"]
 [plugins.scale]
 kubernetes.app_name = "algo-test"
 kubernetes.namespace = "algo-test"
-kubernetes.env.OPENAI_API_KEY = "${OPENAI_API_KEY}"
