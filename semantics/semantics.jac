@@ -121,34 +121,23 @@ def extract_raw_task_names(
 sem extract_raw_task_names = """
 Extract task names and generate unique names.
 
-Focus on the CORE ACTION only, in CamelCase format.
+CRITICAL: ALWAYS EXTRACT TASK NAMES even when they already exist in the graph!
 
-CRITICAL: Convert user's natural language to proper CamelCase:
-- "checking whatsapp" → "CheckWhatsapp" or "CheckingWhatsapp"
-- "make coffee" → "MakeCoffee"
-- "grab some buns" → "GrabSomeBuns"
-Remove articles (a, an, the) and convert spaces to CamelCase.
+REORDERING MODE (correction_type='reorder' OR tasks_to_move is populated):
+- Extract the task names being reordered from user_message
+- Use EXISTING names without adding numbers
+- Example: User says "have coffee before checking news" when TakeCoffee and CheckNews exist
+  → raw_names = ["TakeCoffee", "CheckNews"]
+  → unique_names = ["TakeCoffee", "CheckNews"] (no numbers added)
 
-raw_names = "Base CamelCase task names from message";
+CORRECTION/INSERTION MODE (conversation_context.is_insertion=True OR correction_type='insert_before' OR keywords like 'before', 'after', 'between', 'instead'):
+- If task exists in existing_nodes, use the EXISTING name without adding numbers
+- User is correcting/modifying existing flow, not creating new duplicate tasks
+- Example: User says "wash face before heading to gym", and both WashFace and HeadToGym exist → use WashFace and HeadToGym (not WashFace2, HeadToGym2)
 
-unique_names = "Task names based on correction_type:
-
-CRITICAL - RENAME OPERATIONS (correction_type='rename'):
-- DO NOT look at existing_nodes at all
-- Extract the NEW name from user_message only
-- Convert to CamelCase
-
-OTHER OPERATIONS:
-- insert_before/after: Reuse existing names WITHOUT numbers
-- normal: Append numbers for duplicates (count>0 → name+str(count+1))";
-
-name_mappings = "List of {raw: str, unique: str, count: int} showing transformation for each task";
-Here is what you should know about name mappings:
-TaskNameMapping.raw = "Base task name extracted from message";
-TaskNameMapping.unique = "Unique task name with number appended if duplicate (or NEW name for rename)";
-TaskNameMapping.count = "How many times this raw name appeared in existing_nodes";
-
-duplicate_counts = "For each raw_name, how many times it appears in existing_nodes. Used to calculate unique_names";
+NORMAL MODE:
+- Append numbers for duplicate task names when creating truly new occurrences
+- Formula: if count>0 then raw_name+str(count+1) else raw_name (Example: "MakeCoffee" exists → new unique name "MakeCoffee2")
 
 Populate all fields including duplicate_counts.
 """;

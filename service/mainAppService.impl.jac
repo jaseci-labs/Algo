@@ -48,6 +48,9 @@ impl init_user_graph.initialize{
     visit [-->](`?user_graph_data) else {
         (here ++> user_graph_data()) ++> TaskState(task_name="Start");
     }
+    visit [-->](`?manager_comm_data) else {
+        here ++> manager_comm_data();
+    }
     visit [-->](`?user_routines) else { here ++> user_routines(); }
 }
 
@@ -750,7 +753,7 @@ impl call_graph_agent.call{
             print(f"Failed to generate suggestions: {str(e)}");
             suggestions = [];
         }
-        
+
         # Build thinking insights for frontend (convert to dict)
         thinking = {
             "emotional": thinking_summary.emotional_insight if thinking_summary.emotional_insight else "",
@@ -758,12 +761,31 @@ impl call_graph_agent.call{
             "tasks": thinking_summary.task_insight if thinking_summary.task_insight else "",
             "pattern": thinking_summary.pattern_insight if thinking_summary.pattern_insight else ""
         };
-        
+
+        # Store response data in manager_comm_data for Manager Agent to read
+        manager_data = find_manager_comm_data(here, self.username);
+        if manager_data {
+            manager_data.last_response = response;
+            manager_data.last_suggestions = suggestions;
+            manager_data.last_thinking = thinking;
+            manager_data.last_task_names = task_names;
+            manager_data.last_emotional_state = emotional_state.state;
+        } else {
+            # Create if doesn't exist
+            new_manager_data = here ++> manager_comm_data(username=self.username);
+            new_manager_data.last_response = response;
+            new_manager_data.last_suggestions = suggestions;
+            new_manager_data.last_thinking = thinking;
+            new_manager_data.last_task_names = task_names;
+            new_manager_data.last_emotional_state = emotional_state.state;
+        }
+
         report {
             "response": response,
             "emotional_state": emotional_state.state,
             "suggestions": suggestions,
-            "thinking": thinking
+            "thinking": thinking,
+            "task_names": task_names
         };
     } except Exception as e {
         report {"error": "Supervisor error", "details": str(e)} ;
@@ -795,107 +817,37 @@ impl call_manager.orchestrate{
             current_graph_state = {"nodes": ["Start"], "edges": [], "last_task": "Start"};
         }
 
-        # Step 2: Get Graph Agent's analysis by calling semantic functions directly
-        print(f"[MANAGER] Performing semantic analysis...");
-        
-        # Get current graph nodes and edges for context
-        current_nodes = current_graph_state.get("nodes", ["Start"]);
-        current_edges = current_graph_state.get("edges", []);
-        last_task = current_graph_state.get("last_task", "Start");
-        
-        # Run the same semantic analysis that call_graph_agent does
-        emotional_state = detect_emotional_state(
-            user_message=self.context_from_user,
-            conversation_history=self.conversation_history
-        );
-        
-        intent_analysis = analyze_conversation_intent(
-            user_message=self.context_from_user,
-            conversation_history=self.conversation_history,
-            existing_nodes=current_nodes,
-            last_task=last_task
-        );
-        
-        # Store intent for later validation
-        should_create_tasks = intent_analysis.should_create_tasks;
-        
-        # Now call the actual graph agent to perform the updates
-        graph_agent_spawn_result = root spawn call_graph_agent(
+        # Step 2: Spawn the Graph Agent to update the graph
+        print(f"[MANAGER] Calling graph agent...");
+
+        # Spawn graph agent (fire and forget - it updates the graph and stores response in manager_comm_data)
+        root spawn call_graph_agent(
             conversation_history=self.conversation_history,
             context_from_user=self.context_from_user,
             username=self.username
         );
-        
-        # Get the updated graph state after graph agent execution
-        user_graph = find_user_graph(here, self.username);
-        updated_graph_state = {};
-        if user_graph {
-            graph_data = get_user_graph_structure(user_graph);
-            updated_graph_state = {
-                "nodes": graph_data[0],
-                "edges": graph_data[1],
-                "last_task": user_graph?.last_task or "Start"
+
+        # Read the response data from manager_comm_data (stored by call_graph_agent)
+        manager_data = find_manager_comm_data(here, self.username);
+        if manager_data {
+            graph_agent_result = {
+                "response": manager_data.last_response or "Done.",
+                "emotional_state": manager_data.last_emotional_state or "neutral",
+                "suggestions": manager_data.last_suggestions or [],
+                "thinking": manager_data.last_thinking or {},
+                "graph_updated": len(manager_data.last_task_names or []) > 0
             };
+            print(f"[MANAGER] Read from manager_comm_data: task_names={manager_data.last_task_names}");
         } else {
-            updated_graph_state = {"nodes": ["Start"], "edges": [], "last_task": "Start"};
+            # Fallback if manager_comm_data doesn't exist
+            graph_agent_result = {
+                "response": "Done.",
+                "emotional_state": "neutral",
+                "suggestions": [],
+                "thinking": {},
+                "graph_updated": False
+            };
         }
-        
-        # Build response from semantic analysis
-        extracted_tasks = None;
-        task_names = [];
-        if should_create_tasks {
-            extracted_tasks = extract_raw_task_names(
-                user_message=self.context_from_user,
-                conversation_context=intent_analysis.conversation_context,
-                existing_nodes=current_nodes
-            );
-            if extracted_tasks and extracted_tasks.unique_names {
-                task_names = extracted_tasks.unique_names;
-            }
-        }
-        
-        response = generate_friendly_response(
-            user_message=self.context_from_user,
-            emotional_state=emotional_state,
-            action_taken="task_added" if should_create_tasks else "none",
-            task_names=task_names
-        );
-        
-        # Generate suggestions
-        suggestions = [];
-        try {
-            recent_tasks = [];
-            task_count = 0;
-            for i in range(len(current_nodes) - 1, -1, -1) {
-                if current_nodes[i] != "Start" and task_count < 3 {
-                    recent_tasks.insert(0, current_nodes[i]);
-                    task_count = task_count + 1;
-                }
-            }
-            suggestions = generate_next_suggestions(
-                last_task=last_task,
-                recent_tasks=recent_tasks,
-                conversation_context=self.context_from_user,
-                emotional_state=emotional_state.state
-            );
-        } except Exception as e {
-            print(f"Failed to generate suggestions: {str(e)}");
-            suggestions = [];
-        }
-        
-        # Build the graph agent result
-        graph_agent_result = {
-            "response": response,
-            "emotional_state": emotional_state.state,
-            "suggestions": suggestions,
-            "thinking": {
-                "emotional": f"You seem {emotional_state.state} right now",
-                "intent": intent_analysis.conversation_context.correction_type if intent_analysis.conversation_context.correction_type else "",
-                "tasks": ", ".join(task_names) if task_names else "",
-                "pattern": ""
-            },
-            "graph_updated": should_create_tasks
-        };
         
         print(f"[MANAGER] Graph agent result: {graph_agent_result}");
 
@@ -1203,6 +1155,17 @@ def find_user_graph(root_node: node, username: str) {
         graph_username = graph?.username if graph else None;
         if graph?.username and graph.username == username {
             return graph;
+        }
+    }
+    return None;
+}
+
+"""Find manager comm data node or return None"""
+def find_manager_comm_data(root_node: node, username: str) {
+    all_comm_data = [root_node-->](`?manager_comm_data);
+    for comm_data in all_comm_data {
+        if comm_data?.username and comm_data.username == username {
+            return comm_data;
         }
     }
     return None;

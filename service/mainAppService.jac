@@ -40,6 +40,15 @@ node user_graph_data {
     has saved_routines: dict = {};
 }
 
+node manager_comm_data {
+    has username: str = "anonymous";
+    has last_response: str = "";
+    has last_suggestions: list = [];
+    has last_thinking: dict = {};
+    has last_task_names: list = [];
+    has last_emotional_state: str = "neutral";
+}
+
 node user_routines {
     has username: str = "anonymous";
     has routines: dict = {};
