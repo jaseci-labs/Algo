@@ -264,7 +264,7 @@ Each TaskRelationship object MUST have separate fields:
   "sequence_order": 1
 }
 
-connection_type = "SEQUENTIAL: then/after | PARALLEL: and/also/while/same time | CONDITIONAL: if/otherwise | 
+connection_type = "SEQUENTIAL: then/after | PARALLEL: and/also/while/same time | CONDITIONAL: if/otherwise |
 CONVERGENT: merge point";
 from_task = "Task name in CamelCase (previous task in sequence)";
 to_task = "Next task name in CamelCase (e.g., MakeCoffee, BrushTeeth)";
@@ -279,6 +279,20 @@ CONNECTION RULES:
 - For attachment_nodes: ["Start"]
 - Create: Start -> BrushTeeth, BrushTeeth -> MakeCoffee, MakeCoffee -> GoToGym
 
+CRITICAL EDGE LABEL RULES:
+- "then" or "afterwards": Default for sequential tasks (A happens, then B happens)
+- "while" or "at same time": For PARALLEL tasks (A and B happen simultaneously)
+- "if X" or "otherwise": For CONDITIONAL branches (if X happens do A, otherwise do B)
+- "either way": ONLY for CONDITIONAL convergence where if/otherwise branches merge (NOT for parallel tasks)
+- After PARALLEL tasks converge, use "then" or "afterwards" for the next sequential task
+- Example: "have drink while chatting with buddies, then head home, then call a cab"
+  → HaveDrink[label="while"], ChatWithBuddies[label="while"] from HeadToThePub
+  → HaveDrink->HeadHome[label="then"], ChatWithBuddies->HeadHome[label="then"]
+  → HeadHome->CallACab[label="then"]
+- Example conditional: "if raining, read book; otherwise, walk; either way go home"
+  → IfRaining->ReadBook[label="if raining"], Otherwise->Walk[label="otherwise"]
+  → ReadBook->GoHome[label="either way"], Walk->GoHome[label="either way"]
+
 CRITICAL CONNECTION TYPE DETECTION:
 Analyze user_message for parallel keywords:
 - PARALLEL: "while", "as", "during", "at the same time", "simultaneously", "and" (when tasks happen together)
@@ -286,15 +300,20 @@ Analyze user_message for parallel keywords:
     - ALL relationships use connection_type = PARALLEL
     - Each relationship goes to a different unique task
     - sequence_order: 1, 2, 3... for each parallel branch
-    
+
 CRITICAL: CONVERGENCE HANDLING
-If convergence_intent.should_converge=True OR attachment_nodes contains multiple nodes:
-- Create a relationship from EACH node in attachment_nodes to the FIRST extracted task
-- Then chain remaining tasks sequentially
-- Example: attachment_nodes=["TaskA", "TaskB"], extracted_tasks=["NewTask", "NextTask"]
-  Result: TaskA -> NewTask, TaskB -> NewTask, NewTask -> NextTask
-- Use connection_type=CONVERGENT for the converging edges
-- Edge label should be "either way" or similar convergence phrase depending on user message
+PARALLEL CONVERGENCE (multiple nodes converging after doing things simultaneously):
+- attachment_nodes contains multiple nodes from parallel activities
+- Create edges from EACH attachment node to the FIRST extracted task
+- Use "then" or "afterwards" for these converging edges (parallel tasks finished, now do next thing)
+- Example: attachment_nodes=["HaveADrink", "ChatWithBuddies"], extracted_tasks=["HeadHome", "CallACab"]
+  Result: HaveADrink->HeadHome[label="then"], ChatWithBuddies->HeadHome[label="then"], HeadHome->CallACab[label="then"]
+
+CONDITIONAL CONVERGENCE (if/otherwise branches merging):
+- Only use "either way" label when converging CONDITIONAL branches (if X / otherwise)
+- The user must say "either way", "both paths", "regardless", or similar for conditional convergence
+- Example: "if raining read book otherwise walk either way go home"
+  → IfRaining->ReadBook, Otherwise->Walk, ReadBook->GoHome[label="either way"], Walk->GoHome[label="either way"]
 """;
 
 """Generate 2 contextual suggestions for what the user might do next"""
@@ -627,20 +646,21 @@ def validate_edge_labels(
 sem validate_edge_labels = """
 Validate that edge labels match the user's intent from their message.
 
-CONDITIONAL KEYWORDS TO CHECK:
-- "if X, then Y" → edge should have "if X" or similar label
-- "otherwise", "else" → edge should have "otherwise" or "else" label
-- "while X", "during X" → edge should have "while" or "during" label
-- "at the same time", "also", "simultaneously" → edge should reflect parallel execution
-- "then", "after", "next" → edge should have "then" label
-- "either way", "both paths" → edge indicates convergence
+CRITICAL EDGE LABEL RULES:
+- "then" or "afterwards": Sequential tasks (A happens, then B happens)
+- "while" or "at same time": PARALLEL tasks (A and B happen simultaneously)
+- "if X" or "otherwise": CONDITIONAL branches (if X happens do A, otherwise do B)
+- "either way": ONLY for CONDITIONAL convergence where if/otherwise branches merge
+- After PARALLEL tasks converge, use "then" or "afterwards" (NOT "either way")
 
-CRITICAL CHECKS:
-1. Conditional branches have appropriate labels mentioning the condition
-2. "otherwise" branches have "otherwise" labels
-3. Parallel relationships are indicated (while, during, at same time)
-4. Sequential relationships use "then" labels
-5. Convergence points are labeled appropriately
+CHECK FOR COMMON MISTAKES:
+1. "either way" used incorrectly (should only be for conditional convergence)
+   - Parallel tasks converging: should use "then", not "either way"
+   - Sequential tasks: should use "then", not "either way"
+   - Only valid: "if X do A; otherwise do B; either way do C" (A->C, B->C both labeled "either way")
+2. Sequential edge missing "then" label (has "either way" incorrectly)
+3. Conditional branches missing condition labels ("if X") or "otherwise" labels
+4. Parallel tasks not marked with "while" or "at same time"
 
 ANALYSIS APPROACH:
 - Parse user_message for conditional/parallel keywords
@@ -650,11 +670,12 @@ ANALYSIS APPROACH:
 Examples:
 - Valid: User: "if raining, read book; otherwise, walk"
   → Edges: [{from: Check, to: ReadBook, label: "if raining"}, {to: Walk, label: "otherwise"}]
-- Valid: User: "make coffee then check emails"
-  → Edge: {to: CheckEmails, label: "then"}
-- Invalid: Conditional branch missing "if X" label (label is just "then")
-- Invalid: "otherwise" branch has wrong label
-- Invalid: Parallel tasks not marked as such
+- Valid: User: "have drink while chatting, then head home, then call cab"
+  → Edges: [{to: HaveDrink, label: "while"}, {to: ChatWithBuddies, label: "while"},
+           {from: HaveDrink, to: HeadHome, label: "then"}, {from: ChatWithBuddies, to: HeadHome, label: "then"},
+           {from: HeadHome, to: CallACab, label: "then"}]
+- Invalid: Edge from HeadHome to CallACab uses "either way" label (should be "then")
+- Invalid: "either way" used for parallel task convergence (should be "then")
 
 Return:
 - is_valid: true if edge labels match user intent
