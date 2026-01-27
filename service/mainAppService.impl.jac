@@ -918,6 +918,46 @@ impl call_graph_agent.call{
         if validation_failed {
             print(f"[GRAPH AGENT] Validation type: {validation_type}");
 
+            # Handle task rename (when existing task has wrong/incomplete name)
+            if validation_type == "task_rename" {
+                incorrect_task = manager_data.incorrect_task or "";
+                correct_task_name = manager_data.correct_task_name or "";
+
+                if incorrect_task and correct_task_name {
+                    print(f"[GRAPH AGENT] Correcting by renaming task: '{incorrect_task}' -> '{correct_task_name}'");
+
+                    # Perform the rename using the rename_task walker
+                    here spawn rename_task(
+                        old_name=incorrect_task,
+                        new_name=correct_task_name,
+                        username=self.username
+                    );
+
+                    # Update task_names to reflect the renamed task
+                    for i in range(len(task_names)) {
+                        if task_names[i] == incorrect_task {
+                            task_names[i] = correct_task_name;
+                        }
+                    }
+
+                    # Update response to acknowledge the correction
+                    response = f"{response} I've renamed '{incorrect_task}' to '{correct_task_name}'.";
+
+                    print(f"[GRAPH AGENT] Rename correction complete - reporting updated response");
+                    report {
+                        "response": response,
+                        "emotional_state": emotional_state.state,
+                        "suggestions": suggestions,
+                        "thinking": thinking,
+                        "task_names": task_names,
+                        "validation_passed": True,
+                        "corrected": True,
+                        "renamed_task": {"from": incorrect_task, "to": correct_task_name}
+                    };
+                    return;
+                }
+            }
+
             # Handle task extraction failures
             if validation_type == "task_extraction" and len(missing_tasks) > 0 {
                 print(f"[GRAPH AGENT] Correcting by adding missing tasks: {missing_tasks}");
@@ -1507,6 +1547,8 @@ impl validate_graph_output.validate {
     manager_data.validation_type = "";
     manager_data.correction_needed = False;
     manager_data.missing_tasks = [];
+    manager_data.incorrect_task = "";
+    manager_data.correct_task_name = "";
 
     # Route to appropriate validation based on operation type
     if correction_type == "rename" {
@@ -1602,14 +1644,39 @@ impl validate_graph_output.validate {
         # Default validation: task extraction and graph structure
         print(f"[MANAGER VALIDATE] Using default validation (task extraction + graph structure)");
 
-        # Validation 1: Task Extraction
+        # Check intent - if asking question or thinking aloud, no tasks expected
+        conversation_context = intent_analysis.get("conversation_context", {});
+        intent_str = str(conversation_context.get("intent", "")) if conversation_context.get("intent") else "";
+
+        if "ASK_QUESTION" in intent_str or "THINK_ALOUD" in intent_str {
+            print(f"[MANAGER VALIDATE] User intent is {intent_str} - no tasks expected, skipping validation");
+            # No validation needed - user is asking questions or thinking, not committing to actions
+            return;
+        }
+
+        # Validation 1: Task Extraction (pass before_nodes for rename detection)
         task_validation = validate_task_extraction(
             user_message=user_message,
-            extracted_tasks=extracted_tasks
+            extracted_tasks=extracted_tasks,
+            existing_nodes=before_nodes
         );
 
         if not task_validation.is_valid {
             print(f"[MANAGER VALIDATE] Task extraction FAILED: {task_validation.reason}");
+
+            # Check if this is a rename case (incorrect_task is set)
+            if task_validation.incorrect_task and len(task_validation.incorrect_task) > 0 {
+                print(f"[MANAGER VALIDATE] Rename needed: '{task_validation.incorrect_task}' -> '{task_validation.correct_task_name}'");
+                manager_data.validation_passed = False;
+                manager_data.validation_reason = task_validation.reason;
+                manager_data.validation_type = "task_rename";
+                manager_data.incorrect_task = task_validation.incorrect_task;
+                manager_data.correct_task_name = task_validation.correct_task_name;
+                manager_data.correction_needed = True;
+                return;
+            }
+
+            # Standard missing tasks case
             manager_data.validation_passed = False;
             manager_data.validation_reason = task_validation.reason;
             manager_data.correction_needed = True;

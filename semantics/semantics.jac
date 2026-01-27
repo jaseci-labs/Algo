@@ -384,12 +384,15 @@ obj TaskValidationResult {
     has is_valid: bool;
     has reason: str;
     has missing_tasks: list[str];
+    has incorrect_task: str;      # Existing task with wrong name that should be renamed
+    has correct_task_name: str;    # What the task should be renamed to
 }
 
 """Validate that extracted tasks match the user's message"""
 def validate_task_extraction(
     user_message: str,
-    extracted_tasks: list[str]
+    extracted_tasks: list[str],
+    existing_nodes: list[str]
 ) -> TaskValidationResult by llm();
 
 sem validate_task_extraction = """
@@ -400,6 +403,23 @@ CRITICAL: Look for:
 2. Multiple activities in one message: "I'll do X and then Y" → BOTH tasks should be extracted
 3. Parallel tasks: "while X, I'll also Y" → BOTH tasks should be extracted
 4. Alternative scenarios: "if I have time I'll X, otherwise I'll Y" → BOTH tasks should be extracted
+5. TASK NAME CORRECTION: If extracted task is similar to an existing task but missing a verb or has wrong wording, signal a RENAME
+
+TASK NAME CORRECTION (rename needed):
+- Compare extracted_tasks with existing_nodes
+- If an extracted task is SEMANTICALLY THE SAME as an existing task but has a better/complete name:
+  * Set is_valid = false
+  * Set incorrect_task = the existing task with wrong/incomplete name
+  * Set correct_task_name = the better extracted task name
+  * Set reason = explanation of why rename is needed
+  * Set missing_tasks = [] (empty - no new task needed, just rename)
+- Examples of rename needed:
+  * existing_nodes: ["TheGoodPlace"], extracted: ["WatchTheGoodPlace"]
+    → incorrect_task="TheGoodPlace", correct_task_name="WatchTheGoodPlace", reason="TheGoodPlace should be renamed to WatchTheGoodPlace to include the verb 'Watch'"
+  * existing_nodes: ["Gym"], extracted: ["HeadToGym"]
+    → incorrect_task="Gym", correct_task_name="HeadToGym", reason="Gym should be renamed to HeadToGym to include the action verb"
+  * existing_nodes: ["Messages"], extracted: ["CheckMessages"]
+    → incorrect_task="Messages", correct_task_name="CheckMessages", reason="Messages should be renamed to CheckMessages to clarify the action"
 
 Examples of INCORRECT extraction (missing tasks):
 - User: "If I have assignments due I will work on them, if not I will netflix and chill"
@@ -410,9 +430,11 @@ Examples of INCORRECT extraction (missing tasks):
   Extracted: ["BrushTeeth"] → INVALID (missing "CheckNews")
 
 Return:
-- is_valid: true if ALL tasks mentioned are captured, false otherwise
-- reason: Brief explanation of why invalid (e.g., "Missing task: WorkOnAssignments - the user said they would work on assignments IF they have any")
-- missing_tasks: List of task names that were missed (empty if valid)
+- is_valid: true if ALL tasks mentioned are captured correctly, false otherwise
+- reason: Brief explanation of what's wrong
+- missing_tasks: List of task names that were missed (empty if rename needed or if valid)
+- incorrect_task: Empty string if valid or if missing tasks; set to existing task name if rename needed
+- correct_task_name: Empty string if valid or if missing tasks; set to the correct name if rename needed
 """;
 
 """Graph structure validation result"""

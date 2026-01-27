@@ -64,6 +64,8 @@ node manager_comm_data {
     has validation_type: str = "";
     has correction_needed: bool = False;
     has missing_tasks: list[str] = [];
+    has incorrect_task: str = "";      # Existing task with wrong name that should be renamed
+    has correct_task_name: str = "";    # What the task should be renamed to
 }
 
 node user_routines {
