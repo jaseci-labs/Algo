@@ -762,7 +762,7 @@ impl call_graph_agent.call{
             "pattern": thinking_summary.pattern_insight if thinking_summary.pattern_insight else ""
         };
 
-        # Store response data in manager_comm_data for Manager Agent to read
+        # Store response data in manager_comm_data for Manager Agent validation
         manager_data = find_manager_comm_data(here, self.username);
         if manager_data {
             manager_data.last_response = response;
@@ -772,20 +772,59 @@ impl call_graph_agent.call{
             manager_data.last_emotional_state = emotional_state.state;
         } else {
             # Create if doesn't exist
-            new_manager_data = here ++> manager_comm_data(username=self.username);
-            new_manager_data.last_response = response;
-            new_manager_data.last_suggestions = suggestions;
-            new_manager_data.last_thinking = thinking;
-            new_manager_data.last_task_names = task_names;
-            new_manager_data.last_emotional_state = emotional_state.state;
+            manager_data = here ++> manager_comm_data(username=self.username);
+            manager_data.last_response = response;
+            manager_data.last_suggestions = suggestions;
+            manager_data.last_thinking = thinking;
+            manager_data.last_task_names = task_names;
+            manager_data.last_emotional_state = emotional_state.state;
         }
 
+        # Call Manager to validate the Graph Agent's output
+        print(f"\n[GRAPH AGENT] Calling Manager for validation...");
+        root spawn validate_graph_output(
+            context_from_user=self.context_from_user,
+            username=self.username
+        );
+
+        # Read validation result from manager_comm_data (stored by validate_graph_output)
+        manager_data = find_manager_comm_data(here, self.username);
+        validation_failed = False;
+        validation_reason = "";
+        missing_tasks = [];
+
+        if manager_data and not manager_data.validation_passed {
+            print(f"[GRAPH AGENT] Validation FAILED: {manager_data.validation_reason}");
+            validation_failed = True;
+            validation_reason = manager_data.validation_reason;
+            missing_tasks = manager_data.missing_tasks or [];
+        }
+
+        if validation_failed {
+            print(f"[GRAPH AGENT] Validation FAILED - reporting with error info");
+            # TODO: Implement correction logic based on validation feedback
+            # For now, still report but with validation info
+            report {
+                "response": response,
+                "emotional_state": emotional_state.state,
+                "suggestions": suggestions,
+                "thinking": thinking,
+                "task_names": task_names,
+                "validation_passed": False,
+                "validation_reason": validation_reason,
+                "missing_tasks": missing_tasks
+            };
+            return;
+        }
+
+        print(f"[GRAPH AGENT] Validation PASSED - reporting response to user");
         report {
             "response": response,
             "emotional_state": emotional_state.state,
             "suggestions": suggestions,
             "thinking": thinking,
-            "task_names": task_names
+            "task_names": task_names,
+            "validation_passed": True
         };
     } except Exception as e {
         report {"error": "Supervisor error", "details": str(e)} ;
@@ -801,175 +840,41 @@ impl call_manager.orchestrate{
             return;
         }
 
-        print(f"\n[MANAGER] Processing user message: '{self.context_from_user}'");
+        print(f"\n[MANAGER ORCHESTRATE] Processing user message: '{self.context_from_user}'");
 
-        # Step 1: Get current graph state for context
-        user_graph = find_user_graph(here, self.username);
-        current_graph_state = {};
-        if user_graph {
-            graph_data = get_user_graph_structure(user_graph);
-            current_graph_state = {
-                "nodes": graph_data[0],
-                "edges": graph_data[1],
-                "last_task": user_graph?.last_task or "Start"
-            };
-        } else {
-            current_graph_state = {"nodes": ["Start"], "edges": [], "last_task": "Start"};
-        }
-
-        # Step 2: Spawn the Graph Agent to update the graph
-        print(f"[MANAGER] Calling graph agent...");
-
-        # Spawn graph agent (fire and forget - it updates the graph and stores response in manager_comm_data)
+        # Spawn the Graph Agent (it handles its own validation via validate_graph_output)
+        print(f"[MANAGER ORCHESTRATE] Spawning Graph Agent...");
         root spawn call_graph_agent(
             conversation_history=self.conversation_history,
             context_from_user=self.context_from_user,
             username=self.username
         );
 
-        # Read the response data from manager_comm_data (stored by call_graph_agent)
+        # Read the result from manager_comm_data (stored by call_graph_agent)
         manager_data = find_manager_comm_data(here, self.username);
-        if manager_data {
+        if manager_data and manager_data.last_response {
             graph_agent_result = {
-                "response": manager_data.last_response or "Done.",
+                "response": manager_data.last_response,
                 "emotional_state": manager_data.last_emotional_state or "neutral",
                 "suggestions": manager_data.last_suggestions or [],
                 "thinking": manager_data.last_thinking or {},
-                "graph_updated": len(manager_data.last_task_names or []) > 0
+                "task_names": manager_data.last_task_names or []
             };
-            print(f"[MANAGER] Read from manager_comm_data: task_names={manager_data.last_task_names}");
+            print(f"[MANAGER ORCHESTRATE] Returning Graph Agent response to user");
+            report graph_agent_result;
         } else {
-            # Fallback if manager_comm_data doesn't exist
-            graph_agent_result = {
-                "response": "Done.",
-                "emotional_state": "neutral",
-                "suggestions": [],
-                "thinking": {},
-                "graph_updated": False
-            };
-        }
-        
-        print(f"[MANAGER] Graph agent result: {graph_agent_result}");
-
-        # Check if graph agent returned an error
-        if "error" in graph_agent_result {
-            print(f"[MANAGER] Graph Agent failed: {graph_agent_result.get('error', 'Unknown error')}");
-            # Return error response
+            print(f"[MANAGER ORCHESTRATE] No response from Graph Agent");
             report {
-                "error": "Graph analysis failed",
-                "response": "I apologize, I couldn't process that request properly."
+                "error": "No response from graph agent",
+                "response": "I apologize, something went wrong."
             };
-            return;
         }
-
-        # Step 3: Validate Graph Agent's output
-        validation_result = validate_graph_agent_output(
-            user_message=self.context_from_user,
-            conversation_history=self.conversation_history,
-            current_graph_state=current_graph_state,
-            graph_agent_response=graph_agent_result
-        );
-
-        if not validation_result.is_valid {
-            print(f"[MANAGER] Validation failed: {validation_result.reason}");
-
-            # Step 4: Attempt correction if validation failed
-            correction_result = attempt_graph_correction(
-                user_message=self.context_from_user,
-                conversation_history=self.conversation_history,
-                current_graph_state=current_graph_state,
-                validation_failure=validation_result,
-                username=self.username
-            );
-
-            if correction_result.get("success", False) {
-                print(f"[MANAGER] Correction successful");
-                report correction_result.final_response;
-                return;
-            } else {
-                print(f"[MANAGER] Correction failed, using fallback");
-                # Use fallback response
-                report {
-                    "response": generate_fallback_response(self.context_from_user, validation_result.reason),
-                    "emotional_state": graph_agent_result.get("emotional_state", "neutral"),
-                    "suggestions": [],
-                    "thinking": {
-                        "emotional": "I detected some uncertainty in processing your request",
-                        "intent": "Working to understand your task structure",
-                        "tasks": "Reviewing the task flow",
-                        "pattern": "Ensuring logical connections"
-                    }
-                };
-                return;
-            }
-        }
-
-        # Step 5: If validation passed, ensure graph was actually updated if it should have been
-        should_have_updated = should_graph_have_been_updated(
-            user_message=self.context_from_user,
-            conversation_history=self.conversation_history,
-            current_graph_state=current_graph_state
-        );
-
-        if should_have_updated and not graph_agent_result.get("graph_updated", False) {
-            print(f"[MANAGER] Graph should have been updated but wasn't - forcing update");
-
-            # Force a graph update
-            forced_update = force_graph_update(
-                user_message=self.context_from_user,
-                conversation_history=self.conversation_history,
-                current_graph_state=current_graph_state,
-                username=self.username
-            );
-
-            if forced_update.get("success", False) {
-                # Merge the forced update with the original response
-                merged_response = merge_responses(graph_agent_result, forced_update);
-                report merged_response;
-                return;
-            }
-        }
-
-        # Step 6: Final validation of graph connectivity and logic
-        final_validation = validate_graph_connectivity(
-            root_node=here,
-            username=self.username,
-            graph_agent_response=graph_agent_result
-        );
-
-        if not final_validation.is_valid {
-            print(f"[MANAGER] Final validation failed: {final_validation.reason}");
-            
-            # Only apply correction if it's a real connectivity issue, not a validation error
-            if "error" not in final_validation.reason.lower() {
-                # Attempt final correction for real issues
-                final_correction = perform_final_correction(
-                    username=self.username,
-                    validation_issue=final_validation,
-                    original_response=graph_agent_result
-                );
-
-                report final_correction;
-                return;
-            } else {
-                # Validation error, not a real issue - return original response
-                print(f"[MANAGER] Validation error (not a real issue) - using original response");
-            }
-        }
-
-        # All validations passed - return the graph agent's response
-        print(f"[MANAGER] All validations passed - returning Graph Agent response");
-        print(f"[MANAGER] Response being reported: {graph_agent_result}");
-        report graph_agent_result;
 
     } except Exception as e {
-        print(f"[MANAGER] Unexpected error: {str(e)}");
+        print(f"[MANAGER ORCHESTRATE] Error: {str(e)}");
         report {
             "error": "Manager processing failed",
-            "response": "I apologize, something went wrong while processing your request.",
-            "emotional_state": "neutral",
-            "suggestions": [],
-            "thinking": {}
+            "response": "I apologize, something went wrong while processing your request."
         };
     }
 }
@@ -1321,376 +1226,120 @@ def extract_edge_label_via_printgraph(from_node: node, to_node: node) -> str {
 }
 
 #===========================================================
-#              MANAGER AGENT HELPER FUNCTIONS
+#              MANAGER VALIDATION ABILITY
 #===========================================================
 
-# Validation result structure
-class ValidationResult {
-    has is_valid: bool = True;
-    has reason: str = "";
-    has suggested_corrections: list = [];
-}
+# The validate ability is called by the Graph Agent to validate its output.
+# It performs validation checks and stores results in manager_comm_data.
+# The Manager NEVER sends responses to the user - only validates for Graph Agent.
+impl validate_graph_output.validate {
+    print(f"\n[MANAGER VALIDATE] Starting validation for user: {self.username}");
 
-# Validate Graph Agent's output against user intent and conversation context
-def validate_graph_agent_output(
-    user_message: str,
-    conversation_history: list,
-    current_graph_state: dict,
-    graph_agent_response: dict
-) -> ValidationResult {
-    try {
-        result = ValidationResult();
-        
-        # Check 1: If user mentioned tasks/activities, ensure graph was updated or should have been
-        task_keywords = ["task", "do", "make", "create", "build", "write", "call", "email", "meeting", "appointment", "schedule", "plan", "routine", "habit", "work", "study", "exercise", "cook", "clean", "shop", "drive", "walk", "run"];
-        mentioned_tasks = False;
-        
-        user_lower = user_message.lower();
-        for keyword in task_keywords {
-            if keyword in user_lower {
-                mentioned_tasks = True;
-                break;
-            }
-        }
-        
-        # Check for temporal indicators that suggest task sequencing
-        temporal_indicators = ["then", "after", "before", "next", "first", "second", "third", "finally", "last", "when", "if", "after that"];
-        has_temporal = False;
-        for indicator in temporal_indicators {
-            if indicator in user_lower {
-                has_temporal = True;
-                break;
-            }
-        }
-        
-        # If tasks were mentioned but no graph update occurred, this might be an issue
-        if (mentioned_tasks or has_temporal) and not graph_agent_response.get("graph_updated", False) {
-            # This is not necessarily invalid - the graph agent might have determined no update needed
-            # We'll check this in should_graph_have_been_updated instead
-        }
-        
-        # Check 2: Ensure response makes sense contextually
-        response_text = graph_agent_response.get("response", "").lower();
-        
-        # If user is asking a question but response doesn't address it
-        question_words = ["what", "how", "when", "where", "why", "which", "who", "can you", "could you"];
-        is_question = False;
-        for word in question_words {
-            if user_lower.startswith(word) or f" {word} " in f" {user_lower} " {
-                is_question = True;
-                break;
-            }
-        }
-        
-        if is_question and not any(word in response_text for word in ["i'll", "let me", "here's", "that's", "yes", "no", "the next", "you have"]) {
-            result.is_valid = False;
-            result.reason = "Question not properly addressed in response";
-            return result;
-        }
-        
-        # Check 3: Ensure suggestions are relevant if provided
-        suggestions = graph_agent_response.get("suggestions", []);
-        if len(suggestions) > 0 {
-            # Basic check - ensure suggestions aren't empty strings
-            for suggestion in suggestions {
-                if not suggestion or len(str(suggestion).strip()) == 0 {
-                    result.is_valid = False;
-                    result.reason = "Empty or invalid suggestions provided";
-                    return result;
-                }
-            }
-        }
-        
-        return result;
-        
-    } except Exception as e {
-        result = ValidationResult();
-        result.is_valid = False;
-        result.reason = f"Validation error: {str(e)}";
-        return result;
+    # Find or create manager_comm_data
+    manager_data = find_manager_comm_data(here, self.username);
+    if not manager_data {
+        print(f"[MANAGER VALIDATE] No manager_comm_data found - creating one");
+        manager_data = here ++> manager_comm_data(username=self.username);
     }
-}
 
-# Determine if the graph should have been updated based on user intent
-def should_graph_have_been_updated(
-    user_message: str,
-    conversation_history: list,
-    current_graph_state: dict
-) -> bool {
-    try {
-        user_lower = user_message.lower();
-        
-        # Direct task mentions
-        task_indicators = [
-            "i'm going to", "i will", "i'll", "i need to", "i have to", "i should",
-            "let me", "i want to", "i plan to", "i'm about to", "starting with",
-            "first i'll", "then i'll", "after that", "next i", "finally"
-        ];
-        
-        for indicator in task_indicators {
-            if indicator in user_lower {
-                return True;
-            }
-        }
-        
-        # Activity verbs
-        activity_verbs = [
-            "make", "do", "create", "build", "write", "call", "email", "text",
-            "meet", "schedule", "plan", "cook", "clean", "shop", "drive",
-            "walk", "run", "exercise", "study", "work", "read", "sleep"
-        ];
-        
-        for verb in activity_verbs {
-            if f" {verb} " in f" {user_lower} " or user_lower.startswith(verb) {
-                return True;
-            }
-        }
-        
-        # Correction indicators
-        correction_words = [
-            "actually", "instead", "not that", "change", "modify", "correct",
-            "fix", "update", "revise", "amend", "adjust", "replace"
-        ];
-        
-        for word in correction_words {
-            if word in user_lower {
-                return True;
-            }
-        }
-        
-        # Sequence indicators
-        sequence_words = ["before", "after", "then", "next", "first", "last", "finally"];
-        sequence_count = 0;
-        for word in sequence_words {
-            if word in user_lower {
-                sequence_count += 1;
-            }
-        }
-        
-        if sequence_count >= 2 {  # Multiple sequence indicators suggest task flow
-            return True;
-        }
-        
-        return False;
-        
-    } except Exception as e {
-        print(f"[MANAGER] Error in should_graph_have_been_updated: {str(e)}");
-        return False;
-    }
-}
+    # Get the Graph Agent's output from manager_comm_data
+    extracted_tasks = manager_data.last_task_names or [];
+    user_message = self.context_from_user;
 
-# Attempt to correct graph agent output when validation fails
-def attempt_graph_correction(
-    user_message: str,
-    conversation_history: list,
-    current_graph_state: dict,
-    validation_failure: ValidationResult,
-    username: str
-) -> dict {
-    try {
-        print(f"[MANAGER] Attempting correction for: {validation_failure.reason}");
-        
-        # For now, return a basic correction response
-        # In a full implementation, this would call the graph agent with specific correction instructions
-        
-        return {
-            "success": True,
-            "final_response": {
-                "response": "I understand what you're saying. Let me make sure I have that right in your routine.",
-                "emotional_state": "focused",
-                "suggestions": ["Tell me more about your plans", "What comes next?"],
-                "thinking": {
-                    "emotional": "Making sure I understand your workflow correctly",
-                    "intent": "Clarifying your task sequence",
-                    "tasks": "Reviewing and adjusting the task flow",
-                    "pattern": "Ensuring logical progression"
-                }
-            }
+    print(f"[MANAGER VALIDATE] Extracted tasks: {extracted_tasks}");
+
+    # Validation 1: Task Extraction Validation
+    print(f"[MANAGER VALIDATE] Validating task extraction...");
+    task_validation = validate_task_extraction(
+        user_message=user_message,
+        extracted_tasks=extracted_tasks
+    );
+
+    if not task_validation.is_valid {
+        print(f"[MANAGER VALIDATE] Task extraction FAILED: {task_validation.reason}");
+        print(f"[MANAGER VALIDATE] Missing tasks: {task_validation.missing_tasks}");
+
+        # Store validation results in manager_comm_data
+        manager_data.validation_passed = False;
+        manager_data.validation_reason = task_validation.reason;
+        manager_data.correction_needed = True;
+        manager_data.missing_tasks = task_validation.missing_tasks;
+
+        # Return validation failure (to Graph Agent, not to user)
+        report {
+            "validation_passed": False,
+            "validation_type": "task_extraction",
+            "reason": task_validation.reason,
+            "missing_tasks": task_validation.missing_tasks
         };
-        
-    } except Exception as e {
-        return {
-            "success": False,
-            "error": f"Correction failed: {str(e)}"
-        };
+        return;
+    } else {
+        print(f"[MANAGER VALIDATE] Task extraction PASSED");
     }
-}
 
-# Force a graph update when it should have happened but didn't
-def force_graph_update(
-    user_message: str,
-    conversation_history: list,
-    current_graph_state: dict,
-    username: str
-) -> dict {
-    try {
-        print(f"[MANAGER] Forcing graph update for message: {user_message}");
-        
-        # Call graph agent with explicit instruction to update
-        # This is a simplified version - in practice would need more sophisticated logic
-        
-        return {
-            "success": True,
-            "response": "Got it, updating your routine.",
-            "emotional_state": "focused",
-            "suggestions": [],
-            "thinking": {
-                "emotional": "Making sure everything is recorded properly",
-                "intent": "Capturing your task",
-                "tasks": "Adding to your workflow",
-                "pattern": "Building your routine step by step"
-            },
-            "graph_updated": True
-        };
-        
-    } except Exception as e {
-        return {
-            "success": False,
-            "error": f"Force update failed: {str(e)}"
-        };
-    }
-}
+    # Validation 2: Graph Structure Validation (for newly added tasks only)
+    print(f"[MANAGER VALIDATE] Validating graph structure for new tasks...");
 
-# Merge two responses when one supplements the other
-def merge_responses(original_response: dict, supplemental_response: dict) -> dict {
-    try {
-        merged = original_response.copy();
-        
-        # Combine suggestions if both have them
-        if "suggestions" in supplemental_response and len(supplemental_response["suggestions"]) > 0 {
-            existing_suggestions = merged.get("suggestions", []);
-            merged["suggestions"] = existing_suggestions + supplemental_response["suggestions"];
-        }
-        
-        # Update thinking if supplemental has more specific info
-        if "thinking" in supplemental_response {
-            supp_thinking = supplemental_response["thinking"];
-            orig_thinking = merged.get("thinking", {});
-            
-            for key in ["emotional", "intent", "tasks", "pattern"] {
-                if key in supp_thinking and supp_thinking[key] {
-                    orig_thinking[key] = supp_thinking[key];
-                }
-            }
-            
-            merged["thinking"] = orig_thinking;
-        }
-        
-        # Mark as updated
-        merged["graph_updated"] = True;
-        
-        return merged;
-        
-    } except Exception as e {
-        print(f"[MANAGER] Error merging responses: {str(e)}");
-        return original_response;
-    }
-}
-
-# Validate final graph connectivity and logical consistency
-def validate_graph_connectivity(root_node: node, username: str, graph_agent_response: dict) -> ValidationResult {
-    try {
-        result = ValidationResult();
-        
-        # Get current graph state after any updates
-        user_graph = find_user_graph(root_node, username);
-        if not user_graph {
-            return result;  # Empty graph is valid
-        }
-        
+    # Get the actual graph state
+    user_graph = find_user_graph(here, self.username);
+    actual_nodes = [];
+    actual_edges = [];
+    if user_graph {
         graph_data = get_user_graph_structure(user_graph);
-        nodes = graph_data[0];
-        edges = graph_data[1];
-        
-        # Check 1: Ensure Start node exists
-        if "Start" not in nodes {
-            result.is_valid = False;
-            result.reason = "Missing Start node";
-            return result;
-        }
-        
-        # Check 2: Ensure no orphaned nodes (except Start)
-        connected_nodes = {"Start"};
-        for edge in edges {
-            from_node = edge.get("from", "");
-            to_node = edge.get("to", "");
-            if from_node {
-                connected_nodes.add(from_node);
-            }
-            if to_node {
-                connected_nodes.add(to_node);
-            }
-        }
-        
-        for node in nodes {
-            if node not in connected_nodes and node != "Start" {
-                result.is_valid = False;
-                result.reason = f"Orphaned node: {node}";
-                return result;
-            }
-        }
-        
-        # Check 3: Ensure no circular references (basic check)
-        # This is a simplified check - full topological sort would be better
-        for edge in edges {
-            from_node = edge.get("from", "");
-            to_node = edge.get("to", "");
-            if from_node == to_node {
-                result.is_valid = False;
-                result.reason = f"Self-referencing edge: {from_node}";
-                return result;
-            }
-        }
-        
-        return result;
-        
-    } except Exception as e {
-        result = ValidationResult();
-        result.is_valid = False;
-        result.reason = f"Connectivity validation error: {str(e)}";
-        return result;
+        actual_nodes = graph_data[0];
+        actual_edges = graph_data[1];
     }
-}
+    print(f"[MANAGER VALIDATE] Graph nodes: {actual_nodes}, edges: {actual_edges}");
 
-# Perform final corrections for connectivity issues
-def perform_final_correction(username: str, validation_issue: ValidationResult, original_response: dict) -> dict {
-    try {
-        print(f"[MANAGER] Performing final correction for: {validation_issue.reason}");
-        
-        # For connectivity issues, we might need to rebuild the graph
-        # This is a simplified response for now
-        
-        return {
-            "response": original_response.get("response", "I've reviewed and organized your tasks."),
-            "emotional_state": original_response.get("emotional_state", "focused"),
-            "suggestions": original_response.get("suggestions", []),
-            "thinking": {
-                "emotional": "Ensuring everything is properly connected",
-                "intent": "Organizing your task flow",
-                "tasks": "Validating and fixing task connections",
-                "pattern": "Creating a logical sequence"
-            }
+    # Only validate edges involving the newly added tasks (as destinations)
+    new_task_edges = [];
+    for edge in actual_edges {
+        if edge.get("to", "") in extracted_tasks {
+            new_task_edges.append(edge);
+        }
+    }
+    print(f"[MANAGER VALIDATE] Edges involving new tasks: {new_task_edges}");
+
+    # Validate only the new tasks and their connections
+    graph_validation = validate_graph_structure(
+        user_message=user_message,
+        graph_nodes=extracted_tasks,
+        graph_edges=new_task_edges
+    );
+
+    if not graph_validation.is_valid {
+        print(f"[MANAGER VALIDATE] Graph structure validation FAILED: {graph_validation.reason}");
+        print(f"[MANAGER VALIDATE] Expected structure: {graph_validation.expected_structure}");
+
+        # Store validation results in manager_comm_data
+        manager_data.validation_passed = False;
+        manager_data.validation_reason = graph_validation.reason;
+        manager_data.correction_needed = True;
+
+        # Return validation failure (to Graph Agent, not to user)
+        report {
+            "validation_passed": False,
+            "validation_type": "graph_structure",
+            "reason": graph_validation.reason,
+            "expected_structure": graph_validation.expected_structure
         };
-        
-    } except Exception as e {
-        return original_response;  # Return original if correction fails
+        return;
+    } else {
+        print(f"[MANAGER VALIDATE] Graph structure validation PASSED");
     }
-}
 
-# Generate fallback response when all else fails
-def generate_fallback_response(user_message: str, reason: str) -> str {
-    try {
-        # Simple fallback responses based on user input type
-        user_lower = user_message.lower();
-        
-        if any(word in user_lower for word in ["what", "how", "when", "where", "why"]) {
-            return "I'm working on understanding that better. Could you tell me more about what you're planning?";
-        } elif any(word in user_lower for word in ["do", "make", "create", "build"]) {
-            return "I want to make sure I capture that correctly. What are the main steps involved?";
-        } else {
-            return "I appreciate you sharing that with me. I'm here to help organize your tasks and routines.";
-        }
-    } except Exception as e {
-        return "I understand you're working on something. I'm here to help keep track of your tasks!";
-    }
+    # All validations passed
+    manager_data.validation_passed = True;
+    manager_data.validation_reason = "";
+    manager_data.correction_needed = False;
+    manager_data.missing_tasks = [];
+
+    print(f"[MANAGER VALIDATE] All validations PASSED");
+
+    # Return validation success (to Graph Agent)
+    report {
+        "validation_passed": True,
+        "validation_type": "all",
+        "reason": ""
+    };
 }

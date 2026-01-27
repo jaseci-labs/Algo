@@ -348,3 +348,90 @@ For parallel tasks detected: 'These happen at the same time' or 'These happen wh
 
 Keep all bullets under 10 words. Be conversational and natural.
 """;
+
+"""Task validation result"""
+obj TaskValidationResult {
+    has is_valid: bool;
+    has reason: str;
+    has missing_tasks: list[str];
+}
+
+"""Validate that extracted tasks match the user's message"""
+def validate_task_extraction(
+    user_message: str,
+    extracted_tasks: list[str]
+) -> TaskValidationResult by llm();
+
+sem validate_task_extraction = """
+Validate if the extracted tasks correctly capture ALL actions/activities mentioned in the user's message.
+
+CRITICAL: Look for:
+1. Conditional statements: "if X, then Y; otherwise Z" → BOTH tasks should be extracted
+2. Multiple activities in one message: "I'll do X and then Y" → BOTH tasks should be extracted
+3. Parallel tasks: "while X, I'll also Y" → BOTH tasks should be extracted
+4. Alternative scenarios: "if I have time I'll X, otherwise I'll Y" → BOTH tasks should be extracted
+
+Examples of INCORRECT extraction (missing tasks):
+- User: "If I have assignments due I will work on them, if not I will netflix and chill"
+  Extracted: ["NetflixAndChill"] → INVALID (missing "WorkOnAssignments")
+- User: "I'll make coffee and then check my emails"
+  Extracted: ["MakeCoffee"] → INVALID (missing "CheckEmails")
+- User: "While brushing my teeth, I'll also check the news"
+  Extracted: ["BrushTeeth"] → INVALID (missing "CheckNews")
+
+Return:
+- is_valid: true if ALL tasks mentioned are captured, false otherwise
+- reason: Brief explanation of why invalid (e.g., "Missing task: WorkOnAssignments - the user said they would work on assignments IF they have any")
+- missing_tasks: List of task names that were missed (empty if valid)
+""";
+
+"""Graph structure validation result"""
+obj GraphValidationResult {
+    has is_valid: bool;
+    has reason: str;
+    has expected_structure: str;
+}
+
+"""Validate that graph structure matches user's intent"""
+def validate_graph_structure(
+    user_message: str,
+    graph_nodes: list[str],
+    graph_edges: list[dict[str, str]]
+) -> GraphValidationResult by llm();
+
+sem validate_graph_structure = """
+Validate if the graph structure correctly represents the user's intent for NEWLY ADDED tasks.
+
+IMPORTANT CONTEXT:
+- graph_nodes: ONLY the newly added task names (not the entire graph)
+- graph_edges: ONLY edges involving the new tasks (as "to" destination)
+- The "from" task in edges is typically a pre-existing task - this is EXPECTED and VALID
+
+Check for:
+1. Conditional branches: "if X then Y, otherwise Z" → New tasks should have proper conditional structure
+2. Sequential tasks: "do X then Y" → If user said "do X then Y", both should be added with X→Y edge
+3. Parallel tasks: "while X, also Y" → Both tasks should branch from same source
+4. Convergence: "either way" → Tasks should merge into a common task
+
+Examples of CORRECT structure (pre-existing task "ReadABook" + new task "MakeBreakfast"):
+- User: "make breakfast"
+  graph_nodes: ["MakeBreakfast"]
+  graph_edges: [{"from": "ReadABook", "to": "MakeBreakfast", "label": "then"}]
+  → VALID: Single task added, connected from previous task
+
+Examples of INCORRECT structure:
+- User: "I'll make coffee and then check emails"
+  graph_nodes: ["MakeCoffee"]
+  graph_edges: [{"from": "Start", "to": "MakeCoffee", "label": "then"}]
+  → INVALID: Missing "CheckEmails" task mentioned in user message
+
+- User: "if I have assignments I'll work on them, otherwise netflix"
+  graph_nodes: ["NetflixAndChill"]
+  graph_edges: [{"from": "Start", "to": "NetflixAndChill", "label": "then"}]
+  → INVALID: Missing conditional branch "WorkOnAssignments"
+
+Return:
+- is_valid: true if the new tasks are correctly connected
+- reason: Brief explanation of what's wrong (empty if valid)
+- expected_structure: Description of what SHOULD exist (empty if valid)
+""";

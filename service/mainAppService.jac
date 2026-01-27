@@ -14,6 +14,8 @@ import from semantics.semantics {
     AttachmentPointAnalysis,
     ConvergenceIntent,
     ThinkingSummary,
+    TaskValidationResult,
+    GraphValidationResult,
     detect_emotional_state,
     analyze_conversation_intent,
     extract_raw_task_names,
@@ -22,7 +24,9 @@ import from semantics.semantics {
     build_task_relationships,
     generate_friendly_response,
     generate_next_suggestions,
-    generate_thinking_summary
+    generate_thinking_summary,
+    validate_task_extraction,
+    validate_graph_structure
 }
 
 node TaskState {
@@ -47,6 +51,10 @@ node manager_comm_data {
     has last_thinking: dict = {};
     has last_task_names: list = [];
     has last_emotional_state: str = "neutral";
+    has validation_passed: bool = True;
+    has validation_reason: str = "";
+    has correction_needed: bool = False;
+    has missing_tasks: list[str] = [];
 }
 
 node user_routines {
@@ -144,4 +152,11 @@ walker :pub call_manager {
     has username: str = "anonymous";
 
     can orchestrate with `root entry;
+}
+
+walker :pub validate_graph_output {
+    has context_from_user: str;
+    has username: str = "anonymous";
+
+    can validate with `root entry;
 }
