@@ -16,6 +16,10 @@ import from semantics.semantics {
     ThinkingSummary,
     TaskValidationResult,
     GraphValidationResult,
+    RenameValidationResult,
+    InsertValidationResult,
+    ReorderValidationResult,
+    EdgeLabelValidationResult,
     detect_emotional_state,
     analyze_conversation_intent,
     extract_raw_task_names,
@@ -26,7 +30,11 @@ import from semantics.semantics {
     generate_next_suggestions,
     generate_thinking_summary,
     validate_task_extraction,
-    validate_graph_structure
+    validate_graph_structure,
+    validate_rename_operation,
+    validate_insert_operation,
+    validate_reorder_operation,
+    validate_edge_labels
 }
 
 node TaskState {
@@ -53,6 +61,7 @@ node manager_comm_data {
     has last_emotional_state: str = "neutral";
     has validation_passed: bool = True;
     has validation_reason: str = "";
+    has validation_type: str = "";
     has correction_needed: bool = False;
     has missing_tasks: list[str] = [];
 }
@@ -156,6 +165,12 @@ walker :pub call_manager {
 
 walker :pub validate_graph_output {
     has context_from_user: str;
+    has intent_analysis: dict;
+    has extracted_tasks: list;
+    has before_nodes: list;
+    has before_edges: list;
+    has after_nodes: list;
+    has after_edges: list;
     has username: str = "anonymous";
 
     can validate with `root entry;

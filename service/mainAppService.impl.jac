@@ -395,7 +395,7 @@ impl call_graph_agent.call{
         if user_graph {
             last_task = user_graph?.last_task or "Start";
             start_node = find_start_node(user_graph);
-            
+
             if start_node {
                 # Use bounded traversal to avoid crossing user boundaries
                 graph_data = get_user_graph_structure(user_graph);
@@ -420,6 +420,10 @@ impl call_graph_agent.call{
             current_nodes = ["Start"];
         }
 
+        # Capture graph state BEFORE operation (for validation)
+        before_nodes = current_nodes.copy();
+        before_edges = current_edges.copy();
+
         # ============================================
         # NEW SEMANTIC APPROACH (Multi-Step Analysis)
         # ============================================
@@ -442,19 +446,19 @@ impl call_graph_agent.call{
         if intent_analysis.conversation_context.correction_type == "rename" {
             # Use LLM-identified task or fall back to last_task
             referring_to = intent_analysis.conversation_context.referring_to_task;
-            old_name = (referring_to if referring_to and referring_to in current_nodes 
+            old_name = (referring_to if referring_to and referring_to in current_nodes
                        else last_task.split("|")[0] if "|" in last_task else last_task);
-            
+
             extracted_tasks = extract_raw_task_names(
                 user_message=self.context_from_user,
                 conversation_context=intent_analysis.conversation_context,
                 existing_nodes=current_nodes
             );
-            
+
             if old_name != "Start" and len(extracted_tasks.unique_names) > 0 {
                 new_name = extracted_tasks.unique_names[0];
                 print(f"[DEBUG] RENAME: '{old_name}' -> '{new_name}'");
-                
+
                 # Rebuild graph with renamed node
                 new_nodes = [new_name if n == old_name else n for n in current_nodes];
                 new_edges = [
@@ -465,19 +469,65 @@ impl call_graph_agent.call{
                     }
                     for e in current_edges
                 ];
-                
+
                 here spawn rebuild_graph(username=self.username, new_nodes=new_nodes, new_edges=new_edges);
-                
+
+                # Capture AFTER state for validation
+                after_nodes = new_nodes;
+                after_edges = new_edges;
+
+                # Convert intent_analysis object to dict for passing
+                intent_dict = {
+                    "conversation_context": {
+                        "intent": str(intent_analysis.conversation_context.intent),
+                        "referring_to_task": intent_analysis.conversation_context.referring_to_task,
+                        "correction_type": intent_analysis.conversation_context.correction_type,
+                        "needs_graph_rebuild": intent_analysis.conversation_context.needs_graph_rebuild,
+                        "is_insertion": intent_analysis.conversation_context.is_insertion,
+                        "tasks_to_move": intent_analysis.conversation_context.tasks_to_move
+                    },
+                    "should_create_tasks": intent_analysis.should_create_tasks,
+                    "confidence": intent_analysis.confidence
+                };
+
+                # Call Manager to validate the rename operation (passing context directly)
+                root spawn validate_graph_output(
+                    context_from_user=self.context_from_user,
+                    username=self.username,
+                    intent_analysis=intent_dict,
+                    extracted_tasks=[new_name],
+                    before_nodes=before_nodes,
+                    before_edges=before_edges,
+                    after_nodes=after_nodes,
+                    after_edges=after_edges
+                );
+
+                # Generate response
+                response = generate_friendly_response(self.context_from_user, emotional_state, "task_renamed", [new_name]);
+
+                # Store response in manager_comm_data for frontend
+                manager_data = find_manager_comm_data(here, self.username);
+                if not manager_data {
+                    manager_data = here ++> manager_comm_data(username=self.username);
+                }
+                manager_data.last_response = response;
+                manager_data.last_suggestions = [];
+                manager_data.last_thinking = {
+                    "emotional": f"You seem {emotional_state.state} right now",
+                    "intent": "You're renaming a task",
+                    "tasks": f"Renamed: {old_name} → {new_name}",
+                    "pattern": ""
+                };
+                manager_data.last_task_names = [new_name];
+                manager_data.last_emotional_state = emotional_state.state;
+
                 report {
-                    "response": generate_friendly_response(self.context_from_user, emotional_state, "task_renamed", [new_name]),
+                    "response": response,
                     "emotional_state": emotional_state.state,
                     "suggestions": [],
-                    "thinking": {
-                        "emotional": f"You seem {emotional_state.state} right now",
-                        "intent": "You're renaming a task",
-                        "tasks": f"Renamed: {old_name} → {new_name}",
-                        "pattern": ""
-                    }
+                    "thinking": manager_data.last_thinking,
+                    "task_names": [new_name],
+                    "validation_passed": True
                 };
                 return;
             }
@@ -762,88 +812,202 @@ impl call_graph_agent.call{
             "pattern": thinking_summary.pattern_insight if thinking_summary.pattern_insight else ""
         };
 
-        # Store response data in manager_comm_data for Manager Agent validation
-        manager_data = find_manager_comm_data(here, self.username);
-        if manager_data {
-            manager_data.last_response = response;
-            manager_data.last_suggestions = suggestions;
-            manager_data.last_thinking = thinking;
-            manager_data.last_task_names = task_names;
-            manager_data.last_emotional_state = emotional_state.state;
-        } else {
-            # Create if doesn't exist
-            manager_data = here ++> manager_comm_data(username=self.username);
-            manager_data.last_response = response;
-            manager_data.last_suggestions = suggestions;
-            manager_data.last_thinking = thinking;
-            manager_data.last_task_names = task_names;
-            manager_data.last_emotional_state = emotional_state.state;
+        # Capture graph state AFTER operation (for validation)
+        user_graph_after = find_user_graph(here, self.username);
+        after_nodes = [];
+        after_edges = [];
+        if user_graph_after {
+            graph_data = get_user_graph_structure(user_graph_after);
+            after_nodes = graph_data[0];
+            after_edges = graph_data[1];
         }
 
-        # Call Manager to validate the Graph Agent's output
+        # Store response data in manager_comm_data for frontend
+        manager_data = find_manager_comm_data(here, self.username);
+        if not manager_data {
+            manager_data = here ++> manager_comm_data(username=self.username);
+        }
+        manager_data.last_response = response;
+        manager_data.last_suggestions = suggestions;
+        manager_data.last_thinking = thinking;
+        manager_data.last_task_names = task_names;
+        manager_data.last_emotional_state = emotional_state.state;
+
+        # Convert intent_analysis object to dict for passing
+        intent_dict = {
+            "conversation_context": {
+                "intent": str(intent_analysis.conversation_context.intent),
+                "referring_to_task": intent_analysis.conversation_context.referring_to_task,
+                "correction_type": intent_analysis.conversation_context.correction_type,
+                "needs_graph_rebuild": intent_analysis.conversation_context.needs_graph_rebuild,
+                "is_insertion": intent_analysis.conversation_context.is_insertion,
+                "tasks_to_move": intent_analysis.conversation_context.tasks_to_move
+            },
+            "should_create_tasks": intent_analysis.should_create_tasks,
+            "confidence": intent_analysis.confidence
+        };
+
+        # Call Manager to validate the Graph Agent's output (passing context directly)
         print(f"\n[GRAPH AGENT] Calling Manager for validation...");
         root spawn validate_graph_output(
             context_from_user=self.context_from_user,
-            username=self.username
+            username=self.username,
+            intent_analysis=intent_dict,
+            extracted_tasks=task_names,
+            before_nodes=before_nodes,
+            before_edges=before_edges,
+            after_nodes=after_nodes,
+            after_edges=after_edges
         );
 
         # Read validation result from manager_comm_data (stored by validate_graph_output)
         manager_data = find_manager_comm_data(here, self.username);
         validation_failed = False;
         validation_reason = "";
+        validation_type = "";
         missing_tasks = [];
 
         if manager_data and not manager_data.validation_passed {
             print(f"[GRAPH AGENT] Validation FAILED: {manager_data.validation_reason}");
             validation_failed = True;
             validation_reason = manager_data.validation_reason;
+            validation_type = manager_data.validation_type or "";
             missing_tasks = manager_data.missing_tasks or [];
         }
 
-        if validation_failed and len(missing_tasks) > 0 {
-            print(f"[GRAPH AGENT] Validation FAILED - correcting by adding missing tasks: {missing_tasks}");
-
-            # Get the current graph state to find the last task
-            user_graph = find_user_graph(here, self.username);
-            last_task = "Start";
-            if user_graph {
-                last_task = user_graph?.last_task or "Start";
-            }
-
-            # Add each missing task to the graph
-            for missing_task in missing_tasks {
-                print(f"[GRAPH AGENT] Adding missing task: {missing_task}");
-                here spawn update_task_graph(
-                    task_name=missing_task,
-                    previous_task=last_task,
-                    edge_label="then",
-                    username=self.username
-                );
-                last_task = missing_task;
-            }
-
-            # Update task_names to include the newly added tasks
-            task_names.extend(missing_tasks);
-
-            # Update response to acknowledge the correction
-            response = f"{response} I've also added: {', '.join(missing_tasks)}.";
-
-            print(f"[GRAPH AGENT] Correction complete - reporting updated response");
-            report {
-                "response": response,
-                "emotional_state": emotional_state.state,
-                "suggestions": suggestions,
-                "thinking": thinking,
-                "task_names": task_names,
-                "validation_passed": True,
-                "corrected": True,
-                "added_tasks": missing_tasks
-            };
-            return;
-        }
-
         if validation_failed {
-            print(f"[GRAPH AGENT] Validation FAILED - no missing tasks to correct, reporting as-is");
+            print(f"[GRAPH AGENT] Validation type: {validation_type}");
+
+            # Handle task extraction failures
+            if validation_type == "task_extraction" and len(missing_tasks) > 0 {
+                print(f"[GRAPH AGENT] Correcting by adding missing tasks: {missing_tasks}");
+
+                # Get the current graph state to find the last task
+                user_graph = find_user_graph(here, self.username);
+                last_task = "Start";
+                if user_graph {
+                    last_task = user_graph?.last_task or "Start";
+                }
+
+                # Add each missing task to the graph
+                for missing_task in missing_tasks {
+                    print(f"[GRAPH AGENT] Adding missing task: {missing_task}");
+                    here spawn update_task_graph(
+                        task_name=missing_task,
+                        previous_task=last_task,
+                        edge_label="then",
+                        username=self.username
+                    );
+                    last_task = missing_task;
+                }
+
+                # Update task_names to include the newly added tasks
+                task_names.extend(missing_tasks);
+
+                # Update response to acknowledge the correction
+                response = f"{response} I've also added: {', '.join(missing_tasks)}.";
+
+                print(f"[GRAPH AGENT] Correction complete - reporting updated response");
+                report {
+                    "response": response,
+                    "emotional_state": emotional_state.state,
+                    "suggestions": suggestions,
+                    "thinking": thinking,
+                    "task_names": task_names,
+                    "validation_passed": True,
+                    "corrected": True,
+                    "added_tasks": missing_tasks
+                };
+                return;
+            }
+
+            # Handle edge label failures
+            elif validation_type == "edge_labels" {
+                print(f"[GRAPH AGENT] Edge label validation failed: {validation_reason}");
+                # For now, report as-is with validation info
+                # TODO: Implement edge label correction logic
+                report {
+                    "response": response,
+                    "emotional_state": emotional_state.state,
+                    "suggestions": suggestions,
+                    "thinking": thinking,
+                    "task_names": task_names,
+                    "validation_passed": False,
+                    "validation_reason": validation_reason
+                };
+                return;
+            }
+
+            # Handle rename operation failures
+            elif validation_type == "rename_operation" {
+                print(f"[GRAPH AGENT] Rename validation failed: {validation_reason}");
+                # For now, report as-is with validation info
+                # TODO: Implement rename correction logic
+                report {
+                    "response": response,
+                    "emotional_state": emotional_state.state,
+                    "suggestions": suggestions,
+                    "thinking": thinking,
+                    "task_names": task_names,
+                    "validation_passed": False,
+                    "validation_reason": validation_reason
+                };
+                return;
+            }
+
+            # Handle insert operation failures
+            elif validation_type == "insert_operation" {
+                print(f"[GRAPH AGENT] Insert validation failed: {validation_reason}");
+                # For now, report as-is with validation info
+                # TODO: Implement insert position correction logic
+                report {
+                    "response": response,
+                    "emotional_state": emotional_state.state,
+                    "suggestions": suggestions,
+                    "thinking": thinking,
+                    "task_names": task_names,
+                    "validation_passed": False,
+                    "validation_reason": validation_reason
+                };
+                return;
+            }
+
+            # Handle reorder operation failures
+            elif validation_type == "reorder_operation" {
+                print(f"[GRAPH AGENT] Reorder validation failed: {validation_reason}");
+                # For now, report as-is with validation info
+                # TODO: Implement reorder correction logic
+                report {
+                    "response": response,
+                    "emotional_state": emotional_state.state,
+                    "suggestions": suggestions,
+                    "thinking": thinking,
+                    "task_names": task_names,
+                    "validation_passed": False,
+                    "validation_reason": validation_reason
+                };
+                return;
+            }
+
+            # Handle graph structure failures
+            elif validation_type == "graph_structure" {
+                print(f"[GRAPH AGENT] Graph structure validation failed: {validation_reason}");
+                # For now, report as-is with validation info
+                # TODO: Implement graph structure correction logic
+                report {
+                    "response": response,
+                    "emotional_state": emotional_state.state,
+                    "suggestions": suggestions,
+                    "thinking": thinking,
+                    "task_names": task_names,
+                    "validation_passed": False,
+                    "validation_reason": validation_reason
+                };
+                return;
+            }
+
+            # Unknown validation failure - report as-is
+            print(f"[GRAPH AGENT] Unknown validation failure - reporting as-is");
             report {
                 "response": response,
                 "emotional_state": emotional_state.state,
@@ -1274,111 +1438,178 @@ def extract_edge_label_via_printgraph(from_node: node, to_node: node) -> str {
 impl validate_graph_output.validate {
     print(f"\n[MANAGER VALIDATE] Starting validation for user: {self.username}");
 
-    # Find or create manager_comm_data
+    # Find or create manager_comm_data to store validation results
     manager_data = find_manager_comm_data(here, self.username);
     if not manager_data {
-        print(f"[MANAGER VALIDATE] No manager_comm_data found - creating one");
         manager_data = here ++> manager_comm_data(username=self.username);
     }
 
-    # Get the Graph Agent's output from manager_comm_data
-    extracted_tasks = manager_data.last_task_names or [];
+    # Use passed parameters directly
+    intent_analysis = self.intent_analysis or {};
+    extracted_tasks = self.extracted_tasks or [];
+    before_nodes = self.before_nodes or [];
+    before_edges = self.before_edges or [];
+    after_nodes = self.after_nodes or [];
+    after_edges = self.after_edges or [];
     user_message = self.context_from_user;
 
-    print(f"[MANAGER VALIDATE] Extracted tasks: {extracted_tasks}");
+    # Derive operation type from intent_analysis
+    conversation_context = intent_analysis.get("conversation_context", {});
+    correction_type = conversation_context.get("correction_type", "");
+    referring_to_task = conversation_context.get("referring_to_task", "");
+    tasks_to_move = conversation_context.get("tasks_to_move", []);
 
-    # Validation 1: Task Extraction Validation
-    print(f"[MANAGER VALIDATE] Validating task extraction...");
-    task_validation = validate_task_extraction(
-        user_message=user_message,
-        extracted_tasks=extracted_tasks
-    );
+    print(f"[MANAGER VALIDATE] Operation type: '{correction_type}'");
 
-    if not task_validation.is_valid {
-        print(f"[MANAGER VALIDATE] Task extraction FAILED: {task_validation.reason}");
-        print(f"[MANAGER VALIDATE] Missing tasks: {task_validation.missing_tasks}");
-
-        # Store validation results in manager_comm_data
-        manager_data.validation_passed = False;
-        manager_data.validation_reason = task_validation.reason;
-        manager_data.correction_needed = True;
-        manager_data.missing_tasks = task_validation.missing_tasks;
-
-        # Return validation failure (to Graph Agent, not to user)
-        report {
-            "validation_passed": False,
-            "validation_type": "task_extraction",
-            "reason": task_validation.reason,
-            "missing_tasks": task_validation.missing_tasks
-        };
-        return;
-    } else {
-        print(f"[MANAGER VALIDATE] Task extraction PASSED");
-    }
-
-    # Validation 2: Graph Structure Validation (for newly added tasks only)
-    print(f"[MANAGER VALIDATE] Validating graph structure for new tasks...");
-
-    # Get the actual graph state
-    user_graph = find_user_graph(here, self.username);
-    actual_nodes = [];
-    actual_edges = [];
-    if user_graph {
-        graph_data = get_user_graph_structure(user_graph);
-        actual_nodes = graph_data[0];
-        actual_edges = graph_data[1];
-    }
-    print(f"[MANAGER VALIDATE] Graph nodes: {actual_nodes}, edges: {actual_edges}");
-
-    # Only validate edges involving the newly added tasks (as destinations)
-    new_task_edges = [];
-    for edge in actual_edges {
-        if edge.get("to", "") in extracted_tasks {
-            new_task_edges.append(edge);
-        }
-    }
-    print(f"[MANAGER VALIDATE] Edges involving new tasks: {new_task_edges}");
-
-    # Validate only the new tasks and their connections
-    graph_validation = validate_graph_structure(
-        user_message=user_message,
-        graph_nodes=extracted_tasks,
-        graph_edges=new_task_edges
-    );
-
-    if not graph_validation.is_valid {
-        print(f"[MANAGER VALIDATE] Graph structure validation FAILED: {graph_validation.reason}");
-        print(f"[MANAGER VALIDATE] Expected structure: {graph_validation.expected_structure}");
-
-        # Store validation results in manager_comm_data
-        manager_data.validation_passed = False;
-        manager_data.validation_reason = graph_validation.reason;
-        manager_data.correction_needed = True;
-
-        # Return validation failure (to Graph Agent, not to user)
-        report {
-            "validation_passed": False,
-            "validation_type": "graph_structure",
-            "reason": graph_validation.reason,
-            "expected_structure": graph_validation.expected_structure
-        };
-        return;
-    } else {
-        print(f"[MANAGER VALIDATE] Graph structure validation PASSED");
-    }
-
-    # All validations passed
+    # Reset validation state
     manager_data.validation_passed = True;
     manager_data.validation_reason = "";
+    manager_data.validation_type = "";
     manager_data.correction_needed = False;
     manager_data.missing_tasks = [];
 
-    print(f"[MANAGER VALIDATE] All validations PASSED");
+    # Route to appropriate validation based on operation type
+    if correction_type == "rename" {
+        print(f"[MANAGER VALIDATE] Validating RENAME operation...");
 
-    # Return validation success (to Graph Agent)
-    report {
-        "validation_passed": True,
-        "validation_type": "all",
-        "reason": ""
-    };
+        # Find which task was renamed (task in before but not in after)
+        old_task = None;
+        new_task = None;
+
+        for node in before_nodes {
+            if node not in after_nodes and node != "Start" {
+                old_task = node;
+                break;
+            }
+        }
+
+        for node in after_nodes {
+            if node not in before_nodes {
+                new_task = node;
+                break;
+            }
+        }
+
+        # If no clear rename detected, skip validation
+        if not old_task or not new_task {
+            print(f"[MANAGER VALIDATE] Could not detect rename from before/after nodes, skipping validation");
+            return;
+        }
+
+        print(f"[MANAGER VALIDATE] Rename: '{old_task}' -> '{new_task}'");
+
+        rename_validation = validate_rename_operation(
+            user_message=user_message,
+            old_task=old_task,
+            new_task=new_task,
+            before_nodes=before_nodes,
+            after_nodes=after_nodes,
+            before_edges=before_edges,
+            after_edges=after_edges
+        );
+
+        if not rename_validation.is_valid {
+            print(f"[MANAGER VALIDATE] Rename validation FAILED: {rename_validation.reason}");
+            manager_data.validation_passed = False;
+            manager_data.validation_reason = rename_validation.reason;
+            manager_data.validation_type = "rename_operation";
+        }
+    }
+    elif correction_type in ["insert_before", "insert_after", "insert_first"] {
+        print(f"[MANAGER VALIDATE] Validating INSERT operation: {correction_type}");
+
+        insert_validation = validate_insert_operation(
+            user_message=user_message,
+            operation_type=correction_type,
+            referring_to_task=referring_to_task,
+            new_tasks=extracted_tasks,
+            before_edges=before_edges,
+            after_edges=after_edges
+        );
+
+        if not insert_validation.is_valid {
+            print(f"[MANAGER VALIDATE] Insert validation FAILED: {insert_validation.reason}");
+            manager_data.validation_passed = False;
+            manager_data.validation_reason = insert_validation.reason;
+            manager_data.validation_type = "insert_operation";
+        }
+    }
+    elif correction_type == "reorder" or len(tasks_to_move) > 0 {
+        print(f"[MANAGER VALIDATE] Validating REORDER operation");
+
+        reorder_tasks = tasks_to_move if len(tasks_to_move) > 0 else extracted_tasks;
+
+        reorder_validation = validate_reorder_operation(
+            user_message=user_message,
+            tasks_to_move=reorder_tasks,
+            before_edges=before_edges,
+            after_edges=after_edges
+        );
+
+        if not reorder_validation.is_valid {
+            print(f"[MANAGER VALIDATE] Reorder validation FAILED: {reorder_validation.reason}");
+            manager_data.validation_passed = False;
+            manager_data.validation_reason = reorder_validation.reason;
+            manager_data.validation_type = "reorder_operation";
+        }
+    }
+    else {
+        # Default validation: task extraction and graph structure
+        print(f"[MANAGER VALIDATE] Using default validation (task extraction + graph structure)");
+
+        # Validation 1: Task Extraction
+        task_validation = validate_task_extraction(
+            user_message=user_message,
+            extracted_tasks=extracted_tasks
+        );
+
+        if not task_validation.is_valid {
+            print(f"[MANAGER VALIDATE] Task extraction FAILED: {task_validation.reason}");
+            manager_data.validation_passed = False;
+            manager_data.validation_reason = task_validation.reason;
+            manager_data.correction_needed = True;
+            manager_data.missing_tasks = task_validation.missing_tasks;
+            manager_data.validation_type = "task_extraction";
+            return;
+        }
+
+        # Validation 2: Edge Label Validation
+        if len(after_edges) > 0 {
+            edge_label_validation = validate_edge_labels(
+                user_message=user_message,
+                new_edges=after_edges
+            );
+
+            if not edge_label_validation.is_valid {
+                print(f"[MANAGER VALIDATE] Edge label validation FAILED: {edge_label_validation.reason}");
+                manager_data.validation_passed = False;
+                manager_data.validation_reason = edge_label_validation.reason;
+                manager_data.validation_type = "edge_labels";
+                return;
+            }
+        }
+
+        # Validation 3: Graph Structure Validation
+        new_task_edges = [];
+        for edge in after_edges {
+            if edge.get("to", "") in extracted_tasks {
+                new_task_edges.append(edge);
+            }
+        }
+
+        graph_validation = validate_graph_structure(
+            user_message=user_message,
+            graph_nodes=extracted_tasks,
+            graph_edges=new_task_edges
+        );
+
+        if not graph_validation.is_valid {
+            print(f"[MANAGER VALIDATE] Graph structure validation FAILED: {graph_validation.reason}");
+            manager_data.validation_passed = False;
+            manager_data.validation_reason = graph_validation.reason;
+            manager_data.validation_type = "graph_structure";
+        }
+    }
+
+    print(f"[MANAGER VALIDATE] All validations PASSED");
 }

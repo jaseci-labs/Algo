@@ -444,3 +444,219 @@ Return:
 - reason: Brief explanation of what's wrong (empty if valid)
 - expected_structure: Description of what SHOULD exist (empty if valid)
 """;
+
+#===========================================================
+#           OPERATION-SPECIFIC VALIDATION FUNCTIONS
+#===========================================================
+
+"""Rename validation result"""
+obj RenameValidationResult {
+    has is_valid: bool;
+    has reason: str;
+    has old_task_found: bool;
+    has new_task_unique: bool;
+    has edges_updated: bool;
+}
+
+"""Validate that a rename operation was executed correctly"""
+def validate_rename_operation(
+    user_message: str,
+    old_task: str,
+    new_task: str,
+    before_nodes: list[str],
+    after_nodes: list[str],
+    before_edges: list[dict[str, str]],
+    after_edges: list[dict[str, str]]
+) -> RenameValidationResult by llm();
+
+sem validate_rename_operation = """
+Validate that a rename operation was executed correctly.
+
+CRITICAL CHECKS:
+1. Old task existed in before_nodes (cannot rename non-existent task)
+2. New task is in after_nodes (the renamed task exists)
+3. New task is NOT the same as old task (actual rename occurred)
+4. Old task is NOT in after_nodes (original name removed)
+5. All edges that referenced old_task now reference new_task
+6. No duplicate tasks created
+
+ANALYSIS APPROACH:
+- Compare before_nodes and after_nodes to find what changed
+- Check if old_task was removed and new_task was added
+- Verify edge labels are preserved (only task names changed)
+
+Examples:
+- Valid: old="IfItIsRainingIWillReadMyBook" in before, new="ReadBook" in after, edges updated
+- Valid: old="MakeCoffee", new="GrabCoffee", all edges now reference "GrabCoffee"
+- Invalid: old task not found in before_nodes
+- Invalid: new task same as old task (no actual rename)
+- Invalid: old task still exists in after_nodes (rename incomplete)
+- Invalid: edges still reference old task (edges not updated)
+
+Return:
+- is_valid: true if rename was correctly executed
+- reason: Brief explanation of what's wrong (empty if valid)
+- old_task_found: true if old task existed in before_nodes
+- new_task_unique: true if new task doesn't conflict with existing tasks
+- edges_updated: true if all edges were correctly updated
+""";
+
+"""Insert validation result"""
+obj InsertValidationResult {
+    has is_valid: bool;
+    has reason: str;
+    has insert_position_correct: bool;
+    has referring_task_exists: bool;
+    has no_orphans: bool;
+}
+
+"""Validate that an insert operation positioned tasks correctly"""
+def validate_insert_operation(
+    user_message: str,
+    operation_type: str,
+    referring_to_task: str,
+    new_tasks: list[str],
+    before_edges: list[dict[str, str]],
+    after_edges: list[dict[str, str]]
+) -> InsertValidationResult by llm();
+
+sem validate_insert_operation = """
+Validate that an insert operation positioned tasks correctly.
+
+OPERATION TYPES:
+- insert_before: New tasks should be BEFORE referring_to_task
+- insert_after: New tasks should be AFTER referring_to_task
+- insert_first: New tasks should be at beginning (after Start)
+
+CRITICAL CHECKS:
+1. Referring task exists in the graph (or is "Start" for insert_first)
+2. New tasks were actually added to the graph
+3. Insert position matches the operation type:
+   - insert_before: New task → referring_to_task edge exists
+   - insert_after: referring_to_task → new task edge exists
+   - insert_first: Start → new task edge exists
+4. No orphaned tasks (disconnected from main flow)
+
+ANALYSIS APPROACH:
+- Compare before_edges and after_edges to find new edges
+- Check if new edges connect tasks in the correct order
+- Verify the position relative to referring_to_task
+
+Examples:
+- Valid: operation="insert_before", referring="CheckMessages", new="WashFace"
+  → Edge: WashFace → CheckMessages exists
+- Valid: operation="insert_after", referring="MakeCoffee", new="HaveBreakfast"
+  → Edge: MakeCoffee → HaveBreakfast exists
+- Invalid: referring_to_task not found in graph
+- Invalid: Insert position doesn't match operation type
+- Invalid: New task not connected to graph
+
+Return:
+- is_valid: true if insert was correctly executed
+- reason: Brief explanation of what's wrong (empty if valid)
+- insert_position_correct: true if position matches operation type
+- referring_task_exists: true if referring task was found
+- no_orphans: true if no disconnected tasks
+""";
+
+"""Reorder validation result"""
+obj ReorderValidationResult {
+    has is_valid: bool;
+    has reason: str;
+    has tasks_moved_exist: bool;
+    has new_order_logical: bool;
+    has no_circular_refs: bool;
+}
+
+"""Validate that a reorder operation moved tasks correctly"""
+def validate_reorder_operation(
+    user_message: str,
+    tasks_to_move: list[str],
+    before_edges: list[dict[str, str]],
+    after_edges: list[dict[str, str]]
+) -> ReorderValidationResult by llm();
+
+sem validate_reorder_operation = """
+Validate that a reorder operation moved tasks correctly.
+
+CRITICAL CHECKS:
+1. All tasks in tasks_to_move exist in the graph
+2. New position matches user's description from user_message
+3. No circular references created (A→B→...→A)
+4. All affected tasks remain connected to the main flow
+5. The reorder actually changed something (edges are different)
+
+ANALYSIS APPROACH:
+- Identify edges that involve tasks_to_move in before_edges vs after_edges
+- Check if the connections changed as expected
+- Verify the new order matches user's intent
+
+Examples:
+- Valid: tasks=["HaveCoffee"], user: "have coffee before checking news"
+  → Edge: HaveCoffee → CheckNews exists in after_edges
+- Valid: tasks=["WorkOut", "Study"], user: "work out then study"
+  → Edges show correct sequential order
+- Invalid: Task in tasks_to_move not found in graph
+- Invalid: No change in edges (reorder didn't happen)
+- Invalid: Circular reference created
+
+Return:
+- is_valid: true if reorder was correctly executed
+- reason: Brief explanation of what's wrong (empty if valid)
+- tasks_moved_exist: true if all tasks to move were found
+- new_order_logical: true if new order matches user intent
+- no_circular_refs: true if no circular references detected
+""";
+
+"""Edge label validation result"""
+obj EdgeLabelValidationResult {
+    has is_valid: bool;
+    has reason: str;
+    has missing_labels: list[str];
+    has incorrect_labels: list[str];
+}
+
+"""Validate that edge labels match user's intent"""
+def validate_edge_labels(
+    user_message: str,
+    new_edges: list[dict[str, str]]
+) -> EdgeLabelValidationResult by llm();
+
+sem validate_edge_labels = """
+Validate that edge labels match the user's intent from their message.
+
+CONDITIONAL KEYWORDS TO CHECK:
+- "if X, then Y" → edge should have "if X" or similar label
+- "otherwise", "else" → edge should have "otherwise" or "else" label
+- "while X", "during X" → edge should have "while" or "during" label
+- "at the same time", "also", "simultaneously" → edge should reflect parallel execution
+- "then", "after", "next" → edge should have "then" label
+- "either way", "both paths" → edge indicates convergence
+
+CRITICAL CHECKS:
+1. Conditional branches have appropriate labels mentioning the condition
+2. "otherwise" branches have "otherwise" labels
+3. Parallel relationships are indicated (while, during, at same time)
+4. Sequential relationships use "then" labels
+5. Convergence points are labeled appropriately
+
+ANALYSIS APPROACH:
+- Parse user_message for conditional/parallel keywords
+- Check if new_edges have labels reflecting those keywords
+- Identify which edges are missing labels or have incorrect labels
+
+Examples:
+- Valid: User: "if raining, read book; otherwise, walk"
+  → Edges: [{from: Check, to: ReadBook, label: "if raining"}, {to: Walk, label: "otherwise"}]
+- Valid: User: "make coffee then check emails"
+  → Edge: {to: CheckEmails, label: "then"}
+- Invalid: Conditional branch missing "if X" label (label is just "then")
+- Invalid: "otherwise" branch has wrong label
+- Invalid: Parallel tasks not marked as such
+
+Return:
+- is_valid: true if edge labels match user intent
+- reason: Brief explanation of what's wrong (empty if valid)
+- missing_labels: List of descriptions for missing labels (e.g., ["condition on 'raining' edge"])
+- incorrect_labels: List of descriptions for incorrect labels
+""";
