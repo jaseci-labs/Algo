@@ -766,14 +766,13 @@ impl call_graph_agent.call{
             after_edges=after_edges
         );
 
-        # Read validation result from manager_comm_data (stored by validate_graph_output)
-        manager_data = find_manager_comm_data(here, self.username);
+        # Read validation result from manager_comm_data
         validation_failed = False;
         validation_reason = "";
         validation_type = "";
         missing_tasks = [];
 
-        if manager_data and not manager_data.validation_passed {
+        if not manager_data.validation_passed {
             validation_failed = True;
             validation_reason = manager_data.validation_reason;
             validation_type = manager_data.validation_type or "";
@@ -863,17 +862,6 @@ impl call_graph_agent.call{
                 };
                 return;
             }
-
-            report {
-                "response": response,
-                "emotional_state": emotional_state.state,
-                "suggestions": suggestions,
-                "thinking": thinking,
-                "task_names": task_names,
-                "validation_passed": False,
-                "validation_reason": validation_reason
-            };
-            return;
         }
 
         report {
