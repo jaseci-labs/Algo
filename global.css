@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@source "./.jac/client/compiled";
+@source ".";
 
 @theme {
   /* Brand */
