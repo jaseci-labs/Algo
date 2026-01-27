@@ -1,7 +1,7 @@
 # LoginPage Component
 # Login form with username and password
 
-import from "@jac-client/utils" { Link }
+import from "@jac/runtime" { Link }
 import from ..hooks.useAuth { useAuth }
 import from ..utils.mergeCls { cn }
 import from ..components.Layout { Layout }

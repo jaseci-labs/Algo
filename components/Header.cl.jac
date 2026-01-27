@@ -1,7 +1,7 @@
 # Header Component
 # Application header with title and username display
 
-import from "@jac-client/utils" { jacLogout, useNavigate }
+import from "@jac/runtime" { jacLogout, useNavigate }
 import from ..utils.mergeCls { cn }
 
 def:pub Header() -> any {

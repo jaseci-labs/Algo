@@ -1,4 +1,4 @@
-import from "@jac-client/utils" { jacLogin, jacSignup, useNavigate }
+import from "@jac/runtime" { jacLogin, jacSignup, useNavigate }
 
 def:pub useAuth() -> any {
     navigate = useNavigate();

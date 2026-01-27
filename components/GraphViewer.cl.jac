@@ -1,5 +1,5 @@
 # GraphViewer Component - Renders GraphViz DOT code
-import from react { useEffect, useRef }
+import from react { useRef }
 import from "@hpcc-js/wasm/graphviz" { Graphviz }
 import from ..utils.mergeCls { cn }
 
@@ -12,45 +12,39 @@ def:pub GraphViewer(dotCode: str) -> any {
     prevDotCodeRef = useRef("");
 
     # Render DOT code to SVG whenever it changes
-    useEffect(
-        lambda -> None {
-            console.log("GraphViewer useEffect triggered");
-            console.log("Current dotCode:", dotCode);
-            console.log("Previous dotCode:", prevDotCodeRef.current);
+    # Using new can with [dep] entry syntax
+    async can with [dotCode] entry {
+        console.log("GraphViewer effect triggered");
+        console.log("Current dotCode:", dotCode);
+        console.log("Previous dotCode:", prevDotCodeRef.current);
 
-            # Check if dotCode actually changed
-            if dotCode == prevDotCodeRef.current {
-                console.log("DotCode unchanged, skipping render");
-                return;
+        # Check if dotCode actually changed
+        if dotCode == prevDotCodeRef.current {
+            console.log("DotCode unchanged, skipping render");
+            return;
+        }
+
+        prevDotCodeRef.current = dotCode;
+
+        if dotCode and dotCode.length > 0 {
+            try {
+                console.log("Rendering new graph...");
+                isLoading = True;
+                graphviz = await Graphviz.load();
+                svg = graphviz.dot(dotCode);
+                console.log("Graph rendered, SVG length:", svg.length);
+                svgContent = svg;
+                renderKey = renderKey + 1;
+                isLoading = False;
+            } except Exception as e {
+                console.error("Error rendering graph:", e);
+                isLoading = False;
             }
-
-            prevDotCodeRef.current = dotCode;
-
-            async def renderGraph() -> None {
-                if dotCode and dotCode.length > 0 {
-                    try {
-                        console.log("Rendering new graph...");
-                        isLoading = True;
-                        graphviz = await Graphviz.load();
-                        svg = graphviz.dot(dotCode);
-                        console.log("Graph rendered, SVG length:", svg.length);
-                        svgContent = svg;
-                        renderKey = renderKey + 1;
-                        isLoading = False;
-                    } except Exception as e {
-                        console.error("Error rendering graph:", e);
-                        isLoading = False;
-                    }
-                } else {
-                    console.log("No dotCode to render");
-                    isLoading = False;
-                }
-            }
-
-            renderGraph();
-        },
-        [dotCode]
-    );
+        } else {
+            console.log("No dotCode to render");
+            isLoading = False;
+        }
+    }
     
     # Empty state
     if not dotCode or dotCode.length == 0 {

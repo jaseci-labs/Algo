@@ -1,5 +1,5 @@
 # Note: React imports removed - hooks use 'has' for state management
-import from "@jac-client/utils" { Router, Routes, Route }
+import from "@jac/runtime" { Router, Routes, Route }
 
 import from .pages.MainApp { MainApp }
 import from .pages.HomePage { HomePage }
