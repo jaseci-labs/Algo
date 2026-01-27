@@ -1,4 +1,4 @@
-import from "@jac-client/utils" { jacIsLoggedIn, Navigate }
+import from "@jac/runtime" { jacIsLoggedIn, Navigate }
 
 def:pub HomePage() -> any {
     if jacIsLoggedIn() {
