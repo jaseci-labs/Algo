@@ -123,6 +123,15 @@ Extract task names and generate unique names.
 
 CRITICAL: ALWAYS EXTRACT TASK NAMES even when they already exist in the graph!
 
+RENAME MODE (correction_type='rename'):
+- Extract ONLY the NEW task name (the one being renamed TO)
+- DO NOT extract the old task name (the one being renamed FROM)
+- Example: User says "rename IfItIsRainingIWillReadMyBook to ReadBook"
+  → raw_names = ["ReadBook"] (NOT "IfItIsRainingIWillReadMyBook")
+  → unique_names = ["ReadBook"]
+- Look for keywords: "rename X to Y", "change X to Y", "call X as Y", "X is now Y"
+- The NEW name comes AFTER "to", "as", "now", "become"
+
 REORDERING MODE (correction_type='reorder' OR tasks_to_move is populated):
 - Extract the task names being reordered from user_message
 - Use EXISTING names without adding numbers

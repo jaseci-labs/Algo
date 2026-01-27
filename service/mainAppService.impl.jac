@@ -800,10 +800,50 @@ impl call_graph_agent.call{
             missing_tasks = manager_data.missing_tasks or [];
         }
 
+        if validation_failed and len(missing_tasks) > 0 {
+            print(f"[GRAPH AGENT] Validation FAILED - correcting by adding missing tasks: {missing_tasks}");
+
+            # Get the current graph state to find the last task
+            user_graph = find_user_graph(here, self.username);
+            last_task = "Start";
+            if user_graph {
+                last_task = user_graph?.last_task or "Start";
+            }
+
+            # Add each missing task to the graph
+            for missing_task in missing_tasks {
+                print(f"[GRAPH AGENT] Adding missing task: {missing_task}");
+                here spawn update_task_graph(
+                    task_name=missing_task,
+                    previous_task=last_task,
+                    edge_label="then",
+                    username=self.username
+                );
+                last_task = missing_task;
+            }
+
+            # Update task_names to include the newly added tasks
+            task_names.extend(missing_tasks);
+
+            # Update response to acknowledge the correction
+            response = f"{response} I've also added: {', '.join(missing_tasks)}.";
+
+            print(f"[GRAPH AGENT] Correction complete - reporting updated response");
+            report {
+                "response": response,
+                "emotional_state": emotional_state.state,
+                "suggestions": suggestions,
+                "thinking": thinking,
+                "task_names": task_names,
+                "validation_passed": True,
+                "corrected": True,
+                "added_tasks": missing_tasks
+            };
+            return;
+        }
+
         if validation_failed {
-            print(f"[GRAPH AGENT] Validation FAILED - reporting with error info");
-            # TODO: Implement correction logic based on validation feedback
-            # For now, still report but with validation info
+            print(f"[GRAPH AGENT] Validation FAILED - no missing tasks to correct, reporting as-is");
             report {
                 "response": response,
                 "emotional_state": emotional_state.state,
@@ -811,8 +851,7 @@ impl call_graph_agent.call{
                 "thinking": thinking,
                 "task_names": task_names,
                 "validation_passed": False,
-                "validation_reason": validation_reason,
-                "missing_tasks": missing_tasks
+                "validation_reason": validation_reason
             };
             return;
         }
