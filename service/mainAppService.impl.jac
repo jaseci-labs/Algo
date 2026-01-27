@@ -444,20 +444,57 @@ impl call_graph_agent.call{
 
         # Step 2.5: Handle RENAME operations
         if intent_analysis.conversation_context.correction_type == "rename" {
-            # Use LLM-identified task or fall back to last_task
-            referring_to = intent_analysis.conversation_context.referring_to_task;
-            old_name = (referring_to if referring_to and referring_to in current_nodes
-                       else last_task.split("|")[0] if "|" in last_task else last_task);
+            print(f"\n[RENAME] ===== RENAME OPERATION STARTED =====");
+            print(f"[RENAME] User message: '{self.context_from_user}'");
+            print(f"[RENAME] Current nodes: {current_nodes}");
 
+            # Get referring_to_task from LLM
+            referring_to = intent_analysis.conversation_context.referring_to_task;
+            print(f"[RENAME] LLM identified referring_to_task: '{referring_to}'");
+
+            # Find old_name (exact match or fallback)
+            old_name = None;
+            if referring_to and referring_to in current_nodes {
+                old_name = referring_to;
+                print(f"[RENAME] Exact match found: '{old_name}'");
+            } else {
+                # Try case-insensitive match
+                for node in current_nodes {
+                    if referring_to and node.lower() == referring_to.lower() {
+                        old_name = node;
+                        print(f"[RENAME] Case-insensitive match found: '{old_name}'");
+                        break;
+                    }
+                }
+                # Fallback to last_task
+                if not old_name {
+                    old_name = last_task.split("|")[0] if "|" in last_task else last_task;
+                    print(f"[RENAME] No match found, using last_task fallback: '{old_name}'");
+                }
+            }
+
+            # Extract new task name
+            print(f"[RENAME] Calling extract_raw_task_names with correction_type='rename'...");
             extracted_tasks = extract_raw_task_names(
                 user_message=self.context_from_user,
                 conversation_context=intent_analysis.conversation_context,
                 existing_nodes=current_nodes
             );
 
-            if old_name != "Start" and len(extracted_tasks.unique_names) > 0 {
-                new_name = extracted_tasks.unique_names[0];
-                print(f"[DEBUG] RENAME: '{old_name}' -> '{new_name}'");
+            print(f"[RENAME] extract_raw_task_names result:");
+            print(f"[RENAME]   renamed_to: '{extracted_tasks.renamed_to}'");
+            print(f"[RENAME]   raw_names: {extracted_tasks.raw_names}");
+            print(f"[RENAME]   unique_names: {extracted_tasks.unique_names}");
+
+            # Use the dedicated renamed_to field
+            new_name = extracted_tasks.renamed_to;
+
+            if old_name != "Start" and new_name {
+                print(f"[RENAME] Final: '{old_name}' -> '{new_name}'");
+
+                if old_name == new_name {
+                    print(f"[RENAME] ERROR: Old and new names are the same! Rename will do nothing.");
+                }
 
                 # Rebuild graph with renamed node
                 new_nodes = [new_name if n == old_name else n for n in current_nodes];
@@ -469,6 +506,9 @@ impl call_graph_agent.call{
                     }
                     for e in current_edges
                 ];
+
+                print(f"[RENAME] Nodes changed from {current_nodes} to {new_nodes}");
+                print(f"[RENAME] Calling rebuild_graph...");
 
                 here spawn rebuild_graph(username=self.username, new_nodes=new_nodes, new_edges=new_edges);
 
@@ -1471,6 +1511,8 @@ impl validate_graph_output.validate {
     # Route to appropriate validation based on operation type
     if correction_type == "rename" {
         print(f"[MANAGER VALIDATE] Validating RENAME operation...");
+        print(f"[MANAGER VALIDATE] before_nodes: {before_nodes}");
+        print(f"[MANAGER VALIDATE] after_nodes: {after_nodes}");
 
         # Find which task was renamed (task in before but not in after)
         old_task = None;
@@ -1490,9 +1532,12 @@ impl validate_graph_output.validate {
             }
         }
 
+        print(f"[MANAGER VALIDATE] Detected old_task: {old_task}, new_task: {new_task}");
+
         # If no clear rename detected, skip validation
         if not old_task or not new_task {
             print(f"[MANAGER VALIDATE] Could not detect rename from before/after nodes, skipping validation");
+            print(f"[MANAGER VALIDATE] This means the graph didn't actually change (old == new)");
             return;
         }
 
