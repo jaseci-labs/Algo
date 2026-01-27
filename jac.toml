@@ -43,3 +43,18 @@ lib_imports = ["import tailwindcss from '@tailwindcss/vite'"]
 [plugins.scale]
 kubernetes.app_name = "algo-test"
 kubernetes.namespace = "algo-test"
+
+# Jacpack metadata - used when packing, stripped from created projects
+[jacpack]
+name = "algo"
+description = "Voice RAG Application built with Jac and OpenAI Realtime API"
+jaclang = "0.9.11"
+
+[[jacpack.plugins]]
+name = "jac-client"
+version = "0.2.11"
+
+[jacpack.options]
+directories = [".jac"]
+gitignore_entries = ["*"]
+root_gitignore_entries = [".jac/"]
