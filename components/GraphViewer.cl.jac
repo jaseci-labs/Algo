@@ -1,53 +1,91 @@
-# GraphViewer Component - Renders GraphViz DOT code
-import from react { useRef }
-import from "@hpcc-js/wasm/graphviz" { Graphviz }
-import from ..utils.mergeCls { cn }
+# GraphViewer Component - Modern React Flow Visualization
+import from react { useState, useEffect, useMemo }
+import from "@xyflow/react" {
+    ReactFlow,
+    Background,
+    Controls,
+    MiniMap,
+    useNodesState,
+    useEdgesState
+}
+import "@xyflow/react/dist/style.css";
 
-def:pub GraphViewer(dotCode: str) -> any {
-    # Reactive state using has variables
-    has svgContent: str = "";
-    has isLoading: bool = True;
-    has renderKey: int = 0;
+import from .nodes.StartNode { StartNode }
+import from .nodes.TaskNode { TaskNode }
+import from ..utils.graphLayout { transformGraphData, getLayoutedElements }
 
-    prevDotCodeRef = useRef("");
+# Define custom node types
+glob NODE_TYPES = {
+    "startNode": StartNode,
+    "taskNode": TaskNode
+};
 
-    # Render DOT code to SVG whenever it changes
-    # Using new can with [dep] entry syntax
-    async can with [dotCode] entry {
-        console.log("GraphViewer effect triggered");
-        console.log("Current dotCode:", dotCode);
-        console.log("Previous dotCode:", prevDotCodeRef.current);
+# Default edge options - bezier for curved lines with better label positioning
+glob DEFAULT_EDGE_OPTIONS = {
+    "type": "bezier",
+    "animated": False,
+    "labelBgPadding": [8, 4],
+    "labelBgBorderRadius": 4
+};
 
-        # Check if dotCode actually changed
-        if dotCode == prevDotCodeRef.current {
-            console.log("DotCode unchanged, skipping render");
-            return;
-        }
+def:pub GraphViewer(graphEdges: list) -> any {
+    [nodes, setNodes, onNodesChange] = useNodesState([]);
+    [edges, setEdges, onEdgesChange] = useEdgesState([]);
+    [isLoading, setIsLoading] = useState(True);
 
-        prevDotCodeRef.current = dotCode;
-
-        if dotCode and dotCode.length > 0 {
-            try {
-                console.log("Rendering new graph...");
-                isLoading = True;
-                graphviz = await Graphviz.load();
-                svg = graphviz.dot(dotCode);
-                console.log("Graph rendered, SVG length:", svg.length);
-                svgContent = svg;
-                renderKey = renderKey + 1;
-                isLoading = False;
-            } except Exception as e {
-                console.error("Error rendering graph:", e);
-                isLoading = False;
+    # Transform and layout graph when edges change
+    useEffect(
+        lambda -> None {
+            if not graphEdges or graphEdges.length == 0 {
+                # Empty state - just show Start node centered
+                startNode = {
+                    "id": "Start",
+                    "type": "startNode",
+                    "data": { "label": "Start" },
+                    "position": { "x": 250, "y": 50 }
+                };
+                setNodes([startNode]);
+                setEdges([]);
+                setIsLoading(False);
+                return;
             }
-        } else {
-            console.log("No dotCode to render");
-            isLoading = False;
-        }
-    }
-    
-    # Empty state
-    if not dotCode or dotCode.length == 0 {
+
+            setIsLoading(True);
+
+            # Async layout function
+            async def layoutGraph() -> None {
+                try {
+                    # Transform edge data to React Flow format
+                    transformed = transformGraphData(graphEdges);
+
+
+                    # Apply ELK layout for automatic positioning (async)
+                    layouted = await getLayoutedElements(
+                        transformed.nodes,
+                        transformed.edges
+                    );
+
+                    setNodes(layouted.nodes);
+                    setEdges(layouted.edges);
+                } except Exception as e {
+                    console.error("Error laying out graph:", e);
+                }
+                setIsLoading(False);
+            }
+
+            layoutGraph();
+        },
+        [graphEdges]
+    );
+
+    # Memoize node types to prevent re-renders
+     nodeTypes = useMemo(
+        lambda -> dict { return NODE_TYPES; },
+        []
+    );
+
+    # Empty state (no edges and not loading)
+    if (not graphEdges or graphEdges.length == 0) and not isLoading and nodes.length == 0 {
         return <div className="flex items-center justify-center h-full text-text-secondary text-sm text-center p-8">
             <div>
                 <div className="text-4xl mb-2">{"🌳"}</div>
@@ -55,7 +93,7 @@ def:pub GraphViewer(dotCode: str) -> any {
             </div>
         </div>;
     }
-    
+
     # Loading state
     if isLoading {
         return <div className="flex items-center justify-center h-full text-text-secondary">
@@ -65,12 +103,49 @@ def:pub GraphViewer(dotCode: str) -> any {
             </div>
         </div>;
     }
-    
-    # Rendered graph
-    return <div 
-        key={renderKey}
-        className="p-8 h-full overflow-y-auto bg-surface-hover flex justify-center items-start"
-    >
-        <div dangerouslySetInnerHTML={{"__html": svgContent}}></div>
+
+    # Helper function for minimap node colors
+    def getNodeColor(node: any) -> str {
+        if node.type == "startNode" {
+            return "hsl(var(--primary))";
+        }
+        return "hsl(var(--foreground))";
+    }
+
+    # Rendered graph with React Flow
+    return <div className="w-full h-full graph-viewer-container">
+        <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={nodeTypes}
+            defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
+            fitView={True}
+            fitViewOptions={{
+                "padding": 0.2,
+                "minZoom": 0.3,
+                "maxZoom": 1
+            }}
+            nodesDraggable={False}
+            nodesConnectable={False}
+            elementsSelectable={False}
+            panOnDrag={True}
+            zoomOnScroll={True}
+            zoomOnPinch={True}
+            minZoom={0.2}
+            maxZoom={1.5}
+        >
+            <Background
+                gap={12}
+                size={1}
+                variant="dots"
+            />
+            <Controls showInteractive={False} />
+            <MiniMap
+                nodeColor={getNodeColor}
+                nodeBorderRadius={4}
+                zoomable={True}
+                pannable={True}
+            />
+        </ReactFlow>
     </div>;
 }

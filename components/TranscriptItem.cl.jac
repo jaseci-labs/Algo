@@ -24,7 +24,7 @@ def:pub TranscriptItem(item: any, showThinking: bool = True) -> any {
     
     # Message bubble styling based on role
     bubbleClass = cn(
-        "max-w-lg px-3 py-2 rounded-xl",
+        "max-w-lg px-3 py-2 rounded-xl animate-fade-in",
         (("bg-secondary text-secondary-foreground") if isUser else (
             ("bg-warning/20 text-text-primary") if isSystem else 
             "bg-surface-hover text-text-primary"
@@ -33,8 +33,8 @@ def:pub TranscriptItem(item: any, showThinking: bool = True) -> any {
     
     # Role label styling
     labelClass = cn(
-        "text-xs mb-1 uppercase font-semibold",
-        ("text-text-secondary/70" if isUser else "text-text-secondary")
+        "text-[10px] uppercase tracking-wider  mb-1 block px-2",
+        ("text-muted-foreground/70" if isUser else "text-muted-foreground")
     );
     
     # Thinking bubble styling
