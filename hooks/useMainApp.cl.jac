@@ -3,7 +3,7 @@
 # Provides a unified interface for the MainApp component
 
 import from react { useEffect, useRef }
-import from "@jac-client/utils" { useNavigate }
+import from "@jac/runtime" { useNavigate }
 
 # Import sub-hooks
 import from .useTranscript { useTranscript }
