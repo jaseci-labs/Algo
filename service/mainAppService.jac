@@ -14,6 +14,12 @@ import from semantics.semantics {
     AttachmentPointAnalysis,
     ConvergenceIntent,
     ThinkingSummary,
+    TaskValidationResult,
+    GraphValidationResult,
+    RenameValidationResult,
+    InsertValidationResult,
+    ReorderValidationResult,
+    EdgeLabelValidationResult,
     detect_emotional_state,
     analyze_conversation_intent,
     extract_raw_task_names,
@@ -22,7 +28,13 @@ import from semantics.semantics {
     build_task_relationships,
     generate_friendly_response,
     generate_next_suggestions,
-    generate_thinking_summary
+    generate_thinking_summary,
+    validate_task_extraction,
+    validate_graph_structure,
+    validate_rename_operation,
+    validate_insert_operation,
+    validate_reorder_operation,
+    validate_edge_labels
 }
 
 node TaskState {
@@ -38,6 +50,22 @@ node user_graph_data {
     has username: str = "anonymous";
     has last_task: str = "Start";
     has saved_routines: dict = {};
+}
+
+node manager_comm_data {
+    has username: str = "anonymous";
+    has last_response: str = "";
+    has last_suggestions: list = [];
+    has last_thinking: dict = {};
+    has last_task_names: list = [];
+    has last_emotional_state: str = "neutral";
+    has validation_passed: bool = True;
+    has validation_reason: str = "";
+    has validation_type: str = "";
+    has correction_needed: bool = False;
+    has missing_tasks: list[str] = [];
+    has incorrect_task: str = "";      # Existing task with wrong name that should be renamed
+    has correct_task_name: str = "";    # What the task should be renamed to
 }
 
 node user_routines {
@@ -121,10 +149,31 @@ walker :pub rename_task {
     can rename with user_graph_data entry;
 }
 
-walker :pub call_supervisor {
+walker :pub call_graph_agent {
     has conversation_history: list;
     has context_from_user: str;
     has username: str = "anonymous";
 
     can call with `root entry;
+}
+
+walker :pub call_manager {
+    has conversation_history: list;
+    has context_from_user: str;
+    has username: str = "anonymous";
+
+    can orchestrate with `root entry;
+}
+
+walker :pub validate_graph_output {
+    has context_from_user: str;
+    has intent_analysis: dict;
+    has extracted_tasks: list;
+    has before_nodes: list;
+    has before_edges: list;
+    has after_nodes: list;
+    has after_edges: list;
+    has username: str = "anonymous";
+
+    can validate with `root entry;
 }

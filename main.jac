@@ -9,7 +9,7 @@ import from service.mainAppService {
     reset_session,
     rebuild_graph,
     rename_task,
-    call_supervisor
+    call_manager
 }
 
 cl import from .index { app as ClientApp }

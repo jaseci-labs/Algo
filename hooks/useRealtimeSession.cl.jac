@@ -7,7 +7,7 @@ import from "@openai/agents/realtime" { RealtimeAgent, RealtimeSession, tool }
 import from ..constants.constants { CHAT_AGENT_INSTRUCTIONS }
 import from ..api.api {
     getSessionToken,
-    callSupervisor,
+    callManager,
     getUsernameFromToken
 }
 
@@ -82,7 +82,7 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
             username = getUsernameFromToken();
             console.log("Using username:", username);
 
-            result = await callSupervisor(context, filteredHistory, username);
+            result = await callManager(context, filteredHistory, username);
             console.log("Supervisor result:", result);
 
             if not result.success {
