@@ -1,0 +1,74 @@
+# Automatically generate and publish jacpack when Algo is updated
+name: Generate and Publish Jacpack
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - 'LICENSE'
+  workflow_dispatch:
+
+env:
+  JACPACKS_REPO: jaseci-labs/jacpacks
+  JACPACK_NAME: Algo
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  generate-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Algo repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install jaclang
+        run: |
+          pip install --upgrade pip
+          pip install jaclang>=0.9.11
+
+      - name: Generate jacpack
+        run: |
+          jac jacpack pack . -o Algo.jacpack
+          echo "✅ Generated jacpack"
+          ls -la Algo.jacpack
+
+      - name: Checkout jacpacks repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.JACPACKS_REPO }}
+          token: ${{ secrets.JACPACKS_PAT }}
+          path: jacpacks-repo
+
+      - name: Push to jacpacks repo
+        run: |
+          cd jacpacks-repo
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          mkdir -p ${{ env.JACPACK_NAME }}
+          cp ../Algo.jacpack ${{ env.JACPACK_NAME }}/${{ env.JACPACK_NAME }}.jacpack
+          [ -f ../README.md ] && cp ../README.md ${{ env.JACPACK_NAME }}/README.md
+
+          git add .
+
+          if git diff --staged --quiet; then
+            echo "📝 No changes to commit"
+            exit 0
+          fi
+
+          git commit -m "chore: update ${{ env.JACPACK_NAME }} jacpack
+
+          Source: ${{ github.repository }}@${{ github.sha }}
+          By: ${{ github.actor }}"
+
+          git push
+          echo "✅ Published to jacpacks repo"

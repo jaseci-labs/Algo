@@ -1,7 +1,7 @@
 # MainApp Component (UI Only)
 # Pure presentation component - all business logic extracted to useMainApp hook
 
-import from react { Fragment, useState }
+import from react { Fragment }
 
 import from ..components.TranscriptItem { TranscriptItem }
 import from ..components.Header { Header }
@@ -18,16 +18,16 @@ import from ..utils.mergeCls { cn }
 # ============================================
 
 def:pub MainApp() -> any {
-    # Thinking insights toggle state (local to UI)
-    [showThinking, setShowThinking] = useState(True);
-    
+    # Thinking insights toggle state (local to UI) - using new has syntax
+    has showThinking: bool = True;
+
     def toggleThinking() -> None {
-        setShowThinking(not showThinking);
+        showThinking = not showThinking;
     }
-    
+
     # Get all state and handlers from the hook
     hook = useMainApp();
-    
+
     # Destructure hook values for cleaner access
     sessionStatus = hook.sessionStatus;
     isPTTActive = hook.isPTTActive;
@@ -42,7 +42,7 @@ def:pub MainApp() -> any {
     graphDotCode = hook.graphDotCode;
     transcriptEndRef = hook.transcriptEndRef;
     suggestions = hook.suggestions;
-    
+
     # Handlers
     onToggleConnection = hook.onToggleConnection;
     toggleMicMute = hook.toggleMicMute;
@@ -52,14 +52,11 @@ def:pub MainApp() -> any {
     handleSuggestionClick = hook.handleSuggestionClick;
     handleClearGraph = hook.handleClearGraph;
     handleSaveAndRestart = hook.handleSaveAndRestart;
-    
+
     # Build transcript items
-    transcriptItems = [];
-    idx = 0;
-    for item in transcript {
-        transcriptItems.push(<TranscriptItem key={idx} item={item} showThinking={showThinking} />);
-        idx = idx + 1;
-    }
+    transcriptItems = transcript.map(lambda item: any, idx: int -> any {
+        return <TranscriptItem key={idx} item={item} showThinking={showThinking} />;
+    });
     
     # ========== Render ==========
     return <Layout meta={{"title": "Dashboard | Algo", "description": "Your AI assistant dashboard with voice interface"}}>

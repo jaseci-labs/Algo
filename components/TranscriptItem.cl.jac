@@ -1,20 +1,20 @@
 # TranscriptItem Component
 # Renders a single transcript message with role-based styling
 
-import from react { useState }
 import from ..utils.mergeCls { cn }
 
 def:pub TranscriptItem(item: any, showThinking: bool = True) -> any {
     role = item.role;
     content = item.content;
     thinking = item.thinking;
-    
+
     isUser = role == "user";
     isSystem = role == "system" or role == "tool";
     isAssistant = role == "assistant";
-    
+
     # State for expandable thinking details
-    [showDetails, setShowDetails] = useState(False);
+    # Using new has syntax for reactive state
+    has showDetails: bool = False;
     
     # Container alignment based on role
     containerClass = cn(

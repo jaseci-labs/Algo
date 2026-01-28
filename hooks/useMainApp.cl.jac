@@ -2,7 +2,7 @@
 # Main orchestrator hook that composes all sub-hooks
 # Provides a unified interface for the MainApp component
 
-import from react { useEffect, useRef }
+import from react { useRef }
 import from "@jac/runtime" { useNavigate }
 
 # Import sub-hooks
@@ -234,16 +234,13 @@ def:pub useMainApp() -> any {
     }
     
     # ========== Effects ==========
-    
-    # Auto-scroll to bottom when transcript changes
-    useEffect(
-        lambda -> None {
-            if transcriptEndRef.current {
-                transcriptEndRef.current.scrollIntoView({"behavior": "smooth"});
-            }
-        },
-        [transcript]
-    );
+
+    # Auto-scroll to bottom when transcript changes - using new can with [dep] entry syntax
+    can with [transcript] entry {
+        if transcriptEndRef.current {
+            transcriptEndRef.current.scrollIntoView({"behavior": "smooth"});
+        }
+    }
     
     # ========== Return Hook Interface ==========
     return {

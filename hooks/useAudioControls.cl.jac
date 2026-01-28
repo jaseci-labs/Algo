@@ -1,7 +1,7 @@
 # useAudioControls Hook
 # Custom hook for managing audio, microphone, and push-to-talk controls
 
-import from react { useEffect, useRef }
+import from react { useRef }
 
 def:pub useAudioControls(sessionRef: any, sessionStatus: str) -> any {
     # Audio element ref
@@ -56,42 +56,33 @@ def:pub useAudioControls(sessionRef: any, sessionStatus: str) -> any {
         isAudioPlaybackEnabled = value;
     }
 
-    # Create audio element on mount
-    useEffect(
-        lambda -> None {
-            el = document.createElement('audio');
-            el.autoplay = True;
-            el.style.display = 'none';
-            document.body.appendChild(el);
-            audioElementRef.current = el;
-        },
-        []
-    );
-    
-    # Handle mic mute/unmute
-    useEffect(
-        lambda -> None {
-            if sessionRef.current {
-                try {
-                    console.log("Setting mic mute state to:", isMicMuted);
-                    sessionRef.current.mute(isMicMuted);
-                } except Exception as e {
-                    console.error("Error toggling mic:", e);
-                }
+    # Create audio element on mount - using new can with entry syntax
+    can with entry {
+        el = document.createElement('audio');
+        el.autoplay = True;
+        el.style.display = 'none';
+        document.body.appendChild(el);
+        audioElementRef.current = el;
+    }
+
+    # Handle mic mute/unmute - using new can with (deps) entry syntax
+    can with (isMicMuted, sessionStatus) entry {
+        if sessionRef.current {
+            try {
+                console.log("Setting mic mute state to:", isMicMuted);
+                sessionRef.current.mute(isMicMuted);
+            } except Exception as e {
+                console.error("Error toggling mic:", e);
             }
-        },
-        [isMicMuted, sessionStatus]
-    );
-    
-    # Audio playback toggle
-    useEffect(
-        lambda -> None {
-            if audioElementRef.current {
-                audioElementRef.current.muted = not isAudioPlaybackEnabled;
-            }
-        },
-        [isAudioPlaybackEnabled]
-    );
+        }
+    }
+
+    # Audio playback toggle - using new can with [dep] entry syntax
+    can with [isAudioPlaybackEnabled] entry {
+        if audioElementRef.current {
+            audioElementRef.current.muted = not isAudioPlaybackEnabled;
+        }
+    }
     
     return {
         # State
