@@ -43,7 +43,7 @@ def:pub MainApp() -> any {
         clearHideTimer();
         hideTimerRef.current = setTimeout(
             lambda -> None { setIsControlBarVisible(False); },
-            30000
+            3000
         );
     }
 
