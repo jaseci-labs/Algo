@@ -472,7 +472,8 @@ impl call_graph_agent.call{
 
                 manager_data = find_manager_comm_data(here, self.username);
                 if not manager_data {
-                    manager_data = here ++> manager_comm_data(username=self.username);
+                    manager_data = manager_comm_data(username=self.username);
+                    here ++> manager_data;
                 }
                 manager_data.last_response = response;
                 manager_data.last_suggestions = [];
@@ -734,7 +735,8 @@ impl call_graph_agent.call{
 
         manager_data = find_manager_comm_data(here, self.username);
         if not manager_data {
-            manager_data = here ++> manager_comm_data(username=self.username);
+            manager_data = manager_comm_data(username=self.username);
+            here ++> manager_data;
         }
         manager_data.last_response = response;
         manager_data.last_suggestions = suggestions;
@@ -1218,7 +1220,8 @@ def extract_edge_label_via_printgraph(from_node: node, to_node: node) -> str {
 impl validate_graph_output.validate {
     manager_data = find_manager_comm_data(here, self.username);
     if not manager_data {
-        manager_data = here ++> manager_comm_data(username=self.username);
+        manager_data = manager_comm_data(username=self.username);
+        here ++> manager_data;
     }
 
     intent_analysis = self.intent_analysis or {};
