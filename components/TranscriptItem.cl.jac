@@ -23,22 +23,29 @@ def:pub TranscriptItem(item: any, showThinking: bool = True) -> any {
     );
     
     # Message bubble styling based on role
+    # bubbleClass = cn(
+    #     "max-w-lg px-3 py-2 rounded-xl animate-fade-in",
+    #     (("bg-secondary text-secondary-foreground") if isUser else (
+    #         ("bg-warning/20 text-text-primary") if isSystem else 
+    #         "bg-primary-hover text-text-primary"
+    #     ))
+    # );
     bubbleClass = cn(
-        "max-w-lg px-3 py-2 rounded-xl",
-        (("bg-secondary text-secondary-foreground") if isUser else (
-            ("bg-warning/20 text-text-primary") if isSystem else 
-            "bg-surface-hover text-text-primary"
-        ))
-    );
+    "max-w-[80%] font-[14px] leading-[1] animate-fade-in",
+    (("chat-bubble-user") if isUser else (
+        ("bg-warning/20 text-text-primary  px-4 py-3 rounded-2xl border border-border/30") if isSystem else 
+        "chat-bubble-assistant"
+    ))
+);
     
     # Role label styling
     labelClass = cn(
-        "text-xs mb-1 uppercase font-semibold",
-        ("text-text-secondary/70" if isUser else "text-text-secondary")
+        "text-[10px] uppercase tracking-wider  mb-1 block px-2",
+        ("text-muted-foreground/70" if isUser else "text-muted-foreground")
     );
     
     # Thinking bubble styling
-    thinkingBubbleClass = "text-xs italic text-text-secondary bg-surface/50 px-2 py-1 rounded-lg max-w-lg";
+    thinkingBubbleClass = "text-xs italic text-text-secondary bg-primary/50 px-2 py-1 rounded-lg max-w-lg";
     
     # Check if thinking has any non-empty values
     hasThinking = False;
@@ -69,11 +76,11 @@ def:pub TranscriptItem(item: any, showThinking: bool = True) -> any {
             </div>
         )}
         
-        <div className={bubbleClass}>
+        <div>
             <div className={labelClass}>
                 {role}
             </div>
-            <div className="text-sm leading-relaxed">{content}</div>
+            <div className={bubbleClass}>{content}</div>
         </div>
     </div>;
 }
