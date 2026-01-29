@@ -15,7 +15,7 @@ def HeaderComponent(isDarkMode: bool, onToggleTheme: any) -> any {
         jacLogout();
         navigate("/login");
     }
-    return <header className="h-16 px-6 flex items-center justify-between border-b border-border/50 bg-card/50 backdrop-blur-xl">
+    return <header className="h-16 px-2 md:px-6 flex items-center justify-between border-b border-border/50 bg-card/50 backdrop-blur-xl">
         <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                 <Bot className="w-5 h-5 text-primary" />

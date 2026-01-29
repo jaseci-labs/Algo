@@ -31,7 +31,7 @@ def:pub TranscriptItem(item: any, showThinking: bool = True) -> any {
     #     ))
     # );
     bubbleClass = cn(
-    "max-w-[80%] font-[14px] leading-[1] animate-fade-in",
+    "max-w-[80%] text-[14px] leading-[1] animate-fade-in",
     (("chat-bubble-user") if isUser else (
         ("bg-warning/20 text-text-primary  px-4 py-3 rounded-2xl border border-border/30") if isSystem else 
         "chat-bubble-assistant"

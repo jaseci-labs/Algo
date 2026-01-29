@@ -14,6 +14,7 @@ lib_imports = ["import tailwindcss from '@tailwindcss/vite'"]
 
 
 
+
 [plugins.scale.kubernetes]
 app_name = "algo-test"
 namespace = "algo-test"

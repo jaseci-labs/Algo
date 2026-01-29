@@ -24,7 +24,7 @@ def:pub RegisterPage() -> any {
     # Error display element
     errorDisplay = None;
     if error {
-        errorDisplay = <div className="p-3 mb-4 bg-error/10 border border-error/30 rounded-lg text-error text-sm">
+        errorDisplay = <div className="error-display p-3 mb-4 bg-error/10 border border-error/30 rounded-lg text-error text-sm">
             {error}
         </div>;
     }
@@ -39,18 +39,16 @@ def:pub RegisterPage() -> any {
     
     # Button classes with conditional styling
     buttonClass = cn(
-        "w-full py-4 text-primary-foreground border-none rounded-xl text-base font-semibold transition-all flex items-center justify-center gap-2 tracking-wide",
-        ("bg-secondary opacity-70 cursor-not-allowed" if loading else "bg-secondary cursor-pointer hover:opacity-90")
+        "auth-button w-full py-4  border-none rounded-xl text-base font-semibold transition-all flex items-center justify-center gap-2 tracking-wide",
+        (" opacity-70 cursor-not-allowed" if loading else "cursor-pointer hover:opacity-90")
     );
-
     buttonText = "Creating account..." if loading else "Sign up";
 
     # Render (UI Only) 
     return <Layout meta={{"title": "Register | Algo", "description": "Create your Algo AI assistant account"}}>
-        <div className="flex items-center justify-center min-h-screen p-5 relative overflow-hidden">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_50%,rgba(0,0,0,0.03)_0%,transparent_50%),radial-gradient(circle_at_80%_80%,rgba(0,0,0,0.03)_0%,transparent_50%)] pointer-events-none" />
+        <div className="flex items-center justify-center min-h-screen p-5  overflow-hidden">
 
-            <div className="bg-background p-12 rounded-3xl w-full max-w-md shadow-[0_0_0_1px_rgba(0,0,0,0.05),0_20px_60px_rgba(0,0,0,0.08)] relative z-10">
+            <div className="glass-panel p-12 rounded-3xl w-full max-w-md shadow-2 ">
                 <div className="text-center mb-10">
                     <h1 className="text-4xl font-bold text-text-primary mb-2 tracking-tight">
                         {"Algo"}

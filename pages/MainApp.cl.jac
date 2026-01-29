@@ -10,6 +10,9 @@ import from ..components.MessageInput { MessageInput }
 import from ..components.FloatingControlBar { FloatingControlBar }
 import from ..components.GraphViewer { GraphViewer }
 import from ..components.Layout { Layout }
+import from ..components.GraphPanel { GraphPanel }
+import from ..components.TranscriptPanel { TranscriptPanel }
+import from ..components.FloatingGraphPanel { FloatingGraphPanel }
 
 import from ..hooks.useMainApp { useMainApp }
 import from ..hooks.useTheme { useTheme }
@@ -29,6 +32,8 @@ def:pub MainApp() -> any {
 
     # Floating control bar visibility state
     [isControlBarVisible, setIsControlBarVisible] = useState(False);
+    [isGraphPanelVisible, setIsGraphPanelVisible] = useState(False);
+    console.log("Graph Panel Visible:", isGraphPanelVisible);
     hideTimerRef = useRef(None);
 
     # Auto-hide timer logic
@@ -45,6 +50,10 @@ def:pub MainApp() -> any {
             lambda -> None { setIsControlBarVisible(False); },
             3000
         );
+    }
+
+    def handleGraphPanelToggle() -> None {
+        setIsGraphPanelVisible(not isGraphPanelVisible);
     }
 
     # Control bar show/hide handlers
@@ -135,39 +144,47 @@ def:pub MainApp() -> any {
         <div className="flex flex-col h-screen bg-background">
             <Header isDarkMode={isDarkMode} onToggleTheme={toggleTheme} />
 
-            <div className="flex-1 flex gap-4 p-4 overflow-hidden">
-                <div className="w-1/2">
+            <div className="flex-1 flex flex-col md:flex-row gap-4 p-2 md:p-4 overflow-hidden">
+                <div className="w-full md:w-1/2  h-screen md:h-auto">
                     <TranscriptPanel
-                    transcriptItems={transcriptItems}
-                    suggestions={suggestions}
-                    onSelectSuggestion={handleSuggestionClick}
-
-                    transcriptItems={transcriptItems}
-                    transcriptEndRef={transcriptEndRef}
-                    userText={userText}
-                    setUserText={setUserText}
-                    onSend={handleSendTextMessage}
-                    sessionStatus={sessionStatus}
-                    onToggleConnection={onToggleConnection}
-                    onShowControlBar={handleShowControlBar}
-                    onHideControlBar={handleHideControlBar}
+                        transcriptItems={transcriptItems}
+                        suggestions={suggestions}
+                        onSelectSuggestion={handleSuggestionClick}
+                        transcriptItems={transcriptItems}
+                        transcriptEndRef={transcriptEndRef}
+                        userText={userText}
+                        setUserText={setUserText}
+                        onSend={handleSendTextMessage}
+                        sessionStatus={sessionStatus}
+                        onToggleConnection={onToggleConnection}
+                        onShowControlBar={handleShowControlBar}
+                        onHideControlBar={handleHideControlBar}
+                        isGraphPanelVisible={isGraphPanelVisible}
+                        onToggleGraphPanel={handleGraphPanelToggle}
                     />
                 </div>
 
-                <div className="w-1/2">
-                        <GraphPanel
+                <div className="hidden md:block w-full md:w-1/2">
+                    <GraphPanel
                         graphEdges={graphEdges}
                         onClearGraph={handleClearGraph}
                     />
                 </div>
             </div>
-            
+
+            {
+                (<FloatingGraphPanel
+                 graphEdges={graphEdges}
+                 onClearGraph={handleClearGraph}
+                 isGraphPanelVisible={isGraphPanelVisible}
+                onToggleGraphPanel={handleGraphPanelToggle}
+            />) if isGraphPanelVisible else (<Fragment />)
+            }
+
             <FloatingControlBar
                 isPTTActive={isPTTActive}
                 setIsPTTActive={setIsPTTActive}
                 setIsAudioPlaybackEnabled={setIsAudioPlaybackEnabled}
-                
-
                 isVisible={isControlBarVisible}
                 sessionStatus={sessionStatus}
                 isMicMuted={isMicMuted}
@@ -185,78 +202,3 @@ def:pub MainApp() -> any {
     </Layout>;
 }
 
-# ============================================
-# Sub-Components (Presentational)
-# ============================================
-
-# Transcript Panel - left side showing conversation
-def TranscriptPanel(
-    transcriptItems: any,
-    transcriptEndRef: any,
-    userText: str,
-    setUserText: any,
-    onSend: any,
-    suggestions: list,
-    onSelectSuggestion: any,
-    sessionStatus: str,
-    onToggleConnection: any,
-    onShowControlBar: any,
-    onHideControlBar: any
-) -> any {
-    return <div className="glass-panel flex flex-col h-full">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-border/30 text-sm font-semibold text-foreground">
-            <MessageSquare className="w-5 h-5 text-primary" />
-            {"Transcript"}
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-            {transcriptItems}
-            <div ref={transcriptEndRef} />
-        </div>
-
-        <MessageInput
-             userText={userText}
-            setUserText={setUserText}
-            onSend={onSend}
-            suggestions={suggestions}
-            onSelectSuggestion={onSelectSuggestion}
-            sessionStatus={sessionStatus}
-            onToggleConnection={onToggleConnection}
-            onShowControlBar={onShowControlBar}
-            onHideControlBar={onHideControlBar}
-        />
-    </div>;
-}
-
-# Graph Panel - right side showing task visualization
-def GraphPanel(graphEdges: str, onClearGraph: any) -> any {
-    return <div className="glass-panel flex flex-col h-full">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border/30">
-            <div className="flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-primary" />
-                <h2 className="text-sm font-semibold text-foreground">{"Task Graph"}</h2>
-            </div>
-            <span className="text-xs text-muted-foreground">
-                {"Real-time visualization"}
-            </span>
-        </div>
-
-        <div className="flex-1 overflow-hidden bg-background relative rounded-[0.75rem]">
-            <GraphViewer graphEdges={graphEdges} />
-
-            <ClearGraphButton onClick={onClearGraph} />
-        </div>
-    </div>;
-}
-
-
-# Clear Graph Button
-def ClearGraphButton(onClick: any) -> any {
-    return <button
-        onClick={onClick}
-        className="absolute bottom-4 right-4 flex items-center gap-2 px-3 py-2 bg-destructive/10 text-destructive rounded-lg text-xs font-medium hover:bg-destructive/20 transition-colors"
-    >
-        <Trash2 className="w-3.5 h-3.5" />
-        {"Clear Graph"}
-    </button>;
-}
