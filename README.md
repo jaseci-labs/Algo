@@ -46,15 +46,13 @@ Algo is a voice-enabled personal AI assistant that helps you visualize and manag
 
 Algo uses a **Manager → Graph Agent** multi-agent hierarchy:
 
-```
-User → call_manager → call_graph_agent
-                      ↓
-                validate_graph_output
-                      ↓
-                (stores validation result)
-                      ↓
-                Graph Agent corrects/reports
-```
+### System Architecture
+
+![Architecture](assets/Architecture.png)
+
+### Request Flow
+
+![Flow](assets/Flow.png)
 
 ### Manager Agent
 - Supervises and validates the Graph Agent's output
