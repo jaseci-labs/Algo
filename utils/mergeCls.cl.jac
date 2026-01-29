@@ -1,4 +1,4 @@
-import from "clsx" {clsx, ClassValue }
+import from "clsx" { clsx }
 import from "tailwind-merge" { twMerge }
 
 def: pub cn(input:any) -> str{

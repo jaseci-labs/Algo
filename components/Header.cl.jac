@@ -1,34 +1,39 @@
 # Header Component
-# Application header with title and username display
+# Application header with logo, user info, and controls
 
+import from react { memo }
+import from "lucide-react" { Bot, LogOut, ChevronDown }
+import from .ThemeToggle { ThemeToggle }
+import from .UserAvatar { UserAvatar }
 import from "@jac/runtime" { jacLogout, useNavigate }
-import from ..utils.mergeCls { cn }
 
-def:pub Header() -> any {
+def HeaderComponent(isDarkMode: bool, onToggleTheme: any) -> any {
     navigate = useNavigate();
-    has username: str = "User";
-
+    
     def handleLogout(e: any) -> None {
         e.preventDefault();
         jacLogout();
         navigate("/login");
     }
-
-    return <header className="px-5 py-4 text-lg font-semibold flex justify-between items-center border-b border-border bg-surface">
-        <div className="flex items-center gap-2">
-            <span className="text-2xl">{"🎙️"}</span>
-            <span className="text-text-primary">{"Algo - Your Personal AI Assistant"}</span>
+    return <header className="h-16 px-6 flex items-center justify-between border-b border-border/50 bg-card/50 backdrop-blur-xl">
+        <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Bot className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+                <h1 className="text-lg font-semibold text-foreground">{"Algo"}</h1>
+                <p className="text-xs text-muted-foreground">{"AI Assistant"}</p>
+            </div>
         </div>
-        <div className="flex items-center gap-6">
-            <span className="text-sm text-text-secondary font-medium">
-                {f"👤 {username}"}
-            </span>
-            <button
-                onClick={handleLogout}
-                className="px-4 py-2 text-sm font-medium text-primary-foreground bg-gradient-to-br from-primary to-secondary border-none rounded-md cursor-pointer transition-all shadow-md hover:opacity-90 hover:-translate-y-0.5 active:translate-y-0"
-            >
-                {"Logout"}
+
+        <div className="flex items-center gap-3">
+            <ThemeToggle isDarkMode={isDarkMode} onToggle={onToggleTheme} />
+            <UserAvatar />
+            <button onClick={lambda e:any -> None {handleLogout(e);}} className="control-button w-9 h-9 bg-destructive/10 text-destructive hover:bg-destructive/20">
+                <LogOut  className="w-4 h-4" />
             </button>
         </div>
     </header>;
 }
+
+glob:pub Header = memo(HeaderComponent);
