@@ -13,6 +13,7 @@ import from ..components.Layout { Layout }
 import from ..components.GraphPanel { GraphPanel }
 import from ..components.TranscriptPanel { TranscriptPanel }
 import from ..components.FloatingGraphPanel { FloatingGraphPanel }
+import from ..components.AnalyticsPanel { AnalyticsPanel }
 
 import from ..hooks.useMainApp { useMainApp }
 import from ..hooks.useTheme { useTheme }
@@ -33,6 +34,7 @@ def:pub MainApp() -> any {
     # Floating control bar visibility state
     [isControlBarVisible, setIsControlBarVisible] = useState(False);
     [isGraphPanelVisible, setIsGraphPanelVisible] = useState(False);
+    [isAnalyticsPanelVisible, setIsAnalyticsPanelVisible] = useState(False);
     console.log("Graph Panel Visible:", isGraphPanelVisible);
     hideTimerRef = useRef(None);
 
@@ -54,6 +56,10 @@ def:pub MainApp() -> any {
 
     def handleGraphPanelToggle() -> None {
         setIsGraphPanelVisible(not isGraphPanelVisible);
+    }
+
+    def handleAnalyticsPanelToggle() -> None {
+        setIsAnalyticsPanelVisible(not isAnalyticsPanelVisible);
     }
 
     # Control bar show/hide handlers
@@ -142,7 +148,7 @@ def:pub MainApp() -> any {
     # ========== Render ==========
     return <Layout meta={{"title": "Dashboard | Algo", "description": "Your AI assistant dashboard with voice interface"}}>
         <div className="flex flex-col h-screen bg-background">
-            <Header isDarkMode={isDarkMode} onToggleTheme={toggleTheme} />
+            <Header isDarkMode={isDarkMode} onToggleTheme={toggleTheme} onToggleAnalytics={handleAnalyticsPanelToggle} />
 
             <div className="flex-1 flex flex-col md:flex-row gap-4 p-2 md:p-4 overflow-hidden">
                 <div className="w-full md:w-1/2  h-screen md:h-auto">
@@ -179,6 +185,14 @@ def:pub MainApp() -> any {
                  isGraphPanelVisible={isGraphPanelVisible}
                 onToggleGraphPanel={handleGraphPanelToggle}
             />) if isGraphPanelVisible else (<Fragment />)
+            }
+
+            {
+                (<div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-4xl h-[80vh] glass-panel rounded-xl shadow-2xl">
+                        <AnalyticsPanel onClose={handleAnalyticsPanelToggle} />
+                    </div>
+                </div>) if isAnalyticsPanelVisible else (<Fragment />)
             }
 
             <FloatingControlBar

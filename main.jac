@@ -9,7 +9,12 @@ import from service.mainAppService {
     reset_session,
     rebuild_graph,
     rename_task,
-    call_manager
+    call_manager,
+    get_activity_report,
+    get_trend_analysis,
+    analyze_behavioral_patterns,
+    calculate_productivity_metrics,
+    generate_insights
 }
 
 cl import from .index { app as ClientApp }

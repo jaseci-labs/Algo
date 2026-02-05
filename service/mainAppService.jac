@@ -177,3 +177,38 @@ walker :pub validate_graph_output {
 
     can validate with `root entry;
 }
+
+# ========== Analytics Walkers ==========
+
+walker :pub get_activity_report {
+    has username: str = "anonymous";
+    has date_range: dict = {};
+
+    can generate_report with `root entry;
+}
+
+walker :pub get_trend_analysis {
+    has username: str = "anonymous";
+    has period: str = "week";
+
+    can analyze_trends with `root entry;
+}
+
+walker :pub analyze_behavioral_patterns {
+    has username: str = "anonymous";
+
+    can extract_patterns with `root entry;
+}
+
+walker :pub calculate_productivity_metrics {
+    has username: str = "anonymous";
+
+    can compute_metrics with `root entry;
+}
+
+walker :pub generate_insights {
+    has username: str = "anonymous";
+    has category: str = "all";
+
+    can create_insights with `root entry;
+}

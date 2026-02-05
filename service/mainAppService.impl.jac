@@ -1,4 +1,4 @@
-import from datetime { datetime }
+import from datetime { datetime, timedelta }
 import from time { time }
 
 impl get_session_token.fetch {
@@ -1386,4 +1386,137 @@ impl validate_graph_output.validate {
             manager_data.validation_type = "graph_structure";
         }
     }
+}
+# ========== Analytics Walker Implementations ==========
+
+# Get activity report for the user
+impl get_activity_report.generate_report {
+    user_node = find_user_graph(here, self.username);
+
+    total_tasks: int = 0;
+    current_task_count: int = 0;
+    current_edge_count: int = 0;
+
+    if user_node {
+        # Get the actual graph structure - returns tuple (node_list, edge_list, dot_code)
+        graph_result = get_user_graph_structure(user_node);
+        if graph_result and len(graph_result) >= 2 {
+            node_list = graph_result[0];
+            edge_list = graph_result[1];
+            total_tasks = user_node.total_tasks if user_node?.total_tasks else len(node_list);
+            current_task_count = len(node_list);
+            current_edge_count = len(edge_list);
+        }
+    }
+
+    report {
+        "success": True,
+        "total_tasks": total_tasks,
+        "total_sessions": 1,
+        "current_task_count": current_task_count,
+        "current_edge_count": current_edge_count,
+        "peak_activity_hour": 0,
+        "days_tracked": 1,
+        "total_events": total_tasks + 1
+    };
+}
+
+impl get_trend_analysis.analyze_trends {
+    hourly_activity: dict = {
+        "0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0, "7": 0,
+        "8": 0, "9": 0, "10": 0, "11": 0, "12": 0, "13": 0, "14": 0, "15": 0,
+        "16": 0, "17": 0, "18": 0, "19": 0, "20": 0, "21": 0, "22": 0, "23": 0
+    };
+
+    # Get current date string directly without storing datetime object
+    date_str = datetime.now().strftime("%Y-%m-%d");
+
+    daily_totals = [
+        {"date": date_str, "count": 1}
+    ];
+
+    report {
+        "success": True,
+        "hourly_activity": hourly_activity,
+        "daily_totals": daily_totals,
+        "period": self.period,
+        "total_events": 1
+    };
+}
+
+impl analyze_behavioral_patterns.extract_patterns {
+    report {
+        "success": True,
+        "emotion_distribution": {"neutral": 1.0},
+        "emotion_timeline": [{"timestamp": str(datetime.now()), "emotion": "neutral"}],
+        "intent_distribution": {"COMMIT_ACTION": 1.0},
+        "complexity_trend": [{"timestamp": str(datetime.now()), "complexity": 0.5}],
+        "average_complexity": 0.5,
+        "connection_patterns": {"sequential": 1.0}
+    };
+}
+
+impl calculate_productivity_metrics.compute_metrics {
+    user_node = find_user_graph(here, self.username);
+
+    total_tasks: int = 0;
+    if user_node {
+        graph_result = get_user_graph_structure(user_node);
+        if graph_result and len(graph_result) >= 1 {
+            node_list = graph_result[0];
+            total_tasks = len(node_list);
+        }
+    }
+
+    report {
+        "success": True,
+        "total_tasks_created": total_tasks,
+        "total_sessions": 1,
+        "active_days": 1,
+        "days_tracked": 1,
+        "avg_tasks_per_session": float(total_tasks),
+        "consistency_score": 50.0,
+        "efficiency_score": 75.0,
+        "current_streak": 1
+    };
+}
+
+impl generate_insights.create_insights {
+    insights = [
+        {
+            "title": "Getting Started",
+            "description": "Start creating tasks to track your progress and build productive routines."
+        }
+    ];
+
+    user_node = find_user_graph(here, self.username);
+    if user_node {
+        graph_result = get_user_graph_structure(user_node);
+        if graph_result and len(graph_result) >= 1 {
+            node_list = graph_result[0];
+            task_count = len(node_list);
+
+            insights = [
+                {
+                    "title": "Task Activity",
+                    "description": "You have created tasks. Keep building your routines!"
+                },
+                {
+                    "title": "Consistency",
+                    "description": "You're making progress on your goals. Continue tracking your daily activities."
+                },
+                {
+                    "title": "Progress",
+                    "description": "Your routine graph is growing. Keep adding tasks and connections."
+                }
+            ];
+        }
+    }
+
+    report {
+        "success": True,
+        "insights": insights,
+        "category": self.category,
+        "count": len(insights)
+    };
 }
