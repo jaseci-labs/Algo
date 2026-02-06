@@ -152,6 +152,38 @@ async def:pub getInsights(category: str = "all") -> any {
     }
 }
 
+# Log an activity event for analytics tracking
+async def:pub logActivityEvent(eventType: str, eventData: dict = {}, sessionId: str = "") -> any {
+    try {
+        username = getUsernameFromToken();
+
+        response = root spawn log_activity_event(
+            username=username,
+            event_type=eventType,
+            event_data=eventData,
+            session_id=sessionId
+        );
+
+        if response and response.reports and response.reports.length > 0 {
+            return {
+                "success": True,
+                "data": response.reports[0]
+            };
+        }
+
+        return {
+            "success": False,
+            "error": "Failed to log activity event"
+        };
+    } except Exception as e {
+        console.error("[API] logActivityEvent error:", e);
+        return {
+            "success": False,
+            "error": String(e)
+        };
+    }
+}
+
 # Export analytics data in various formats
 async def:pub exportAnalyticsData(format: str = "json") -> any {
     try {

@@ -705,3 +705,102 @@ Return:
 - missing_labels: List of descriptions for missing labels (e.g., ["condition on 'raining' edge"])
 - incorrect_labels: List of descriptions for incorrect labels
 """;
+
+#===========================================================
+#               ANALYTICS INSIGHTS FUNCTIONS
+#===========================================================
+
+"""Personalized insight for analytics"""
+obj PersonalizedInsight {
+    has title: str;
+    has description: str;
+    has category: str;
+    has actionable: bool;
+}
+
+"""Generate personalized insights based on user's activity patterns"""
+def generate_personalized_insights(
+    total_tasks: int,
+    consistency_score: float,
+    efficiency_score: float,
+    current_streak: int,
+    peak_hour: str,
+    peak_day: str,
+    total_events: int,
+    emotion_distribution: dict,
+    connection_patterns: dict
+) -> list[PersonalizedInsight] by llm();
+
+sem generate_personalized_insights = """
+Generate 3-4 personalized, actionable insights based on the user's actual activity data.
+
+INPUT ANALYSIS:
+- total_tasks: How many tasks user has created (higher = more active)
+- consistency_score: 0-100 (higher = more consistent daily activity)
+- efficiency_score: 0-100 (higher = better task connections/routine complexity)
+- current_streak: Consecutive days of activity
+- peak_hour: Hour (0-23) when user is most active
+- peak_day: Day of week when user is most active
+- total_events: Total tracked events
+- emotion_distribution: Distribution of emotional states (stressed, excited, focused, etc.)
+- connection_patterns: How user connects tasks (sequential, parallel, conditional, convergent)
+
+INSIGHT CATEGORIES:
+1. PRODUCTIVITY: Patterns in task creation, peak productivity times, streaks
+2. CONSISTENCY: Daily activity patterns, engagement trends
+3. BEHAVIORAL: Emotional patterns, connection style preferences
+4. RECOMMENDATIONS: Actionable suggestions based on data
+
+GENERATION RULES:
+- Each insight MUST be based on the actual numeric data provided
+- Be specific: mention actual numbers (e.g., "12 tasks", "85% score", "5-day streak")
+- Be encouraging but honest about areas for improvement
+- Make recommendations actionable (specific things to try)
+- Vary categories - don't give all productivity or all behavioral insights
+- For new users (total_tasks < 5): Focus on getting started insights
+- For active users (total_tasks >= 5): Focus on optimization insights
+
+EXAMPLE INSIGHTS:
+PRODUCTIVITY (when streak > 3):
+- title: "On Fire!"
+- description: "You're on a 5-day streak! Your consistency is impressive. Keep the momentum going."
+- category: "productivity"
+- actionable: false
+
+PRODUCTIVITY (when peak_hour shows clear pattern):
+- title: "Peak Productivity"
+- description: "You're most active around 9 AM. Schedule your most important tasks then for maximum productivity."
+- category: "productivity"
+- actionable: true
+
+CONSISTENCY (when consistency_score is high):
+- title: "Rock Steady"
+- description: "Your 85% consistency score shows real dedication. You're building great habits!"
+- category: "consistency"
+- actionable: false
+
+BEHAVIORAL (when emotion_distribution shows stressed):
+- title: "Take It Easy"
+- description: "You seem stressed during your sessions. Consider breaking larger tasks into smaller, manageable steps."
+- category: "behavioral"
+- actionable: true
+
+RECOMMENDATIONS (when connection_patterns are mostly sequential):
+- title: "Try Parallel Tasks"
+- description: "You mostly use sequential connections. Try using 'while' to create parallel workflows and save time."
+- category: "recommendations"
+- actionable: true
+
+RECOMMENDATIONS (when total_events is low):
+- title: "Build Your Routine"
+- description: "Start by adding 3-5 tasks you do every day. Track them to see your patterns emerge."
+- category: "recommendations"
+- actionable: true
+
+OUTPUT FORMAT:
+Return a list of PersonalizedInsight objects with exactly these fields:
+- title: Short, catchy headline (2-4 words)
+- description: 1-2 sentences explaining the insight
+- category: "productivity" | "consistency" | "behavioral" | "recommendations"
+- actionable: true if user can take action, false if just observation
+""";

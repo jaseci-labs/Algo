@@ -20,6 +20,7 @@ import from semantics.semantics {
     InsertValidationResult,
     ReorderValidationResult,
     EdgeLabelValidationResult,
+    PersonalizedInsight,
     detect_emotional_state,
     analyze_conversation_intent,
     extract_raw_task_names,
@@ -34,7 +35,8 @@ import from semantics.semantics {
     validate_rename_operation,
     validate_insert_operation,
     validate_reorder_operation,
-    validate_edge_labels
+    validate_edge_labels,
+    generate_personalized_insights
 }
 
 node TaskState {
@@ -71,6 +73,18 @@ node manager_comm_data {
 node user_routines {
     has username: str = "anonymous";
     has routines: dict = {};
+}
+
+# Analytics: Activity Event Tracking
+node ActivityEvent {
+    has event_type: str;
+    has timestamp: str;
+    has event_data: dict = {};
+    has session_id: str = "";
+}
+
+edge EventFlow {
+    has temporal_order: int = 0;
 }
 
 with entry {
@@ -211,4 +225,21 @@ walker :pub generate_insights {
     has category: str = "all";
 
     can create_insights with `root entry;
+}
+
+# Event Logging Walker
+walker :pub log_activity_event {
+    has event_type: str;
+    has event_data: dict = {};
+    has session_id: str = "";
+    has username: str = "anonymous";
+    can log_event with `root entry;
+}
+
+# Real Trends Analysis Walker
+walker :pub compute_real_trends {
+    has username: str = "anonymous";
+    has period: str = "week";
+
+    can compute_trends with `root entry;
 }

@@ -9,7 +9,8 @@ import from ..api.analytics {
     getBehavioralPatterns,
     getProductivityMetrics,
     getInsights,
-    exportAnalyticsData
+    exportAnalyticsData,
+    logActivityEvent
 }
 
 def:pub useAnalytics() -> any {
@@ -33,6 +34,13 @@ def:pub useAnalytics() -> any {
         setError("");
 
         console.log("[useAnalytics] Fetching all analytics data...");
+
+        # Log analytics view event
+        try {
+            await logActivityEvent("insights_requested", {}, "");
+        } except Exception as e {
+            console.error("[useAnalytics] Failed to log event:", e);
+        }
 
         # Fetch each independently and handle errors
         activityResult = {"success": False};
@@ -181,6 +189,15 @@ def:pub useAnalytics() -> any {
         await fetchInsights(selectedCategory);
     }
 
+    # ========== Event Logging ==========
+    async def logEvent(eventType: str, eventData: dict = {}) -> None {
+        try {
+            await logActivityEvent(eventType, eventData, "");
+        } except Exception as e {
+            console.error("[useAnalytics] Failed to log event:", e);
+        }
+    }
+
     # ========== Export ==========
     async def exportData(format: str) -> None {
         setIsLoading(True);
@@ -236,6 +253,7 @@ def:pub useAnalytics() -> any {
 
         # Action Functions
         "exportData": exportData,
+        "logEvent": logEvent,
         "setSelectedPeriod": setSelectedPeriod,
         "setSelectedCategory": setSelectedCategory
     };

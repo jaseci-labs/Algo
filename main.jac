@@ -14,7 +14,9 @@ import from service.mainAppService {
     get_trend_analysis,
     analyze_behavioral_patterns,
     calculate_productivity_metrics,
-    generate_insights
+    generate_insights,
+    log_activity_event,
+    compute_real_trends
 }
 
 cl import from .index { app as ClientApp }

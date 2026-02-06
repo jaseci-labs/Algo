@@ -119,6 +119,18 @@ impl update_task_graph.update_graph {
     prev_node +>: TaskFlow(label=self.edge_label) :+> new_node;
     here.last_task = self.task_name;
 
+    # Log task creation event for analytics
+    here spawn log_activity_event(
+        username=self.username,
+        event_type="task_created",
+        event_data={
+            "task_name": self.task_name,
+            "previous_task": self.previous_task,
+            "edge_label": self.edge_label
+        },
+        session_id=""
+    );
+
     graph_data = get_graph_structure(here);
     report {
         "success": True,
@@ -888,6 +900,17 @@ impl call_manager.orchestrate{
             return;
         }
 
+        # Log voice interaction event for analytics
+        here spawn log_activity_event(
+            username=self.username,
+            event_type="voice_interaction",
+            event_data={
+                "message_length": len(self.context_from_user or ""),
+                "conversation_turn": len(self.conversation_history or [])
+            },
+            session_id=""
+        );
+
         root spawn call_graph_agent(
             conversation_history=self.conversation_history,
             context_from_user=self.context_from_user,
@@ -1422,37 +1445,189 @@ impl get_activity_report.generate_report {
 }
 
 impl get_trend_analysis.analyze_trends {
+    # Use the real trends computation
+    trend_result = here spawn compute_real_trends(
+        username=self.username,
+        period=self.period
+    );
+
     hourly_activity: dict = {
         "0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0, "7": 0,
         "8": 0, "9": 0, "10": 0, "11": 0, "12": 0, "13": 0, "14": 0, "15": 0,
         "16": 0, "17": 0, "18": 0, "19": 0, "20": 0, "21": 0, "22": 0, "23": 0
     };
 
-    # Get current date string directly without storing datetime object
-    date_str = datetime.now().strftime("%Y-%m-%d");
+    daily_activity: dict = {
+        "Monday": 0, "Tuesday": 0, "Wednesday": 0, "Thursday": 0,
+        "Friday": 0, "Saturday": 0, "Sunday": 0
+    };
 
-    daily_totals = [
-        {"date": date_str, "count": 1}
-    ];
+    peak_hour = "0";
+    peak_day = "Monday";
+    total_events = 0;
+
+    if trend_result and trend_result.reports and len(trend_result.reports) > 0 {
+        trend_data = trend_result.reports[0];
+        if trend_data.get("success") {
+            hourly_activity = trend_data.get("hourly_activity", hourly_activity);
+            daily_activity = trend_data.get("daily_activity", daily_activity);
+            peak_hour = trend_data.get("peak_hour", "0");
+            peak_day = trend_data.get("peak_day", "Monday");
+            total_events = trend_data.get("total_events", 0);
+        }
+    }
+
+    # Convert daily_activity to daily_totals format
+    daily_totals = [];
+    for day_name in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] {
+        if day_name in daily_activity {
+            daily_totals.append({"date": day_name, "count": daily_activity[day_name]});
+        }
+    }
 
     report {
         "success": True,
         "hourly_activity": hourly_activity,
+        "daily_activity": daily_activity,
         "daily_totals": daily_totals,
+        "peak_hour": peak_hour,
+        "peak_day": peak_day,
         "period": self.period,
-        "total_events": 1
+        "total_events": total_events
     };
 }
 
 impl analyze_behavioral_patterns.extract_patterns {
+    user_graph = find_user_graph(here, self.username);
+
+    # Initialize tracking
+    emotion_counts: dict = {
+        "neutral": 0,
+        "stressed": 0,
+        "excited": 0,
+        "focused": 0,
+        "confused": 0,
+        "frustrated": 0
+    };
+
+    emotion_timeline = [];
+    intent_counts: dict = {
+        "COMMIT_ACTION": 0,
+        "CORRECT_PREVIOUS": 0,
+        "CLARIFY_PREVIOUS": 0,
+        "ASK_QUESTION": 0,
+        "THINK_ALOUD": 0
+    };
+
+    connection_patterns: dict = {
+        "sequential": 0,
+        "parallel": 0,
+        "conditional": 0,
+        "convergent": 0
+    };
+
+    total_emotions = 0;
+    total_intents = 0;
+
+    # Analyze emotion/intent from manager_comm_data nodes
+    if user_graph {
+        # Get all manager_comm_data for this user
+        comm_nodes = [-->](`?manager_comm_data);
+        for comm in comm_nodes {
+            if hasattr(comm, "username") and comm.username == self.username {
+                # Count emotional states
+                if hasattr(comm, "last_emotional_state") and comm.last_emotional_state {
+                    emotion = comm.last_emotional_state;
+                    if emotion in emotion_counts {
+                        emotion_counts[emotion] = emotion_counts[emotion] + 1;
+                        total_emotions = total_emotions + 1;
+                    }
+                    emotion_timeline.append({
+                        "emotion": emotion
+                    });
+                }
+            }
+        }
+
+        # Analyze connection patterns from graph edges
+        graph_result = get_user_graph_structure(user_graph);
+        if graph_result and len(graph_result) >= 2 {
+            edge_list = graph_result[1];
+            for edge in edge_list {
+                label = edge.get("label", "").lower();
+                if label in ["then", "after", "next"] {
+                    connection_patterns["sequential"] = connection_patterns["sequential"] + 1;
+                } elif label in ["while", "as", "same time", "parallel"] {
+                    connection_patterns["parallel"] = connection_patterns["parallel"] + 1;
+                } elif label in ["if", "when", "else", "otherwise"] {
+                    connection_patterns["conditional"] = connection_patterns["conditional"] + 1;
+                } elif label in ["either way", "merge", "converge"] {
+                    connection_patterns["convergent"] = connection_patterns["convergent"] + 1;
+                } else {
+                    connection_patterns["sequential"] = connection_patterns["sequential"] + 1;
+                }
+            }
+        }
+
+        # Count events by type
+        activity_events = [user_graph-->](`?ActivityEvent);
+        for event in activity_events {
+            if hasattr(event, "event_type") {
+                event_type = event.event_type;
+                if event_type == "voice_interaction" {
+                    intent_counts["COMMIT_ACTION"] = intent_counts["COMMIT_ACTION"] + 1;
+                    total_intents = total_intents + 1;
+                }
+            }
+        }
+    }
+
+    # Calculate distributions
+    emotion_distribution: dict = {};
+    for emotion_name in emotion_counts {
+        if total_emotions > 0 {
+            emotion_distribution[emotion_name] = emotion_counts[emotion_name] / total_emotions;
+        } else {
+            emotion_distribution[emotion_name] = 0.0;
+        }
+    }
+
+    intent_distribution: dict = {};
+    for intent_name in intent_counts {
+        if total_intents > 0 {
+            intent_distribution[intent_name] = intent_counts[intent_name] / total_intents;
+        } else {
+            intent_distribution[intent_name] = 0.0;
+        }
+    }
+
+    # Calculate average complexity based on graph structure
+    node_count = 0;
+    edge_count = 0;
+    if user_graph {
+        graph_result = get_user_graph_structure(user_graph);
+        if graph_result and len(graph_result) >= 2 {
+            node_count = len(graph_result[0]);
+            edge_count = len(graph_result[1]);
+        }
+    }
+    average_complexity = 0.5;
+    if node_count > 0 {
+        average_complexity = min(1.0, edge_count / (node_count * 2));
+    }
+
+    complexity_trend = [
+        {"timestamp": datetime.now().strftime("%Y-%m-%d"), "complexity": average_complexity}
+    ];
+
     report {
         "success": True,
-        "emotion_distribution": {"neutral": 1.0},
-        "emotion_timeline": [{"timestamp": str(datetime.now()), "emotion": "neutral"}],
-        "intent_distribution": {"COMMIT_ACTION": 1.0},
-        "complexity_trend": [{"timestamp": str(datetime.now()), "complexity": 0.5}],
-        "average_complexity": 0.5,
-        "connection_patterns": {"sequential": 1.0}
+        "emotion_distribution": emotion_distribution,
+        "emotion_timeline": emotion_timeline,
+        "intent_distribution": intent_distribution,
+        "complexity_trend": complexity_trend,
+        "average_complexity": average_complexity,
+        "connection_patterns": connection_patterns
     };
 }
 
@@ -1460,54 +1635,198 @@ impl calculate_productivity_metrics.compute_metrics {
     user_node = find_user_graph(here, self.username);
 
     total_tasks: int = 0;
+    total_edges: int = 0;
+    total_sessions: int = 0;
+    task_created_count: int = 0;
+    voice_interaction_count: int = 0;
+
+    # Track unique days with activity
+    active_days_set: dict = {};
+
     if user_node {
         graph_result = get_user_graph_structure(user_node);
-        if graph_result and len(graph_result) >= 1 {
+        if graph_result and len(graph_result) >= 2 {
             node_list = graph_result[0];
+            edge_list = graph_result[1];
             total_tasks = len(node_list);
+            total_edges = len(edge_list);
         }
+
+        # Count activity events
+        activity_events = [user_node-->](`?ActivityEvent);
+        for event in activity_events {
+            if hasattr(event, "event_type") {
+                if event.event_type == "task_created" {
+                    task_created_count = task_created_count + 1;
+                } elif event.event_type == "voice_interaction" {
+                    voice_interaction_count = voice_interaction_count + 1;
+                    total_sessions = total_sessions + 1;
+                } elif event.event_type == "insights_requested" {
+                    total_sessions = total_sessions + 1;
+                }
+            }
+
+            # Track unique days
+            if hasattr(event, "timestamp") and event.timestamp {
+                date_parts = event.timestamp.split("T");
+                if len(date_parts) > 0 {
+                    active_days_set[date_parts[0]] = True;
+                }
+            }
+        }
+    }
+
+    active_days = len(active_days_set);
+    days_tracked = max(1, active_days);
+
+    # Calculate consistency score based on daily activity
+    # Higher score = more consistent daily activity
+    consistency_score = 50.0;
+    if total_tasks > 0 and active_days > 0 {
+        tasks_per_day = float(total_tasks) / float(active_days);
+        consistency_score = min(100.0, tasks_per_day * 20.0 + 30.0);
+    }
+
+    # Calculate efficiency score based on task-to-edge ratio
+    # More edges per task = more complex/connected routines = higher efficiency
+    efficiency_score = 50.0;
+    if total_tasks > 0 {
+        edge_ratio = float(total_edges) / float(total_tasks);
+        efficiency_score = min(100.0, edge_ratio * 40.0 + 40.0);
+    }
+
+    # Calculate current streak (consecutive days with activity)
+    current_streak = 1;
+    if active_days > 1 {
+        current_streak = active_days;
+    }
+    # Calculate average tasks per session
+    avg_tasks_per_session = float(total_tasks);
+    if total_sessions > 0 {
+        avg_tasks_per_session = float(total_tasks) / float(total_sessions);
     }
 
     report {
         "success": True,
         "total_tasks_created": total_tasks,
-        "total_sessions": 1,
-        "active_days": 1,
-        "days_tracked": 1,
-        "avg_tasks_per_session": float(total_tasks),
-        "consistency_score": 50.0,
-        "efficiency_score": 75.0,
-        "current_streak": 1
+        "total_sessions": total_sessions,
+        "active_days": active_days,
+        "days_tracked": days_tracked,
+        "avg_tasks_per_session": avg_tasks_per_session,
+        "consistency_score": consistency_score,
+        "efficiency_score": efficiency_score,
+        "current_streak": current_streak,
+        "total_interactions": voice_interaction_count,
+        "total_events": task_created_count + voice_interaction_count
     };
 }
 
 impl generate_insights.create_insights {
-    insights = [
-        {
-            "title": "Getting Started",
-            "description": "Start creating tasks to track your progress and build productive routines."
+    # Default values
+    total_tasks: int = 0;
+    consistency_score: float = 50.0;
+    efficiency_score: float = 50.0;
+    current_streak: int = 0;
+    peak_hour: str = "0";
+    peak_day: str = "Monday";
+    total_events: int = 0;
+    emotion_distribution: dict = {"neutral": 1.0};
+    connection_patterns: dict = {"sequential": 1.0};
+
+    # Fetch real data from productivity metrics
+    productivity_result = here spawn calculate_productivity_metrics(
+        username=self.username
+    );
+
+    if productivity_result and productivity_result.reports and len(productivity_result.reports) > 0 {
+        prod_data = productivity_result.reports[0];
+        if prod_data.get("success") {
+            total_tasks = prod_data.get("total_tasks_created", 0);
+            consistency_score = prod_data.get("consistency_score", 50.0);
+            efficiency_score = prod_data.get("efficiency_score", 50.0);
+            current_streak = prod_data.get("current_streak", 0);
         }
-    ];
+    }
 
-    user_node = find_user_graph(here, self.username);
-    if user_node {
-        graph_result = get_user_graph_structure(user_node);
-        if graph_result and len(graph_result) >= 1 {
-            node_list = graph_result[0];
-            task_count = len(node_list);
+    # Fetch real trend data
+    trend_result = here spawn compute_real_trends(
+        username=self.username,
+        period="week"
+    );
 
-            insights = [
+    if trend_result and trend_result.reports and len(trend_result.reports) > 0 {
+        trend_data = trend_result.reports[0];
+        if trend_data.get("success") {
+            peak_hour = trend_data.get("peak_hour", "0");
+            peak_day = trend_data.get("peak_day", "Monday");
+            total_events = trend_data.get("total_events", 0);
+        }
+    }
+
+    # Fetch behavioral patterns
+    patterns_result = here spawn analyze_behavioral_patterns(
+        username=self.username
+    );
+
+    if patterns_result and patterns_result.reports and len(patterns_result.reports) > 0 {
+        patterns_data = patterns_result.reports[0];
+        if patterns_data.get("success") {
+            emotion_distribution = patterns_data.get("emotion_distribution", {"neutral": 1.0});
+            connection_patterns = patterns_data.get("connection_patterns", {"sequential": 1.0});
+        }
+    }
+
+    # Generate AI-powered personalized insights
+    insights = generate_personalized_insights(
+        total_tasks=total_tasks,
+        consistency_score=consistency_score,
+        efficiency_score=efficiency_score,
+        current_streak=current_streak,
+        peak_hour=peak_hour,
+        peak_day=peak_day,
+        total_events=total_events,
+        emotion_distribution=emotion_distribution,
+        connection_patterns=connection_patterns
+    );
+
+    # Convert PersonalizedInsight objects to dict format for JSON response
+    insight_list = [];
+    if insights {
+        for insight in insights {
+            insight_dict = {
+                "title": insight.title,
+                "description": insight.description,
+                "category": insight.category,
+                "actionable": insight.actionable
+            };
+            insight_list.append(insight_dict);
+        }
+    }
+
+    # Fallback insights if LLM fails
+    if len(insight_list) == 0 {
+        if total_tasks == 0 {
+            insight_list = [
                 {
-                    "title": "Task Activity",
-                    "description": "You have created tasks. Keep building your routines!"
+                    "title": "Getting Started",
+                    "description": "Start creating tasks to track your progress and build productive routines.",
+                    "category": "recommendations",
+                    "actionable": True
+                }
+            ];
+        } else {
+            insight_list = [
+                {
+                    "title": "Building Momentum",
+                    "description": f"You've created {total_tasks} tasks. Keep building your routines!",
+                    "category": "productivity",
+                    "actionable": False
                 },
                 {
-                    "title": "Consistency",
-                    "description": "You're making progress on your goals. Continue tracking your daily activities."
-                },
-                {
-                    "title": "Progress",
-                    "description": "Your routine graph is growing. Keep adding tasks and connections."
+                    "title": "Daily Tracker",
+                    "description": f"Your consistency score is {Math.round(consistency_score)}%. Keep tracking daily to improve.",
+                    "category": "consistency",
+                    "actionable": True
                 }
             ];
         }
@@ -1515,8 +1834,146 @@ impl generate_insights.create_insights {
 
     report {
         "success": True,
-        "insights": insights,
+        "insights": insight_list,
         "category": self.category,
-        "count": len(insights)
+        "count": len(insight_list)
+    };
+}
+
+# ========== Activity Event Logging ==========
+
+impl log_activity_event.log_event {
+    # Create or connect to user's activity event stream
+    user_node = find_user_graph(here, self.username);
+
+    if not user_node {
+        # Create user graph if doesn't exist
+        user_node = here ++> user_graph_data(username=self.username);
+    }
+
+    # Generate timestamp
+    timestamp_str = datetime.now().strftime("%Y-%m-%dT%H:%M:%S");
+
+    # Create the activity event
+    event_node = ActivityEvent(
+        event_type=self.event_type,
+        timestamp=timestamp_str,
+        event_data=self.event_data,
+        session_id=self.session_id
+    );
+
+    # Connect event to user graph via temporal edge
+    user_node ++> event_node;
+
+    report {
+        "success": True,
+        "event_id": str(id(event_node)),
+        "timestamp": timestamp_str
+    };
+}
+
+# ========== Real Trends Analysis ==========
+
+impl compute_real_trends.compute_trends {
+    user_graph = find_user_graph(here, self.username);
+
+    # Initialize hourly activity map
+    hourly_activity: dict = {
+        "0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0,
+        "6": 0, "7": 0, "8": 0, "9": 0, "10": 0, "11": 0,
+        "12": 0, "13": 0, "14": 0, "15": 0, "16": 0, "17": 0,
+        "18": 0, "19": 0, "20": 0, "21": 0, "22": 0, "23": 0
+    };
+
+    daily_activity: dict = {
+        "Monday": 0, "Tuesday": 0, "Wednesday": 0, "Thursday": 0,
+        "Friday": 0, "Saturday": 0, "Sunday": 0
+    };
+
+    event_counts: dict = {
+        "task_created": 0,
+        "voice_interaction": 0,
+        "insights_requested": 0,
+        "task_connected": 0
+    };
+
+    total_events = 0;
+    peak_hour = "0";
+    peak_day = "Monday";
+
+    if user_graph {
+        # Get all ActivityEvent nodes connected to user graph
+        activity_events = [user_graph-->](`?ActivityEvent);
+
+        for event in activity_events {
+            if hasattr(event, "timestamp") and event.timestamp {
+                total_events = total_events + 1;
+
+                # Count by event type
+                if hasattr(event, "event_type") {
+                    event_type = event.event_type;
+                    if event_type in event_counts {
+                        event_counts[event_type] = event_counts[event_type] + 1;
+                    }
+                }
+
+                # Extract hour from timestamp (format: YYYY-MM-DDTHH:MM:SS)
+                try {
+                    time_parts = event.timestamp.split("T");
+                    if len(time_parts) > 1 {
+                        time_str = time_parts[1];
+                        hour_parts = time_str.split(":");
+                        if len(hour_parts) > 0 {
+                            hour_str = hour_parts[0];
+                            if hour_str in hourly_activity {
+                                hourly_activity[hour_str] = hourly_activity[hour_str] + 1;
+
+                                # Track peak hour
+                                if hourly_activity[hour_str] > hourly_activity[peak_hour] {
+                                    peak_hour = hour_str;
+                                }
+                            }
+                        }
+                    }
+
+                    # Get day of week from timestamp
+                    date_parts = time_parts[0].split("-");
+                    if len(date_parts) == 3 {
+                        # Simple day calculation (works for dates after 1970)
+                        year = int(date_parts[0]);
+                        month = int(date_parts[1]);
+                        day = int(date_parts[2]);
+
+                        # Using datetime to get weekday
+                        date_obj = datetime(int(date_parts[0]), int(date_parts[1]), int(date_parts[2]));
+                        weekday_index = int(date_obj.strftime("%w"));  # 0=Sunday, 1=Monday, etc.
+                        days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+                        day_name = days[weekday_index];
+
+                        if day_name in daily_activity {
+                            daily_activity[day_name] = daily_activity[day_name] + 1;
+
+                            # Track peak day
+                            if daily_activity[day_name] > daily_activity[peak_day] {
+                                peak_day = day_name;
+                            }
+                        }
+                    }
+                } except Exception as e {
+                    console.error("[compute_real_trends] Error parsing timestamp:", e);
+                }
+            }
+        }
+    }
+
+    report {
+        "success": True,
+        "period": self.period,
+        "total_events": total_events,
+        "hourly_activity": hourly_activity,
+        "daily_activity": daily_activity,
+        "event_counts": event_counts,
+        "peak_hour": peak_hour,
+        "peak_day": peak_day
     };
 }
