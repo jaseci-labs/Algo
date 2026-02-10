@@ -44,13 +44,13 @@ impl get_session_token.fetch {
 
 # WALKER: init_user_graph
 impl init_user_graph.initialize{
-    visit [-->](`?user_graph_data) else {
+    visit [-->](?:user_graph_data) else {
         (here ++> user_graph_data()) ++> TaskState(task_name="Start");
     }
-    visit [-->](`?manager_comm_data) else {
+    visit [-->](?:manager_comm_data) else {
         here ++> manager_comm_data();
     }
-    visit [-->](`?user_routines) else { here ++> user_routines(); }
+    visit [-->](?:user_routines) else { here ++> user_routines(); }
 }
 
 # WALKER: update_task_graph
@@ -64,7 +64,7 @@ impl update_task_graph.navigate_to_graph{
 
 impl update_task_graph.update_graph {
     prev_node = None;
-    all_task_nodes = [-->](`?TaskState);
+    all_task_nodes = [-->](?:TaskState);
     nodes_to_check = all_task_nodes.copy();
     all_nodes = [];
     
@@ -80,7 +80,7 @@ impl update_task_graph.update_graph {
                 visited_ids[node_id] = True;
                 all_nodes.append(current);
                 # Get successors via TaskFlow edges
-                successors = [current-->](`?TaskState);
+                successors = [current-->](?:TaskState);
                 for succ in successors {
                     nodes_to_check.append(succ);
                 }
@@ -181,7 +181,7 @@ impl clear_graph.navigate_to_graph{
 }
 
 impl clear_graph.clear_data{
-    for node in [-->](`?TaskState) { del node; }
+    for node in [-->](?:TaskState) { del node; }
     here ++> TaskState(task_name="Start");
     here.last_task = "Start";
     report {"success": True, "message": "Graph cleared successfully"} ;
@@ -222,7 +222,7 @@ impl save_routine.save_routine_data{
 
 # WALKER: load_past_routines
 impl load_past_routines.navigate_to_routines{
-    all_routines = [-->](`?user_routines);
+    all_routines = [-->](?:user_routines);
     user_routines_node = None;
     for r in all_routines {
         if r?.username and r.username == self.username {
@@ -264,7 +264,7 @@ impl reset_session.navigate_to_graph{
 }
 
 impl reset_session.reset_graph{
-    for node in [-->](`?TaskState) { del node; }
+    for node in [-->](?:TaskState) { del node; }
     here ++> TaskState(task_name="Start");
     here.last_task = "Start";
     report {"success": True, "message": "Session reset. Ready for a new conversation."} ;
@@ -280,7 +280,7 @@ impl rebuild_graph.navigate_to_graph{
 }
 
 impl rebuild_graph.rebuild{
-    all_task_nodes = [-->](`?TaskState);
+    all_task_nodes = [-->](?:TaskState);
     for node in all_task_nodes {
         del node ;
     }
@@ -329,7 +329,7 @@ impl rename_task.navigate_to_graph{
 }
 
 impl rename_task.rename{
-    all_task_nodes = [-->](`?TaskState);
+    all_task_nodes = [-->](?:TaskState);
     target_node = None;
 
     for node in all_task_nodes {
@@ -1082,7 +1082,7 @@ def find_leaf_nodes(edge_list: list, node_list: list) -> list {
 
 """Find user's graph or return None"""
 def find_user_graph(root_node: node, username: str) {
-    all_graphs = [root_node-->](`?user_graph_data);
+    all_graphs = [root_node-->](?:user_graph_data);
     for graph in all_graphs {
         if graph?.username and graph.username == username {
             return graph;
@@ -1093,7 +1093,7 @@ def find_user_graph(root_node: node, username: str) {
 
 """Find manager comm data node or return None"""
 def find_manager_comm_data(root_node: node, username: str) {
-    all_comm_data = [root_node-->](`?manager_comm_data);
+    all_comm_data = [root_node-->](?:manager_comm_data);
     for comm_data in all_comm_data {
         if comm_data?.username and comm_data.username == username {
             return comm_data;
@@ -1104,7 +1104,7 @@ def find_manager_comm_data(root_node: node, username: str) {
 
 """Find Start node in graph - only direct children of user_graph"""
 def find_start_node(graph_node: node) {
-    direct_task_nodes = [graph_node-->](`?TaskState);
+    direct_task_nodes = [graph_node-->](?:TaskState);
     for node in direct_task_nodes {
         if node?.task_name and node.task_name == "Start" {
             return node;
@@ -1133,7 +1133,7 @@ def get_user_graph_structure(user_graph_node: node) {
     node_list = [];
     edge_list = [];
 
-    direct_nodes = [user_graph_node-->](`?TaskState);
+    direct_nodes = [user_graph_node-->](?:TaskState);
     node_map = {};
     for node in direct_nodes {
         if node?.task_name {
@@ -1144,7 +1144,7 @@ def get_user_graph_structure(user_graph_node: node) {
 
     for from_node in direct_nodes {
         if from_node?.task_name {
-            successors = [from_node-->](`?TaskState);
+            successors = [from_node-->](?:TaskState);
             for to_node in successors {
                 if id(to_node) in node_map {
                     edge_label = extract_edge_label_via_printgraph(from_node, to_node);
@@ -1532,7 +1532,7 @@ impl analyze_behavioral_patterns.extract_patterns {
     # Analyze emotion/intent from manager_comm_data nodes
     if user_graph {
         # Get all manager_comm_data for this user
-        comm_nodes = [-->](`?manager_comm_data);
+        comm_nodes = [-->](?:manager_comm_data);
         for comm in comm_nodes {
             if hasattr(comm, "username") and comm.username == self.username {
                 # Count emotional states
@@ -1570,7 +1570,7 @@ impl analyze_behavioral_patterns.extract_patterns {
         }
 
         # Count events by type
-        activity_events = [user_graph-->](`?ActivityEvent);
+        activity_events = [user_graph-->](?:ActivityEvent);
         for event in activity_events {
             if hasattr(event, "event_type") {
                 event_type = event.event_type;
@@ -1653,7 +1653,7 @@ impl calculate_productivity_metrics.compute_metrics {
         }
 
         # Count activity events
-        activity_events = [user_node-->](`?ActivityEvent);
+        activity_events = [user_node-->](?:ActivityEvent);
         for event in activity_events {
             if hasattr(event, "event_type") {
                 if event.event_type == "task_created" {
@@ -1903,7 +1903,7 @@ impl compute_real_trends.compute_trends {
 
     if user_graph {
         # Get all ActivityEvent nodes connected to user graph
-        activity_events = [user_graph-->](`?ActivityEvent);
+        activity_events = [user_graph-->](?:ActivityEvent);
 
         for event in activity_events {
             if hasattr(event, "timestamp") and event.timestamp {
