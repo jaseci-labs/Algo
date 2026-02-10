@@ -78,11 +78,11 @@ node user_routines {
 # }
 
 walker :pub get_session_token {
-    can fetch with `root entry;
+    can fetch with Root entry;
 }
 
 walker :pub init_user_graph {
-    can initialize with `root entry;
+    can initialize with Root entry;
 }
 
 walker :pub update_task_graph {
@@ -91,21 +91,21 @@ walker :pub update_task_graph {
     has edge_label: str = "";
     has username: str = "anonymous";
 
-    can navigate_to_graph with `root entry;
+    can navigate_to_graph with Root entry;
     can update_graph with user_graph_data entry;
 }
 
 walker :pub get_task_graph {
     has username: str = "anonymous";
 
-    can navigate_to_graph with `root entry;
+    can navigate_to_graph with Root entry;
     can get_graph with user_graph_data entry;
 }
 
 walker :pub clear_graph {
     has username: str = "anonymous";
 
-    can navigate_to_graph with `root entry;
+    can navigate_to_graph with Root entry;
     can clear_data with user_graph_data entry;
 }
 
@@ -113,21 +113,21 @@ walker :pub save_routine {
     has routine_name: str = "daily_routine";
     has username: str = "anonymous";
 
-    can navigate_to_graph with `root entry;
+    can navigate_to_graph with Root entry;
     can save_routine_data with user_graph_data entry;
 }
 
 walker :pub load_past_routines {
     has username: str = "anonymous";
 
-    can navigate_to_routines with `root entry;
+    can navigate_to_routines with Root entry;
     can load_routines with user_routines entry;
 }
 
 walker :pub reset_session {
     has username: str = "anonymous";
 
-    can navigate_to_graph with `root entry;
+    can navigate_to_graph with Root entry;
     can reset_graph with user_graph_data entry;
 }
 
@@ -136,7 +136,7 @@ walker :pub rebuild_graph {
     has new_edges: list;
     has username: str = "anonymous";
 
-    can navigate_to_graph with `root entry;
+    can navigate_to_graph with Root entry;
     can rebuild with user_graph_data entry;
 }
 
@@ -145,7 +145,7 @@ walker :pub rename_task {
     has new_name: str;
     has username: str = "anonymous";
 
-    can navigate_to_graph with `root entry;
+    can navigate_to_graph with Root entry;
     can rename with user_graph_data entry;
 }
 
@@ -154,7 +154,7 @@ walker :pub call_graph_agent {
     has context_from_user: str;
     has username: str = "anonymous";
 
-    can call with `root entry;
+    can call with Root entry;
 }
 
 walker :pub call_manager {
@@ -162,7 +162,7 @@ walker :pub call_manager {
     has context_from_user: str;
     has username: str = "anonymous";
 
-    can orchestrate with `root entry;
+    can orchestrate with Root entry;
 }
 
 walker :pub validate_graph_output {
@@ -175,5 +175,5 @@ walker :pub validate_graph_output {
     has after_edges: list;
     has username: str = "anonymous";
 
-    can validate with `root entry;
+    can validate with Root entry;
 }
