@@ -36,8 +36,8 @@ def:pub transformGraphData(graphEdges: list) -> dict {
 
     # Extract unique nodes from edges
     for edge in graphEdges {
-        if <>edge.<>from {
-            nodeSet.add(<>edge.<>from);
+        if `edge.`from {
+            nodeSet.add(`edge.`from);
         }
         if edge["to"] {
             nodeSet.add(edge["to"]);
@@ -62,7 +62,7 @@ def:pub transformGraphData(graphEdges: list) -> dict {
     for edge in graphEdges {
         edges.push({
             "id": f"edge-{idx}",
-            "source": <>edge.<>from,
+            "source": `edge.`from,
             "target": edge["to"],
             "label": edge["label"] or "",
             "type": "bezier"
