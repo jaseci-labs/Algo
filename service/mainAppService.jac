@@ -236,10 +236,3 @@ walker :pub log_activity_event {
     can log_event with Root entry;
 }
 
-# Real Trends Analysis Walker
-walker :pub compute_real_trends {
-    has username: str = "anonymous";
-    has period: str = "week";
-
-    can compute_trends with Root entry;
-}

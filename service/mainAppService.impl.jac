@@ -1,6 +1,8 @@
 import from datetime { datetime, timedelta }
 import from time { time }
 
+# ========== Session Token ==========
+
 impl get_session_token.fetch {
     try {
         api_key = getenv("OPENAI_API_KEY");
@@ -943,6 +945,520 @@ impl call_manager.orchestrate{
     }
 }
 
+
+impl validate_graph_output.validate {
+    manager_data = find_manager_comm_data(here, self.username);
+    if not manager_data {
+        manager_data = manager_comm_data(username=self.username);
+        here ++> manager_data;
+    }
+
+    intent_analysis = self.intent_analysis or {};
+    extracted_tasks = self.extracted_tasks or [];
+    before_nodes = self.before_nodes or [];
+    before_edges = self.before_edges or [];
+    after_nodes = self.after_nodes or [];
+    after_edges = self.after_edges or [];
+    user_message = self.context_from_user;
+
+    conversation_context = intent_analysis.get("conversation_context", {});
+    correction_type = conversation_context.get("correction_type", "");
+    referring_to_task = conversation_context.get("referring_to_task", "");
+    tasks_to_move = conversation_context.get("tasks_to_move", []);
+
+    manager_data.validation_passed = True;
+    manager_data.validation_reason = "";
+    manager_data.validation_type = "";
+    manager_data.correction_needed = False;
+    manager_data.missing_tasks = [];
+    manager_data.incorrect_task = "";
+    manager_data.correct_task_name = "";
+
+    # Route to appropriate validation based on operation type
+    if correction_type == "rename" {
+        old_task = None;
+        new_task = None;
+
+        for node in before_nodes {
+            if node not in after_nodes and node != "Start" {
+                old_task = node;
+                break;
+            }
+        }
+
+        for node in after_nodes {
+            if node not in before_nodes {
+                new_task = node;
+                break;
+            }
+        }
+
+        if not old_task or not new_task {
+            return;
+        }
+
+        rename_validation = validate_rename_operation(
+            user_message=user_message,
+            old_task=old_task,
+            new_task=new_task,
+            before_nodes=before_nodes,
+            after_nodes=after_nodes,
+            before_edges=before_edges,
+            after_edges=after_edges
+        );
+
+        if not rename_validation.is_valid {
+            manager_data.validation_passed = False;
+            manager_data.validation_reason = rename_validation.reason;
+            manager_data.validation_type = "rename_operation";
+        }
+    }
+    elif correction_type in ["insert_before", "insert_after", "insert_first"] {
+        insert_validation = validate_insert_operation(
+            user_message=user_message,
+            operation_type=correction_type,
+            referring_to_task=referring_to_task,
+            new_tasks=extracted_tasks,
+            before_edges=before_edges,
+            after_edges=after_edges
+        );
+
+        if not insert_validation.is_valid {
+            manager_data.validation_passed = False;
+            manager_data.validation_reason = insert_validation.reason;
+            manager_data.validation_type = "insert_operation";
+        }
+    }
+    elif correction_type == "reorder" or len(tasks_to_move) > 0 {
+        reorder_tasks = tasks_to_move if len(tasks_to_move) > 0 else extracted_tasks;
+
+        reorder_validation = validate_reorder_operation(
+            user_message=user_message,
+            tasks_to_move=reorder_tasks,
+            before_edges=before_edges,
+            after_edges=after_edges
+        );
+
+        if not reorder_validation.is_valid {
+            manager_data.validation_passed = False;
+            manager_data.validation_reason = reorder_validation.reason;
+            manager_data.validation_type = "reorder_operation";
+        }
+    }
+    else {
+        conversation_context = intent_analysis.get("conversation_context", {});
+        intent_str = str(conversation_context.get("intent", "")) if conversation_context.get("intent") else "";
+
+        if "ASK_QUESTION" in intent_str or "THINK_ALOUD" in intent_str {
+            return;
+        }
+
+        # Validation 1: Task Extraction (pass before_nodes for rename detection)
+        task_validation = validate_task_extraction(
+            user_message=user_message,
+            extracted_tasks=extracted_tasks,
+            existing_nodes=before_nodes
+        );
+
+        if not task_validation.is_valid {
+            if task_validation.incorrect_task and len(task_validation.incorrect_task) > 0 {
+                manager_data.validation_passed = False;
+                manager_data.validation_reason = task_validation.reason;
+                manager_data.validation_type = "task_rename";
+                manager_data.incorrect_task = task_validation.incorrect_task;
+                manager_data.correct_task_name = task_validation.correct_task_name;
+                manager_data.correction_needed = True;
+                return;
+            }
+
+            # Standard missing tasks case
+            manager_data.validation_passed = False;
+            manager_data.validation_reason = task_validation.reason;
+            manager_data.correction_needed = True;
+            manager_data.missing_tasks = task_validation.missing_tasks;
+            manager_data.validation_type = "task_extraction";
+            return;
+        }
+
+        # Validation 2: Edge Label Validation
+        if len(after_edges) > 0 {
+            edge_label_validation = validate_edge_labels(
+                user_message=user_message,
+                new_edges=after_edges
+            );
+
+            if not edge_label_validation.is_valid {
+                manager_data.validation_passed = False;
+                manager_data.validation_reason = edge_label_validation.reason;
+                manager_data.validation_type = "edge_labels";
+                return;
+            }
+        }
+
+        # Validation 3: Graph Structure Validation
+        new_task_edges = [];
+        for edge in after_edges {
+            if edge.get("to", "") in extracted_tasks {
+                new_task_edges.append(edge);
+            }
+        }
+
+        graph_validation = validate_graph_structure(
+            user_message=user_message,
+            graph_nodes=extracted_tasks,
+            graph_edges=new_task_edges
+        );
+
+        if not graph_validation.is_valid {
+            manager_data.validation_passed = False;
+            manager_data.validation_reason = graph_validation.reason;
+            manager_data.validation_type = "graph_structure";
+        }
+    }
+}
+# ========== Analytics Walker Implementations ==========
+
+# Get activity report for the user
+impl get_activity_report.generate_report {
+    user_node = find_user_graph(here, self.username);
+
+    total_tasks: int = 0;
+    current_task_count: int = 0;
+    current_edge_count: int = 0;
+
+    if user_node {
+        # Get the actual graph structure - returns tuple (node_list, edge_list, dot_code)
+        graph_result = get_user_graph_structure(user_node);
+        if graph_result and len(graph_result) >= 2 {
+            node_list = graph_result[0];
+            edge_list = graph_result[1];
+            total_tasks = user_node.total_tasks if user_node?.total_tasks else len(node_list);
+            current_task_count = len(node_list);
+            current_edge_count = len(edge_list);
+        }
+    }
+
+    report {
+        "success": True,
+        "total_tasks": total_tasks,
+        "total_sessions": 1,
+        "current_task_count": current_task_count,
+        "current_edge_count": current_edge_count,
+        "peak_activity_hour": 0,
+        "days_tracked": 1,
+        "total_events": total_tasks + 1
+    };
+}
+
+impl get_trend_analysis.analyze_trends {
+    user_graph = find_user_graph(here, self.username);
+
+    hourly_activity: dict = {
+        "0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0,
+        "6": 0, "7": 0, "8": 0, "9": 0, "10": 0, "11": 0,
+        "12": 0, "13": 0, "14": 0, "15": 0, "16": 0, "17": 0,
+        "18": 0, "19": 0, "20": 0, "21": 0, "22": 0, "23": 0
+    };
+
+    daily_activity: dict = {"Monday": 0, "Tuesday": 0, "Wednesday": 0, "Thursday": 0,
+                            "Friday": 0, "Saturday": 0, "Sunday": 0};
+
+    total_events = 0;
+    peak_hour = "0";
+    peak_day = "Monday";
+
+    if user_graph {
+        activity_events = [user_graph-->](?:ActivityEvent);
+        activity_data = analyze_activity_events(activity_events);
+        event_counts = activity_data["event_counts"];
+
+        for event in activity_events {
+            if hasattr(event, "timestamp") and event.timestamp {
+                total_events = total_events + 1;
+                parts = parse_timestamp_parts(event.timestamp);
+                hour_str = parts["hour"];
+                day_name = parts["day"];
+
+                if hour_str in hourly_activity {
+                    hourly_activity[hour_str] = hourly_activity[hour_str] + 1;
+                    if hourly_activity[hour_str] > hourly_activity[peak_hour] {
+                        peak_hour = hour_str;
+                    }
+                }
+
+                if day_name in daily_activity {
+                    daily_activity[day_name] = daily_activity[day_name] + 1;
+                    if daily_activity[day_name] > daily_activity[peak_day] {
+                        peak_day = day_name;
+                    }
+                }
+            }
+        }
+    } else {
+        event_counts = {"task_created": 0, "voice_interaction": 0, "insights_requested": 0, "task_connected": 0};
+    }
+
+    daily_totals = [];
+    for day_name in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] {
+        if day_name in daily_activity {
+            daily_totals.append({"date": day_name, "count": daily_activity[day_name]});
+        }
+    }
+
+    report {
+        "success": True,
+        "hourly_activity": hourly_activity,
+        "daily_activity": daily_activity,
+        "daily_totals": daily_totals,
+        "peak_hour": peak_hour,
+        "peak_day": peak_day,
+        "period": self.period,
+        "total_events": total_events,
+        "event_counts": event_counts
+    };
+}
+
+impl analyze_behavioral_patterns.extract_patterns {
+    user_graph = find_user_graph(here, self.username);
+
+    emotion_counts: dict = {"neutral": 0, "stressed": 0, "excited": 0, "focused": 0, "confused": 0, "frustrated": 0};
+    emotion_timeline = [];
+    total_emotions = 0;
+
+    connection_patterns: dict = {"sequential": 0, "parallel": 0, "conditional": 0, "convergent": 0};
+    average_complexity = 0.5;
+
+    if user_graph {
+        # Get emotion data from manager_comm_data
+        comm_nodes = [-->](?:manager_comm_data);
+        for comm in comm_nodes {
+            if hasattr(comm, "username") and comm.username == self.username {
+                if hasattr(comm, "last_emotional_state") and comm.last_emotional_state {
+                    emotion = comm.last_emotional_state;
+                    if emotion in emotion_counts {
+                        emotion_counts[emotion] = emotion_counts[emotion] + 1;
+                        total_emotions = total_emotions + 1;
+                    }
+                    emotion_timeline.append({"emotion": emotion});
+                }
+            }
+        }
+
+        # Get connection patterns using shared utility
+        graph_result = get_user_graph_structure(user_graph);
+        if graph_result and len(graph_result) >= 2 {
+            connection_patterns = get_connection_patterns(graph_result[1]);
+            node_count = len(graph_result[0]);
+            edge_count = len(graph_result[1]);
+            if node_count > 0 {
+                average_complexity = min(1.0, edge_count / (node_count * 2));
+            }
+        }
+
+        # Get intent counts from activity events
+        activity_events = [user_graph-->](?:ActivityEvent);
+        for event in activity_events {
+            if hasattr(event, "event_type") and event.event_type == "voice_interaction" {
+                emotion_counts["neutral"] = emotion_counts["neutral"] + 1;
+                total_emotions = total_emotions + 1;
+            }
+        }
+    }
+
+    # Calculate emotion distribution
+    emotion_distribution: dict = {};
+    for emotion_name in emotion_counts {
+        if total_emotions > 0 {
+            emotion_distribution[emotion_name] = emotion_counts[emotion_name] / total_emotions;
+        } else {
+            emotion_distribution[emotion_name] = 0.0;
+        }
+    }
+
+    complexity_trend = [{"timestamp": datetime.now().strftime("%Y-%m-%d"), "complexity": average_complexity}];
+
+    report {
+        "success": True,
+        "emotion_distribution": emotion_distribution,
+        "emotion_timeline": emotion_timeline,
+        "intent_distribution": emotion_distribution,
+        "complexity_trend": complexity_trend,
+        "average_complexity": average_complexity,
+        "connection_patterns": connection_patterns
+    };
+}
+
+impl calculate_productivity_metrics.compute_metrics {
+    user_graph = find_user_graph(here, self.username);
+
+    total_tasks: int = 0;
+    total_edges: int = 0;
+    task_created_count: int = 0;
+
+    if user_graph {
+        graph_result = get_user_graph_structure(user_graph);
+        if graph_result and len(graph_result) >= 2 {
+            total_tasks = len(graph_result[0]);
+            total_edges = len(graph_result[1]);
+        }
+        activity_events = [user_graph-->](?:ActivityEvent);
+        activity_data = analyze_activity_events(activity_events);
+        voice_interaction_count = activity_data["voice_interaction_count"];
+        total_sessions = activity_data["total_sessions"];
+        active_days = activity_data["active_days"];
+        task_created_count = activity_data["event_counts"]["task_created"];
+    } else {
+        voice_interaction_count = 0;
+        total_sessions = 0;
+        active_days = 0;
+    }
+
+    days_tracked = max(1, active_days);
+    scores = calculate_productivity_scores(total_tasks, total_edges, active_days);
+
+    if total_sessions > 0 {
+        avg_tasks_per_session = float(total_tasks) / float(total_sessions);
+    } else {
+        avg_tasks_per_session = float(total_tasks);
+    }
+
+    report {
+        "success": True,
+        "total_tasks_created": total_tasks,
+        "total_sessions": total_sessions,
+        "active_days": active_days,
+        "days_tracked": days_tracked,
+        "avg_tasks_per_session": avg_tasks_per_session,
+        "consistency_score": scores["consistency_score"],
+        "efficiency_score": scores["efficiency_score"],
+        "current_streak": scores["current_streak"],
+        "total_interactions": voice_interaction_count,
+        "total_events": task_created_count + voice_interaction_count
+    };
+}
+
+impl generate_insights.create_insights {
+    user_graph = find_user_graph(here, self.username);
+
+    total_tasks: int = 0;
+    total_edges: int = 0;
+    active_days: int = 0;
+    emotion_distribution: dict = {"neutral": 1.0};
+
+    if user_graph {
+        graph_result = get_user_graph_structure(user_graph);
+        if graph_result and len(graph_result) >= 2 {
+            total_tasks = len(graph_result[0]);
+            total_edges = len(graph_result[1]);
+            connection_patterns = get_connection_patterns(graph_result[1]);
+        } else {
+            connection_patterns = {"sequential": 0, "parallel": 0, "conditional": 0, "convergent": 0};
+        }
+
+        activity_events = [user_graph-->](?:ActivityEvent);
+        activity_data = analyze_activity_events(activity_events);
+        active_days = activity_data["active_days"];
+    } else {
+        connection_patterns = {"sequential": 0, "parallel": 0, "conditional": 0, "convergent": 0};
+    }
+
+    connection_patterns_pct = get_connection_patterns_percentages(connection_patterns);
+    scores = calculate_productivity_scores(total_tasks, total_edges, active_days);
+
+    insights = generate_personalized_insights(
+        total_tasks=total_tasks,
+        consistency_score=scores["consistency_score"],
+        efficiency_score=scores["efficiency_score"],
+        current_streak=scores["current_streak"],
+        peak_hour="0",
+        peak_day="Monday",
+        total_events=0,
+        emotion_distribution=emotion_distribution,
+        connection_patterns=connection_patterns_pct
+    );
+
+    # Convert PersonalizedInsight objects to dict format
+    insight_list = [];
+    if insights {
+        for insight in insights {
+            if hasattr(insight, "title") and insight.title {
+                insight_list.append({
+                    "title": insight.title,
+                    "description": insight.description,
+                    "category": insight.category,
+                    "actionable": insight.actionable
+                });
+            }
+        }
+    }
+
+    # Fallback insights if LLM fails
+    if len(insight_list) == 0 {
+        if total_tasks == 0 {
+            insight_list = [{
+                "title": "Getting Started",
+                "description": "Start creating tasks to track your progress and build productive routines.",
+                "category": "recommendations",
+                "actionable": True
+            }];
+        } else {
+            insight_list = [
+                {
+                    "title": "Building Momentum",
+                    "description": f"You've created {total_tasks} tasks. Keep building your routines!",
+                    "category": "productivity",
+                    "actionable": False
+                },
+                {
+                    "title": "Daily Tracker",
+                    "description": f"Your consistency score is {Math.round(scores["consistency_score"])}%. Keep tracking daily to improve.",
+                    "category": "consistency",
+                    "actionable": True
+                }
+            ];
+        }
+    }
+
+    report {
+        "success": True,
+        "insights": insight_list,
+        "category": self.category,
+        "count": len(insight_list)
+    };
+}
+
+# ========== Activity Event Logging ==========
+
+impl log_activity_event.log_event {
+    # Create or connect to user's activity event stream
+    user_node = find_user_graph(here, self.username);
+
+    if not user_node {
+        # Create user graph if doesn't exist
+        user_node = here ++> user_graph_data(username=self.username);
+    }
+
+    # Generate timestamp
+    timestamp_str = datetime.now().strftime("%Y-%m-%dT%H:%M:%S");
+
+    # Create the activity event
+    event_node = ActivityEvent(
+        event_type=self.event_type,
+        timestamp=timestamp_str,
+        event_data=self.event_data,
+        session_id=self.session_id
+    );
+
+    # Connect event to user graph via temporal edge
+    user_node ++> event_node;
+
+    report {
+        "success": True,
+        "event_id": str(id(event_node)),
+        "timestamp": timestamp_str
+    };
+}
+
 def parse_printgraph_output(dot_output: str) -> tuple {
     node_list = [];
     edge_list = [];
@@ -1240,740 +1756,128 @@ def extract_edge_label_via_printgraph(from_node: node, to_node: node) -> str {
     return "";
 }
 
-impl validate_graph_output.validate {
-    manager_data = find_manager_comm_data(here, self.username);
-    if not manager_data {
-        manager_data = manager_comm_data(username=self.username);
-        here ++> manager_data;
-    }
+# ========== Analytics Utilities ==========
 
-    intent_analysis = self.intent_analysis or {};
-    extracted_tasks = self.extracted_tasks or [];
-    before_nodes = self.before_nodes or [];
-    before_edges = self.before_edges or [];
-    after_nodes = self.after_nodes or [];
-    after_edges = self.after_edges or [];
-    user_message = self.context_from_user;
-
-    conversation_context = intent_analysis.get("conversation_context", {});
-    correction_type = conversation_context.get("correction_type", "");
-    referring_to_task = conversation_context.get("referring_to_task", "");
-    tasks_to_move = conversation_context.get("tasks_to_move", []);
-
-    manager_data.validation_passed = True;
-    manager_data.validation_reason = "";
-    manager_data.validation_type = "";
-    manager_data.correction_needed = False;
-    manager_data.missing_tasks = [];
-    manager_data.incorrect_task = "";
-    manager_data.correct_task_name = "";
-
-    # Route to appropriate validation based on operation type
-    if correction_type == "rename" {
-        old_task = None;
-        new_task = None;
-
-        for node in before_nodes {
-            if node not in after_nodes and node != "Start" {
-                old_task = node;
-                break;
-            }
-        }
-
-        for node in after_nodes {
-            if node not in before_nodes {
-                new_task = node;
-                break;
-            }
-        }
-
-        if not old_task or not new_task {
-            return;
-        }
-
-        rename_validation = validate_rename_operation(
-            user_message=user_message,
-            old_task=old_task,
-            new_task=new_task,
-            before_nodes=before_nodes,
-            after_nodes=after_nodes,
-            before_edges=before_edges,
-            after_edges=after_edges
-        );
-
-        if not rename_validation.is_valid {
-            manager_data.validation_passed = False;
-            manager_data.validation_reason = rename_validation.reason;
-            manager_data.validation_type = "rename_operation";
-        }
-    }
-    elif correction_type in ["insert_before", "insert_after", "insert_first"] {
-        insert_validation = validate_insert_operation(
-            user_message=user_message,
-            operation_type=correction_type,
-            referring_to_task=referring_to_task,
-            new_tasks=extracted_tasks,
-            before_edges=before_edges,
-            after_edges=after_edges
-        );
-
-        if not insert_validation.is_valid {
-            manager_data.validation_passed = False;
-            manager_data.validation_reason = insert_validation.reason;
-            manager_data.validation_type = "insert_operation";
-        }
-    }
-    elif correction_type == "reorder" or len(tasks_to_move) > 0 {
-        reorder_tasks = tasks_to_move if len(tasks_to_move) > 0 else extracted_tasks;
-
-        reorder_validation = validate_reorder_operation(
-            user_message=user_message,
-            tasks_to_move=reorder_tasks,
-            before_edges=before_edges,
-            after_edges=after_edges
-        );
-
-        if not reorder_validation.is_valid {
-            manager_data.validation_passed = False;
-            manager_data.validation_reason = reorder_validation.reason;
-            manager_data.validation_type = "reorder_operation";
-        }
-    }
-    else {
-        conversation_context = intent_analysis.get("conversation_context", {});
-        intent_str = str(conversation_context.get("intent", "")) if conversation_context.get("intent") else "";
-
-        if "ASK_QUESTION" in intent_str or "THINK_ALOUD" in intent_str {
-            return;
-        }
-
-        # Validation 1: Task Extraction (pass before_nodes for rename detection)
-        task_validation = validate_task_extraction(
-            user_message=user_message,
-            extracted_tasks=extracted_tasks,
-            existing_nodes=before_nodes
-        );
-
-        if not task_validation.is_valid {
-            if task_validation.incorrect_task and len(task_validation.incorrect_task) > 0 {
-                manager_data.validation_passed = False;
-                manager_data.validation_reason = task_validation.reason;
-                manager_data.validation_type = "task_rename";
-                manager_data.incorrect_task = task_validation.incorrect_task;
-                manager_data.correct_task_name = task_validation.correct_task_name;
-                manager_data.correction_needed = True;
-                return;
-            }
-
-            # Standard missing tasks case
-            manager_data.validation_passed = False;
-            manager_data.validation_reason = task_validation.reason;
-            manager_data.correction_needed = True;
-            manager_data.missing_tasks = task_validation.missing_tasks;
-            manager_data.validation_type = "task_extraction";
-            return;
-        }
-
-        # Validation 2: Edge Label Validation
-        if len(after_edges) > 0 {
-            edge_label_validation = validate_edge_labels(
-                user_message=user_message,
-                new_edges=after_edges
-            );
-
-            if not edge_label_validation.is_valid {
-                manager_data.validation_passed = False;
-                manager_data.validation_reason = edge_label_validation.reason;
-                manager_data.validation_type = "edge_labels";
-                return;
-            }
-        }
-
-        # Validation 3: Graph Structure Validation
-        new_task_edges = [];
-        for edge in after_edges {
-            if edge.get("to", "") in extracted_tasks {
-                new_task_edges.append(edge);
-            }
-        }
-
-        graph_validation = validate_graph_structure(
-            user_message=user_message,
-            graph_nodes=extracted_tasks,
-            graph_edges=new_task_edges
-        );
-
-        if not graph_validation.is_valid {
-            manager_data.validation_passed = False;
-            manager_data.validation_reason = graph_validation.reason;
-            manager_data.validation_type = "graph_structure";
-        }
-    }
-}
-# ========== Analytics Walker Implementations ==========
-
-# Get activity report for the user
-impl get_activity_report.generate_report {
-    user_node = find_user_graph(here, self.username);
-
-    total_tasks: int = 0;
-    current_task_count: int = 0;
-    current_edge_count: int = 0;
-
-    if user_node {
-        # Get the actual graph structure - returns tuple (node_list, edge_list, dot_code)
-        graph_result = get_user_graph_structure(user_node);
-        if graph_result and len(graph_result) >= 2 {
-            node_list = graph_result[0];
-            edge_list = graph_result[1];
-            total_tasks = user_node.total_tasks if user_node?.total_tasks else len(node_list);
-            current_task_count = len(node_list);
-            current_edge_count = len(edge_list);
-        }
-    }
-
-    report {
-        "success": True,
-        "total_tasks": total_tasks,
-        "total_sessions": 1,
-        "current_task_count": current_task_count,
-        "current_edge_count": current_edge_count,
-        "peak_activity_hour": 0,
-        "days_tracked": 1,
-        "total_events": total_tasks + 1
-    };
-}
-
-impl get_trend_analysis.analyze_trends {
-    # Use the real trends computation
-    trend_result = here spawn compute_real_trends(
-        username=self.username,
-        period=self.period
-    );
-
-    hourly_activity: dict = {
-        "0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0, "6": 0, "7": 0,
-        "8": 0, "9": 0, "10": 0, "11": 0, "12": 0, "13": 0, "14": 0, "15": 0,
-        "16": 0, "17": 0, "18": 0, "19": 0, "20": 0, "21": 0, "22": 0, "23": 0
-    };
-
-    daily_activity: dict = {
-        "Monday": 0, "Tuesday": 0, "Wednesday": 0, "Thursday": 0,
-        "Friday": 0, "Saturday": 0, "Sunday": 0
-    };
-
-    peak_hour = "0";
-    peak_day = "Monday";
-    total_events = 0;
-
-    if trend_result and trend_result.reports and len(trend_result.reports) > 0 {
-        trend_data = trend_result.reports[0];
-        if trend_data.get("success") {
-            hourly_activity = trend_data.get("hourly_activity", hourly_activity);
-            daily_activity = trend_data.get("daily_activity", daily_activity);
-            peak_hour = trend_data.get("peak_hour", "0");
-            peak_day = trend_data.get("peak_day", "Monday");
-            total_events = trend_data.get("total_events", 0);
-        }
-    }
-
-    # Convert daily_activity to daily_totals format
-    daily_totals = [];
-    for day_name in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] {
-        if day_name in daily_activity {
-            daily_totals.append({"date": day_name, "count": daily_activity[day_name]});
-        }
-    }
-
-    report {
-        "success": True,
-        "hourly_activity": hourly_activity,
-        "daily_activity": daily_activity,
-        "daily_totals": daily_totals,
-        "peak_hour": peak_hour,
-        "peak_day": peak_day,
-        "period": self.period,
-        "total_events": total_events
-    };
-}
-
-impl analyze_behavioral_patterns.extract_patterns {
-    user_graph = find_user_graph(here, self.username);
-
-    # Initialize tracking
-    emotion_counts: dict = {
-        "neutral": 0,
-        "stressed": 0,
-        "excited": 0,
-        "focused": 0,
-        "confused": 0,
-        "frustrated": 0
-    };
-
-    emotion_timeline = [];
-    intent_counts: dict = {
-        "COMMIT_ACTION": 0,
-        "CORRECT_PREVIOUS": 0,
-        "CLARIFY_PREVIOUS": 0,
-        "ASK_QUESTION": 0,
-        "THINK_ALOUD": 0
-    };
-
-    connection_patterns: dict = {
-        "sequential": 0,
-        "parallel": 0,
-        "conditional": 0,
-        "convergent": 0
-    };
-
-    total_emotions = 0;
-    total_intents = 0;
-
-    # Analyze emotion/intent from manager_comm_data nodes
-    if user_graph {
-        # Get all manager_comm_data for this user
-        comm_nodes = [-->](?:manager_comm_data);
-        for comm in comm_nodes {
-            if hasattr(comm, "username") and comm.username == self.username {
-                # Count emotional states
-                if hasattr(comm, "last_emotional_state") and comm.last_emotional_state {
-                    emotion = comm.last_emotional_state;
-                    if emotion in emotion_counts {
-                        emotion_counts[emotion] = emotion_counts[emotion] + 1;
-                        total_emotions = total_emotions + 1;
-                    }
-                    emotion_timeline.append({
-                        "emotion": emotion
-                    });
-                }
-            }
-        }
-
-        # Analyze connection patterns from graph edges
-        graph_result = get_user_graph_structure(user_graph);
-        if graph_result and len(graph_result) >= 2 {
-            edge_list = graph_result[1];
-            for edge in edge_list {
-                label = edge.get("label", "").lower();
-                if label in ["then", "after", "next"] {
-                    connection_patterns["sequential"] = connection_patterns["sequential"] + 1;
-                } elif label in ["while", "as", "same time", "parallel"] {
-                    connection_patterns["parallel"] = connection_patterns["parallel"] + 1;
-                } elif label in ["if", "when", "else", "otherwise"] {
-                    connection_patterns["conditional"] = connection_patterns["conditional"] + 1;
-                } elif label in ["either way", "merge", "converge"] {
-                    connection_patterns["convergent"] = connection_patterns["convergent"] + 1;
-                } else {
-                    connection_patterns["sequential"] = connection_patterns["sequential"] + 1;
-                }
-            }
-        }
-
-        # Count events by type
-        activity_events = [user_graph-->](?:ActivityEvent);
-        for event in activity_events {
-            if hasattr(event, "event_type") {
-                event_type = event.event_type;
-                if event_type == "voice_interaction" {
-                    intent_counts["COMMIT_ACTION"] = intent_counts["COMMIT_ACTION"] + 1;
-                    total_intents = total_intents + 1;
-                }
-            }
-        }
-    }
-
-    # Calculate distributions
-    emotion_distribution: dict = {};
-    for emotion_name in emotion_counts {
-        if total_emotions > 0 {
-            emotion_distribution[emotion_name] = emotion_counts[emotion_name] / total_emotions;
+# Shared helper: Extract connection patterns from edge list
+def get_connection_patterns(edge_list: list) -> dict {
+    patterns: dict = {"sequential": 0, "parallel": 0, "conditional": 0, "convergent": 0};
+    for edge in edge_list {
+        label = edge.get("label", "").lower();
+        if label in ["then", "after", "next"] {
+            patterns["sequential"] = patterns["sequential"] + 1;
+        } elif label in ["while", "as", "same time", "parallel"] {
+            patterns["parallel"] = patterns["parallel"] + 1;
+        } elif label in ["if", "when", "else", "otherwise"] {
+            patterns["conditional"] = patterns["conditional"] + 1;
+        } elif label in ["either way", "merge", "converge"] {
+            patterns["convergent"] = patterns["convergent"] + 1;
         } else {
-            emotion_distribution[emotion_name] = 0.0;
+            patterns["sequential"] = patterns["sequential"] + 1;
         }
     }
-
-    intent_distribution: dict = {};
-    for intent_name in intent_counts {
-        if total_intents > 0 {
-            intent_distribution[intent_name] = intent_counts[intent_name] / total_intents;
-        } else {
-            intent_distribution[intent_name] = 0.0;
-        }
-    }
-
-    # Calculate average complexity based on graph structure
-    node_count = 0;
-    edge_count = 0;
-    if user_graph {
-        graph_result = get_user_graph_structure(user_graph);
-        if graph_result and len(graph_result) >= 2 {
-            node_count = len(graph_result[0]);
-            edge_count = len(graph_result[1]);
-        }
-    }
-    average_complexity = 0.5;
-    if node_count > 0 {
-        average_complexity = min(1.0, edge_count / (node_count * 2));
-    }
-
-    complexity_trend = [
-        {"timestamp": datetime.now().strftime("%Y-%m-%d"), "complexity": average_complexity}
-    ];
-
-    report {
-        "success": True,
-        "emotion_distribution": emotion_distribution,
-        "emotion_timeline": emotion_timeline,
-        "intent_distribution": intent_distribution,
-        "complexity_trend": complexity_trend,
-        "average_complexity": average_complexity,
-        "connection_patterns": connection_patterns
-    };
+    return patterns;
 }
 
-impl calculate_productivity_metrics.compute_metrics {
-    user_node = find_user_graph(here, self.username);
-
-    total_tasks: int = 0;
-    total_edges: int = 0;
-    total_sessions: int = 0;
-    task_created_count: int = 0;
-    voice_interaction_count: int = 0;
-
-    # Track unique days with activity
-    active_days_set: dict = {};
-
-    if user_node {
-        graph_result = get_user_graph_structure(user_node);
-        if graph_result and len(graph_result) >= 2 {
-            node_list = graph_result[0];
-            edge_list = graph_result[1];
-            total_tasks = len(node_list);
-            total_edges = len(edge_list);
-        }
-
-        # Count activity events
-        activity_events = [user_node-->](?:ActivityEvent);
-        for event in activity_events {
-            if hasattr(event, "event_type") {
-                if event.event_type == "task_created" {
-                    task_created_count = task_created_count + 1;
-                } elif event.event_type == "voice_interaction" {
-                    voice_interaction_count = voice_interaction_count + 1;
-                    total_sessions = total_sessions + 1;
-                } elif event.event_type == "insights_requested" {
-                    total_sessions = total_sessions + 1;
-                }
-            }
-
-            # Track unique days
-            if hasattr(event, "timestamp") and event.timestamp {
-                date_parts = event.timestamp.split("T");
-                if len(date_parts) > 0 {
-                    active_days_set[date_parts[0]] = True;
-                }
-            }
-        }
+# Shared helper: Convert connection patterns to percentages
+def get_connection_patterns_percentages(patterns: dict) -> dict {
+    total = 0;
+    for conn_type in patterns {
+        total = total + patterns[conn_type];
     }
+    if total > 0 {
+        result = {};
+        for conn_type in patterns {
+            result[conn_type] = float(patterns[conn_type]) / float(total);
+        }
+        return result;
+    }
+    return {"sequential": 1.0, "parallel": 0.0, "conditional": 0.0, "convergent": 0.0};
+}
 
-    active_days = len(active_days_set);
-    days_tracked = max(1, active_days);
-
-    # Calculate consistency score based on daily activity
-    # Higher score = more consistent daily activity
+# Shared helper: Calculate productivity scores
+def calculate_productivity_scores(total_tasks: int, total_edges: int, active_days: int) -> dict {
     consistency_score = 50.0;
     if total_tasks > 0 and active_days > 0 {
         tasks_per_day = float(total_tasks) / float(active_days);
         consistency_score = min(100.0, tasks_per_day * 20.0 + 30.0);
     }
 
-    # Calculate efficiency score based on task-to-edge ratio
-    # More edges per task = more complex/connected routines = higher efficiency
     efficiency_score = 50.0;
     if total_tasks > 0 {
         edge_ratio = float(total_edges) / float(total_tasks);
         efficiency_score = min(100.0, edge_ratio * 40.0 + 40.0);
     }
 
-    # Calculate current streak (consecutive days with activity)
-    current_streak = 1;
-    if active_days > 1 {
-        current_streak = active_days;
-    }
-    # Calculate average tasks per session
-    avg_tasks_per_session = float(total_tasks);
-    if total_sessions > 0 {
-        avg_tasks_per_session = float(total_tasks) / float(total_sessions);
-    }
+    current_streak = max(1, active_days);
 
-    report {
-        "success": True,
-        "total_tasks_created": total_tasks,
-        "total_sessions": total_sessions,
-        "active_days": active_days,
-        "days_tracked": days_tracked,
-        "avg_tasks_per_session": avg_tasks_per_session,
+    return {
         "consistency_score": consistency_score,
         "efficiency_score": efficiency_score,
-        "current_streak": current_streak,
-        "total_interactions": voice_interaction_count,
-        "total_events": task_created_count + voice_interaction_count
+        "current_streak": current_streak
     };
 }
 
-impl generate_insights.create_insights {
-    # Default values
-    total_tasks: int = 0;
-    consistency_score: float = 50.0;
-    efficiency_score: float = 50.0;
-    current_streak: int = 0;
-    peak_hour: str = "0";
-    peak_day: str = "Monday";
-    total_events: int = 0;
-    emotion_distribution: dict = {"neutral": 1.0};
-    connection_patterns: dict = {"sequential": 1.0};
+# Shared helper: Count activity events and track active days
+def analyze_activity_events(activity_events: list) -> dict {
+    event_counts: dict = {"task_created": 0, "voice_interaction": 0, "insights_requested": 0, "task_connected": 0};
+    voice_interaction_count = 0;
+    total_sessions = 0;
+    active_days_set: dict = {};
 
-    # Fetch real data from productivity metrics
-    productivity_result = here spawn calculate_productivity_metrics(
-        username=self.username
-    );
-
-    if productivity_result and productivity_result.reports and len(productivity_result.reports) > 0 {
-        prod_data = productivity_result.reports[0];
-        if prod_data.get("success") {
-            total_tasks = prod_data.get("total_tasks_created", 0);
-            consistency_score = prod_data.get("consistency_score", 50.0);
-            efficiency_score = prod_data.get("efficiency_score", 50.0);
-            current_streak = prod_data.get("current_streak", 0);
+    for event in activity_events {
+        if hasattr(event, "event_type") {
+            event_type = event.event_type;
+            if event_type in event_counts {
+                event_counts[event_type] = event_counts[event_type] + 1;
+            }
+            if event_type == "voice_interaction" {
+                voice_interaction_count = voice_interaction_count + 1;
+                total_sessions = total_sessions + 1;
+            } elif event_type == "insights_requested" {
+                total_sessions = total_sessions + 1;
+            }
         }
-    }
-
-    # Fetch real trend data
-    trend_result = here spawn compute_real_trends(
-        username=self.username,
-        period="week"
-    );
-
-    if trend_result and trend_result.reports and len(trend_result.reports) > 0 {
-        trend_data = trend_result.reports[0];
-        if trend_data.get("success") {
-            peak_hour = trend_data.get("peak_hour", "0");
-            peak_day = trend_data.get("peak_day", "Monday");
-            total_events = trend_data.get("total_events", 0);
-        }
-    }
-
-    # Fetch behavioral patterns
-    patterns_result = here spawn analyze_behavioral_patterns(
-        username=self.username
-    );
-
-    if patterns_result and patterns_result.reports and len(patterns_result.reports) > 0 {
-        patterns_data = patterns_result.reports[0];
-        if patterns_data.get("success") {
-            emotion_distribution = patterns_data.get("emotion_distribution", {"neutral": 1.0});
-            connection_patterns = patterns_data.get("connection_patterns", {"sequential": 1.0});
-        }
-    }
-
-    # Generate AI-powered personalized insights
-    insights = generate_personalized_insights(
-        total_tasks=total_tasks,
-        consistency_score=consistency_score,
-        efficiency_score=efficiency_score,
-        current_streak=current_streak,
-        peak_hour=peak_hour,
-        peak_day=peak_day,
-        total_events=total_events,
-        emotion_distribution=emotion_distribution,
-        connection_patterns=connection_patterns
-    );
-
-    # Convert PersonalizedInsight objects to dict format for JSON response
-    insight_list = [];
-    if insights {
-        for insight in insights {
-            insight_dict = {
-                "title": insight.title,
-                "description": insight.description,
-                "category": insight.category,
-                "actionable": insight.actionable
-            };
-            insight_list.append(insight_dict);
-        }
-    }
-
-    # Fallback insights if LLM fails
-    if len(insight_list) == 0 {
-        if total_tasks == 0 {
-            insight_list = [
-                {
-                    "title": "Getting Started",
-                    "description": "Start creating tasks to track your progress and build productive routines.",
-                    "category": "recommendations",
-                    "actionable": True
-                }
-            ];
-        } else {
-            insight_list = [
-                {
-                    "title": "Building Momentum",
-                    "description": f"You've created {total_tasks} tasks. Keep building your routines!",
-                    "category": "productivity",
-                    "actionable": False
-                },
-                {
-                    "title": "Daily Tracker",
-                    "description": f"Your consistency score is {Math.round(consistency_score)}%. Keep tracking daily to improve.",
-                    "category": "consistency",
-                    "actionable": True
-                }
-            ];
-        }
-    }
-
-    report {
-        "success": True,
-        "insights": insight_list,
-        "category": self.category,
-        "count": len(insight_list)
-    };
-}
-
-# ========== Activity Event Logging ==========
-
-impl log_activity_event.log_event {
-    # Create or connect to user's activity event stream
-    user_node = find_user_graph(here, self.username);
-
-    if not user_node {
-        # Create user graph if doesn't exist
-        user_node = here ++> user_graph_data(username=self.username);
-    }
-
-    # Generate timestamp
-    timestamp_str = datetime.now().strftime("%Y-%m-%dT%H:%M:%S");
-
-    # Create the activity event
-    event_node = ActivityEvent(
-        event_type=self.event_type,
-        timestamp=timestamp_str,
-        event_data=self.event_data,
-        session_id=self.session_id
-    );
-
-    # Connect event to user graph via temporal edge
-    user_node ++> event_node;
-
-    report {
-        "success": True,
-        "event_id": str(id(event_node)),
-        "timestamp": timestamp_str
-    };
-}
-
-# ========== Real Trends Analysis ==========
-
-impl compute_real_trends.compute_trends {
-    user_graph = find_user_graph(here, self.username);
-
-    # Initialize hourly activity map
-    hourly_activity: dict = {
-        "0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0,
-        "6": 0, "7": 0, "8": 0, "9": 0, "10": 0, "11": 0,
-        "12": 0, "13": 0, "14": 0, "15": 0, "16": 0, "17": 0,
-        "18": 0, "19": 0, "20": 0, "21": 0, "22": 0, "23": 0
-    };
-
-    daily_activity: dict = {
-        "Monday": 0, "Tuesday": 0, "Wednesday": 0, "Thursday": 0,
-        "Friday": 0, "Saturday": 0, "Sunday": 0
-    };
-
-    event_counts: dict = {
-        "task_created": 0,
-        "voice_interaction": 0,
-        "insights_requested": 0,
-        "task_connected": 0
-    };
-
-    total_events = 0;
-    peak_hour = "0";
-    peak_day = "Monday";
-
-    if user_graph {
-        # Get all ActivityEvent nodes connected to user graph
-        activity_events = [user_graph-->](?:ActivityEvent);
-
-        for event in activity_events {
-            if hasattr(event, "timestamp") and event.timestamp {
-                total_events = total_events + 1;
-
-                # Count by event type
-                if hasattr(event, "event_type") {
-                    event_type = event.event_type;
-                    if event_type in event_counts {
-                        event_counts[event_type] = event_counts[event_type] + 1;
-                    }
-                }
-
-                # Extract hour from timestamp (format: YYYY-MM-DDTHH:MM:SS)
-                try {
-                    time_parts = event.timestamp.split("T");
-                    if len(time_parts) > 1 {
-                        time_str = time_parts[1];
-                        hour_parts = time_str.split(":");
-                        if len(hour_parts) > 0 {
-                            hour_str = hour_parts[0];
-                            if hour_str in hourly_activity {
-                                hourly_activity[hour_str] = hourly_activity[hour_str] + 1;
-
-                                # Track peak hour
-                                if hourly_activity[hour_str] > hourly_activity[peak_hour] {
-                                    peak_hour = hour_str;
-                                }
-                            }
-                        }
-                    }
-
-                    # Get day of week from timestamp
-                    date_parts = time_parts[0].split("-");
-                    if len(date_parts) == 3 {
-                        # Simple day calculation (works for dates after 1970)
-                        year = int(date_parts[0]);
-                        month = int(date_parts[1]);
-                        day = int(date_parts[2]);
-
-                        # Using datetime to get weekday
-                        date_obj = datetime(int(date_parts[0]), int(date_parts[1]), int(date_parts[2]));
-                        weekday_index = int(date_obj.strftime("%w"));  # 0=Sunday, 1=Monday, etc.
-                        days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-                        day_name = days[weekday_index];
-
-                        if day_name in daily_activity {
-                            daily_activity[day_name] = daily_activity[day_name] + 1;
-
-                            # Track peak day
-                            if daily_activity[day_name] > daily_activity[peak_day] {
-                                peak_day = day_name;
-                            }
-                        }
-                    }
-                } except Exception as e {
-                    console.error("[compute_real_trends] Error parsing timestamp:", e);
-                }
+        if hasattr(event, "timestamp") and event.timestamp {
+            date_parts = event.timestamp.split("T");
+            if len(date_parts) > 0 {
+                active_days_set[date_parts[0]] = True;
             }
         }
     }
 
-    report {
-        "success": True,
-        "period": self.period,
-        "total_events": total_events,
-        "hourly_activity": hourly_activity,
-        "daily_activity": daily_activity,
+    return {
         "event_counts": event_counts,
-        "peak_hour": peak_hour,
-        "peak_day": peak_day
+        "voice_interaction_count": voice_interaction_count,
+        "total_sessions": total_sessions,
+        "active_days": len(active_days_set),
+        "active_days_set": active_days_set
     };
 }
+
+# Shared helper: Parse timestamp and extract hour/day
+def parse_timestamp_parts(timestamp: str) -> dict {
+    time_parts = timestamp.split("T");
+    hour_str = "0";
+    day_name = "Monday";
+
+    if len(time_parts) > 1 {
+        hour_parts = time_parts[1].split(":");
+        if len(hour_parts) > 0 {
+            hour_str = hour_parts[0];
+        }
+    }
+
+    if len(time_parts) > 0 {
+        date_parts = time_parts[0].split("-");
+        if len(date_parts) == 3 {
+            date_obj = datetime(int(date_parts[0]), int(date_parts[1]), int(date_parts[2]));
+            weekday_index = int(date_obj.strftime("%w"));
+            days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+            day_name = days[weekday_index];
+        }
+    }
+
+    return {"hour": hour_str, "day": day_name};
+}
+
+
