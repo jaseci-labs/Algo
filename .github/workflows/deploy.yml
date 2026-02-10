@@ -45,10 +45,12 @@ jobs:
           python-version: '3.12'
 
       # Install required packages
+      # Install jac-scale from fork branch (kube_secrets) to get K8s secrets support
       - name: Install Jaseci packages
         run: |
           pip install --upgrade pip
-          pip install jaclang jac-client jac-scale byllm
+          pip install jaclang jac-client byllm
+          pip install "jac-scale @ git+https://github.com/udithishanka/jaseci.git@kube_secrets#subdirectory=jac-scale"
 
       # Destroy existing deployment
       - name: Destroy existing deployment
