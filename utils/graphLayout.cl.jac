@@ -39,8 +39,8 @@ def:pub transformGraphData(graphEdges: list) -> dict {
         if `edge.`from {
             nodeSet.add(`edge.`from);
         }
-        if edge["to"] {
-            nodeSet.add(edge["to"]);
+        if item["to"] {
+            nodeSet.add(item["to"]);
         }
     }
 
@@ -59,7 +59,7 @@ def:pub transformGraphData(graphEdges: list) -> dict {
     # Create edges array
     edges = [];
     idx = 0;
-    for edge in graphEdges {
+    for item in graphEdges {
         edges.push({
             "id": f"edge-{idx}",
             "source": `edge.`from,

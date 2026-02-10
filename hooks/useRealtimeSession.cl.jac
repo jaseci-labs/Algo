@@ -135,22 +135,23 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                 if not item {
                     return;
                 }
-                
+
+                itemId = "";
                 if item.type == "message" {
                     itemId = item.itemId or item.item_id or "";
                     role = item.role or "";
                     content = item.content or [];
-                    
+
                     text = extractMessageText(content);
-                    
+
                     if role == "user" and not text {
                         text = "[Transcribing...]";
                     }
-                    
+
                     if role == "assistant" and not text {
                         text = "...";
                     }
-                    
+
                     if role and itemId {
                         addTranscriptItem(itemId, role, text);
                     }
@@ -172,14 +173,15 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                     if not item {
                         continue;
                     }
-                    
+
+                    itemId = "";
                     if item.type == "message" {
                         itemId = item.itemId or item.item_id or "";
                         role = item.role or "";
                         content = item.content or [];
-                        
+
                         text = extractMessageText(content);
-                        
+
                         if text and itemId {
                             addTranscriptItem(itemId, role, text);
                             updateTranscriptItem(itemId, text);
@@ -188,7 +190,7 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                         itemId = item.itemId or item.item_id or "";
                         toolName = item.name or "tool";
                         status = item.status or "";
-                        
+
                         if status == "completed" {
                             updateTranscriptItem(itemId, "✓ " + toolName + " completed");
                         }
@@ -200,7 +202,9 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
             session.on("transport_event", lambda event: any -> None {
                 eventType = event.type or "";
                 console.log("[transport_event]", eventType, event);
-                
+
+                itemId = "";
+                transcriptText = "";
                 if eventType == "conversation.item.input_audio_transcription.completed" {
                     itemId = event.item_id or "";
                     transcriptText = event.transcript or "[inaudible]";

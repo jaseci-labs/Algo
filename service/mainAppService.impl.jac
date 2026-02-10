@@ -7,6 +7,7 @@ impl get_session_token.fetch {
     try {
         api_key = getenv("OPENAI_API_KEY");
         if not api_key {
+            print("OPENAI_API_KEY not set in environment") ;
             report {"error": "OPENAI_API_KEY not set in environment"} ;
             return;
         }
@@ -65,7 +66,7 @@ impl update_task_graph.navigate_to_graph{
 }
 
 impl update_task_graph.update_graph {
-    prev_node = None;
+    prev_node: TaskState | None = None;
     all_task_nodes = [-->](?:TaskState);
     nodes_to_check = all_task_nodes.copy();
     all_nodes = [];
@@ -1536,7 +1537,7 @@ def parse_printgraph_output(dot_output: str) -> tuple {
     return (node_list, edge_list);
 }
 
-def generate_dot_code_from_lists(node_list: list, edge_list: list) -> str {
+def generate_dot_code_from_lists(node_list: list[str], edge_list: list[dict]) -> str {
     if len(node_list) == 0 {
         return "";
     }
@@ -1549,9 +1550,9 @@ def generate_dot_code_from_lists(node_list: list, edge_list: list) -> str {
 
     for task_node in node_list {
         if task_node == "Start" {
-            lines.append("  " + task_node + " [shape=circle, style=filled, fillcolor=\"#22c55e\", fontcolor=white];");
+            lines.append(f'  {task_node} [shape=circle, style=filled, fillcolor="#22c55e", fontcolor=white];');
         } else {
-            lines.append("  " + task_node + " [style=\"rounded,filled\", fillcolor=\"#3b82f6\", fontcolor=white];");
+            lines.append(f'  {task_node} [style="rounded,filled", fillcolor="#3b82f6", fontcolor=white];');
         }
     }
 
@@ -1562,9 +1563,9 @@ def generate_dot_code_from_lists(node_list: list, edge_list: list) -> str {
         to_task = conn.get("to", "");
         conn_label = conn.get("label", "");
         if conn_label {
-            lines.append("  " + from_task + " -> " + to_task + " [label=\"" + conn_label + "\"];");
+            lines.append(f'  {from_task} -> {to_task} [label="{conn_label}"];');
         } else {
-            lines.append("  " + from_task + " -> " + to_task + ";");
+            lines.append(f'  {from_task} -> {to_task};');
         }
     }
 
@@ -1572,7 +1573,7 @@ def generate_dot_code_from_lists(node_list: list, edge_list: list) -> str {
     return "\n".join(lines);
 }
 
-def find_leaf_nodes(edge_list: list, node_list: list) -> list {
+def find_leaf_nodes(edge_list: list[dict], node_list: list[str]) -> list[str] {
     nodes_with_outgoing = {};
     for edge in edge_list {
         from_task = edge.get("from", "");
@@ -1597,7 +1598,7 @@ def find_leaf_nodes(edge_list: list, node_list: list) -> list {
 }
 
 """Find user's graph or return None"""
-def find_user_graph(root_node: node, username: str) {
+def find_user_graph(root_node: node, username: str) -> (node | None) {
     all_graphs = [root_node-->](?:user_graph_data);
     for graph in all_graphs {
         if graph?.username and graph.username == username {
@@ -1608,7 +1609,7 @@ def find_user_graph(root_node: node, username: str) {
 }
 
 """Find manager comm data node or return None"""
-def find_manager_comm_data(root_node: node, username: str) {
+def find_manager_comm_data(root_node: node, username: str) -> (node | None) {
     all_comm_data = [root_node-->](?:manager_comm_data);
     for comm_data in all_comm_data {
         if comm_data?.username and comm_data.username == username {
@@ -1619,7 +1620,7 @@ def find_manager_comm_data(root_node: node, username: str) {
 }
 
 """Find Start node in graph - only direct children of user_graph"""
-def find_start_node(graph_node: node) {
+def find_start_node(graph_node: node) -> (node | None) {
     direct_task_nodes = [graph_node-->](?:TaskState);
     for node in direct_task_nodes {
         if node?.task_name and node.task_name == "Start" {
@@ -1630,7 +1631,7 @@ def find_start_node(graph_node: node) {
 }
 
 """Get graph structure as node/edge lists and DOT code"""
-def get_graph_structure(graph_node: node) {
+def get_graph_structure(graph_node: node) -> tuple {
     start_node = find_start_node(graph_node);
     node_list = [];
     edge_list = [];
@@ -1645,7 +1646,7 @@ def get_graph_structure(graph_node: node) {
 }
 
 """Get user-specific graph structure with bounded traversal"""
-def get_user_graph_structure(user_graph_node: node) {
+def get_user_graph_structure(user_graph_node: node) -> tuple {
     node_list = [];
     edge_list = [];
 
