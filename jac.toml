@@ -18,6 +18,16 @@ lib_imports = ["import tailwindcss from '@tailwindcss/vite'"]
 [plugins.scale.kubernetes]
 app_name = "algo-test"
 namespace = "algo-test"
+jaseci_repo_url = "https://github.com/udithishanka/jaseci.git"
+jaseci_branch = "kube_secrets"
+
+[plugins.scale.kubernetes.secrets]
+OPENAI_API_KEY = "${OPENAI_API_KEY}"
+
+[plugins.scale.metrics]
+enabled = true
+namespace = "algo_test2"
+walker_metrics = true
 
 [dependencies.npm]
 react = "^18.2.0"

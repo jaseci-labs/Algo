@@ -73,9 +73,9 @@ node user_routines {
     has routines: dict = {};
 }
 
-with entry {
-    load_dotenv();
-}
+# with entry {
+#     load_dotenv();
+# }
 
 walker :pub get_session_token {
     can fetch with `root entry;

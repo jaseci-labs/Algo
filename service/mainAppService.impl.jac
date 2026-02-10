@@ -5,6 +5,7 @@ impl get_session_token.fetch {
     try {
         api_key = getenv("OPENAI_API_KEY");
         if not api_key {
+            print("OPENAI_API_KEY not set in environment") ;
             report {"error": "OPENAI_API_KEY not set in environment"} ;
             return;
         }
