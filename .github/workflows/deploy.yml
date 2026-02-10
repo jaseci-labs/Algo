@@ -62,7 +62,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          jac start main.jac --scale
+          jac start main.jac --scale --experimental
 
       # Get deployment status
       - name: Verify deployment
