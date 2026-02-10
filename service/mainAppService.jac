@@ -20,6 +20,7 @@ import from semantics.semantics {
     InsertValidationResult,
     ReorderValidationResult,
     EdgeLabelValidationResult,
+    PersonalizedInsight,
     detect_emotional_state,
     analyze_conversation_intent,
     extract_raw_task_names,
@@ -34,7 +35,8 @@ import from semantics.semantics {
     validate_rename_operation,
     validate_insert_operation,
     validate_reorder_operation,
-    validate_edge_labels
+    validate_edge_labels,
+    generate_personalized_insights
 }
 
 node TaskState {
@@ -73,9 +75,21 @@ node user_routines {
     has routines: dict = {};
 }
 
-# with entry {
-#     load_dotenv();
-# }
+# Analytics: Activity Event Tracking
+node ActivityEvent {
+    has event_type: str;
+    has timestamp: str;
+    has event_data: dict = {};
+    has session_id: str = "";
+}
+
+edge EventFlow {
+    has temporal_order: int = 0;
+}
+
+with entry {
+    load_dotenv();
+}
 
 walker :pub get_session_token {
     can fetch with Root entry;
@@ -177,3 +191,48 @@ walker :pub validate_graph_output {
 
     can validate with Root entry;
 }
+
+# ========== Analytics Walkers ==========
+
+walker :pub get_activity_report {
+    has username: str = "anonymous";
+    has date_range: dict = {};
+
+    can generate_report with Root entry;
+}
+
+walker :pub get_trend_analysis {
+    has username: str = "anonymous";
+    has period: str = "week";
+
+    can analyze_trends with Root entry;
+}
+
+walker :pub analyze_behavioral_patterns {
+    has username: str = "anonymous";
+
+    can extract_patterns with Root entry;
+}
+
+walker :pub calculate_productivity_metrics {
+    has username: str = "anonymous";
+
+    can compute_metrics with Root entry;
+}
+
+walker :pub generate_insights {
+    has username: str = "anonymous";
+    has category: str = "all";
+
+    can create_insights with Root entry;
+}
+
+# Event Logging Walker
+walker :pub log_activity_event {
+    has event_type: str;
+    has event_data: dict = {};
+    has session_id: str = "";
+    has username: str = "anonymous";
+    can log_event with Root entry;
+}
+
