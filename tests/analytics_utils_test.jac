@@ -3,17 +3,8 @@
 #
 # Run with: jac test tests/analytics_utils_test.jac
 
-import {
-    get_connection_patterns,
-    get_connection_patterns_percentages,
-    calculate_productivity_scores,
-    parse_timestamp_parts,
-    discover_routine_patterns,
-    analyze_temporal_patterns,
-    generate_comparative_insights,
-    should_trigger_proactive_insight,
-    calculate_insight_relevance
-}
+import from mainAppService {get_connection_patterns, get_connection_patterns_percentages, calculate_productivity_scores, parse_timestamp_parts}
+
 
 test "get_connection_patterns counts sequential edges" {
     edges = [
@@ -119,10 +110,10 @@ test "get_connection_patterns_percentages calculates correctly" {
 
     result = get_connection_patterns_percentages(patterns);
 
-    assert result["sequential"] == 0.5;  # 5/10
-    assert result["parallel"] == 0.3;    # 3/10
-    assert result["conditional"] == 0.2; # 2/10
-    assert result["convergent"] == 0.0;  # 0/10
+    assert result["sequential"] == 0.5;
+    assert result["parallel"] == 0.3;
+    assert result["conditional"] == 0.2;
+    assert result["convergent"] == 0.0;
 }
 
 test "get_connection_patterns_percentages handles single type" {
@@ -141,7 +132,7 @@ test "get_connection_patterns_percentages returns default for empty patterns" {
 
     result = get_connection_patterns_percentages(patterns);
 
-    assert result["sequential"] == 1.0;  # Default
+    assert result["sequential"] == 1.0;
     assert result["parallel"] == 0.0;
     assert result["conditional"] == 0.0;
     assert result["convergent"] == 0.0;
@@ -189,7 +180,7 @@ test "calculate_productivity_scores with no tasks" {
     # Default scores when no activity
     assert result["consistency_score"] == 50.0;
     assert result["efficiency_score"] == 50.0;
-    assert result["current_streak"] == 1;  # max(1, 0) = 1
+    assert result["current_streak"] == 1;
 }
 
 test "calculate_productivity_scores caps at 100" {
