@@ -22,6 +22,8 @@ import from react { useState, useEffect, Fragment }
 
 import from ..hooks.useAnalytics { useAnalytics }
 import from ..utils.mergeCls { cn }
+import from .InsightCard { InsightCard }
+import from .AchievementBadge { AchievementBadge }
 
 def AnalyticsPanelComponent(onClose: any = None) -> any {
     # Use the analytics hook with React state
@@ -512,7 +514,7 @@ def AnalyticsPanelComponent(onClose: any = None) -> any {
             lockedCount = lockedCount + 1;
         }
     }
-    totalCount = len(analytics.userAchievements);
+    totalCount = analytics.userAchievements.length;
 
     # Achievement grid items
     achievementGridItems = [];

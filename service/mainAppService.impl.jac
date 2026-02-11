@@ -1892,7 +1892,7 @@ impl discover_patterns.find_patterns {
     user_graph = find_user_graph(here, self.username);
 
     if not user_graph {
-        report {"success": False, "patterns": []};
+        report {"success": True, "patterns": [], "count": 0};
         return;
     }
 

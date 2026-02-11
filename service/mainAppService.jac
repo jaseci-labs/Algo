@@ -21,6 +21,9 @@ import from semantics.semantics {
     ReorderValidationResult,
     EdgeLabelValidationResult,
     PersonalizedInsight,
+    RoutinePattern,
+    TemporalInsight,
+    ComparisonInsight,
     detect_emotional_state,
     analyze_conversation_intent,
     extract_raw_task_names,
@@ -36,7 +39,11 @@ import from semantics.semantics {
     validate_insert_operation,
     validate_reorder_operation,
     validate_edge_labels,
-    generate_personalized_insights
+    generate_personalized_insights,
+    discover_routine_patterns,
+    analyze_temporal_patterns,
+    generate_comparative_insights,
+    should_trigger_proactive_insight
 }
 
 node TaskState {
