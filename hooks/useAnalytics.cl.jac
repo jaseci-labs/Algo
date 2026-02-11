@@ -53,13 +53,10 @@ def:pub useAnalytics() -> any {
         setIsLoading(True);
         setError("");
 
-        console.log("[useAnalytics] Fetching all analytics data...");
-
         # Log analytics view event
         try {
             await logActivityEvent("insights_requested", {}, "", "", "", 0);
         } except Exception as e {
-            console.error("[useAnalytics] Failed to log event:", e);
         }
 
         # Fetch each independently and handle errors
@@ -67,35 +64,30 @@ def:pub useAnalytics() -> any {
         try {
             activityResult = await getActivityReport({});
         } except Exception as e {
-            console.error("[useAnalytics] Activity report failed:", e);
         }
 
         trendResult = {"success": False};
         try {
             trendResult = await getTrendAnalysis(selectedPeriod);
         } except Exception as e {
-            console.error("[useAnalytics] Trend analysis failed:", e);
         }
 
         patternsResult = {"success": False};
         try {
             patternsResult = await getBehavioralPatterns();
         } except Exception as e {
-            console.error("[useAnalytics] Behavioral patterns failed:", e);
         }
 
         productivityResult = {"success": False};
         try {
             productivityResult = await getProductivityMetrics();
         } except Exception as e {
-            console.error("[useAnalytics] Productivity metrics failed:", e);
         }
 
         insightsResult = {"success": False};
         try {
             insightsResult = await getInsights(selectedCategory);
         } except Exception as e {
-            console.error("[useAnalytics] Insights failed:", e);
         }
 
         # NEW: Fetch enhanced analytics
@@ -103,35 +95,30 @@ def:pub useAnalytics() -> any {
         try {
             discoveredResult = await discoverPatterns(30);
         } except Exception as e {
-            console.error("[useAnalytics] Pattern discovery failed:", e);
         }
 
         temporalResult = {"success": False};
         try {
             temporalResult = await getTemporalInsights(30);
         } except Exception as e {
-            console.error("[useAnalytics] Temporal insights failed:", e);
         }
 
         goalsResult = {"success": False};
         try {
             goalsResult = await getGoals();
         } except Exception as e {
-            console.error("[useAnalytics] Goals fetch failed:", e);
         }
 
         achievementsResult = {"success": False};
         try {
             achievementsResult = await getAchievements();
         } except Exception as e {
-            console.error("[useAnalytics] Achievements fetch failed:", e);
         }
 
         proactiveResult = {"success": False};
         try {
             proactiveResult = await getProactiveInsights();
         } except Exception as e {
-            console.error("[useAnalytics] Proactive insights failed:", e);
         }
 
         # Process successful results
@@ -229,7 +216,6 @@ def:pub useAnalytics() -> any {
                 setUserGoals(result.data.goals or []);
             }
         } except Exception as e {
-            console.error("[useAnalytics] Failed to fetch goals:", e);
         }
     }
 
@@ -275,7 +261,6 @@ def:pub useAnalytics() -> any {
                 setUserAchievements(result.data.achievements or []);
             }
         } except Exception as e {
-            console.error("[useAnalytics] Failed to fetch achievements:", e);
         }
     }
 
@@ -301,7 +286,6 @@ def:pub useAnalytics() -> any {
                 setProactiveInsights(result.data.insights or []);
             }
         } except Exception as e {
-            console.error("[useAnalytics] Failed to fetch proactive insights:", e);
         }
     }
 
@@ -318,7 +302,6 @@ def:pub useAnalytics() -> any {
             }));
             return result;
         } except Exception as e {
-            console.error("[useAnalytics] Failed to mark insight viewed:", e);
             return {"success": False, "error": String(e)};
         }
     }
@@ -335,7 +318,6 @@ def:pub useAnalytics() -> any {
             }));
             return result;
         } except Exception as e {
-            console.error("[useAnalytics] Failed to mark insight acted upon:", e);
             return {"success": False, "error": String(e)};
         }
     }
@@ -349,7 +331,6 @@ def:pub useAnalytics() -> any {
             }));
             return result;
         } except Exception as e {
-            console.error("[useAnalytics] Failed to dismiss insight:", e);
             return {"success": False, "error": String(e)};
         }
     }
@@ -434,16 +415,7 @@ def:pub useAnalytics() -> any {
 
     # ========== Refresh ==========
     async def refreshAnalytics() -> None {
-        await fetchActivityReport({});
-        await fetchTrendAnalysis(selectedPeriod);
-        await fetchBehavioralPatterns();
-        await fetchProductivityMetrics();
-        await fetchInsights(selectedCategory);
-        await fetchDiscoveredPatterns();
-        await fetchTemporalInsights();
-        await fetchGoals();
-        await fetchAchievements();
-        await fetchProactiveInsights();
+        await fetchAllAnalytics();
     }
 
     # ========== Event Logging ==========
@@ -451,7 +423,6 @@ def:pub useAnalytics() -> any {
         try {
             await logActivityEvent(eventType, eventData, sessionId, taskContext, emotionalContext, durationMs);
         } except Exception as e {
-            console.error("[useAnalytics] Failed to log event:", e);
         }
     }
 

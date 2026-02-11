@@ -11,10 +11,8 @@ import from "lucide-react" {
     Trophy,
     Clock,
     TrendingUp,
-    Calendar,
     Sparkles,
     CheckCircle,
-    XCircle,
     Zap,
     AlertCircle
 }
@@ -36,7 +34,6 @@ def AnalyticsPanelComponent(onClose: any = None) -> any {
     # Fetch data when component mounts
     useEffect(
         lambda -> any {
-            console.log("[AnalyticsPanel] Component mounted, fetching analytics...");
             analytics.fetchAllAnalytics();
         },
         []
@@ -133,9 +130,6 @@ def AnalyticsPanelComponent(onClose: any = None) -> any {
     });
 
     # ========== Pre-compute conditional JSX blocks ==========
-    # Close button (only render if onClose is provided)
-    closeButtonBlock = <Fragment />;
-
     # Header close button
     headerCloseButton = <Fragment />;
     if onClose {

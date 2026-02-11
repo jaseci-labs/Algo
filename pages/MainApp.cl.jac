@@ -35,7 +35,6 @@ def:pub MainApp() -> any {
     [isControlBarVisible, setIsControlBarVisible] = useState(False);
     [isGraphPanelVisible, setIsGraphPanelVisible] = useState(False);
     [isAnalyticsPanelVisible, setIsAnalyticsPanelVisible] = useState(False);
-    console.log("Graph Panel Visible:", isGraphPanelVisible);
     hideTimerRef = useRef(None);
 
     # Auto-hide timer logic

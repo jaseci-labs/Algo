@@ -54,12 +54,9 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
         async def fetchEphemeralKey() -> any {
             try {
                 result = await getSessionToken();
-                console.log("Session response:", result);
-                
                 if result.success {
                     return result.key;
                 }
-                
                 console.error("Error fetching session:", result.error);
                 return None;
             } except Exception as e {
@@ -77,13 +74,8 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
 
             filteredHistory = history.filter(lambda log: any -> bool { return log.type == "message"; });
 
-            console.log("Calling supervisor with context:", context);
-            
             username = getUsernameFromToken();
-            console.log("Using username:", username);
-
             result = await callManager(context, filteredHistory, username);
-            console.log("Supervisor result:", result);
 
             if not result.success {
                 console.error("Supervisor error:", result.error);
@@ -92,7 +84,7 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
 
             # Fetch updated graph state after supervisor completes
             await refreshGraphState(username);
-            
+
             # Update suggestions if available
             if result.suggestions and Array.isArray(result.suggestions) {
                 setSuggestions(result.suggestions);
@@ -102,7 +94,6 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
 
             # Get response from service result
             next_resp = result.response or "I apologize, I couldn't get a response.";
-            console.log("Returning nextResponse:", next_resp);
             return {"nextResponse": next_resp};
         }
         
@@ -131,11 +122,10 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
         def setupSessionEventListeners(session: any) -> None {
             # Listen for history_added events (new messages)
             session.on("history_added", lambda item: any -> None {
-                console.log("[history_added]", item);
                 if not item {
                     return;
                 }
-                
+
                 if item.type == "message" {
                     itemId = item.itemId or item.item_id or "";
                     role = item.role or "";
@@ -163,7 +153,6 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
             
             # Listen for history_updated events (message updates)
             session.on("history_updated", lambda items: any -> None {
-                console.log("[history_updated]", items);
                 if not items or not items.length {
                     return;
                 }
@@ -199,39 +188,33 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
             # Listen for transport events (audio transcription)
             session.on("transport_event", lambda event: any -> None {
                 eventType = event.type or "";
-                console.log("[transport_event]", eventType, event);
-                
+
                 if eventType == "conversation.item.input_audio_transcription.completed" {
                     itemId = event.item_id or "";
                     transcriptText = event.transcript or "[inaudible]";
                     if transcriptText == "\n" {
                         transcriptText = "[inaudible]";
                     }
-                    console.log("[transcription completed]", itemId, transcriptText);
                     updateTranscriptItem(itemId, transcriptText);
                 } elif eventType == "response.output_audio_transcript.delta" {
                     itemId = event.item_id or "";
                     deltaText = event.delta or "";
-                    console.log("[transcript delta]", itemId, deltaText);
                     addTranscriptItem(itemId, "assistant", "");
                     appendTranscriptItem(itemId, deltaText);
                 } elif eventType == "response.output_audio_transcript.done" {
                     itemId = event.item_id or "";
                     transcriptText = event.transcript or "";
-                    console.log("[transcript done]", itemId, transcriptText);
                     updateTranscriptItem(itemId, transcriptText);
                 }
             });
             
             # Listen for tool calls
             session.on("agent_tool_start", lambda details: any, agent: any, functionCall: any -> None {
-                console.log("[tool start]", functionCall);
                 toolName = functionCall.name or "unknown";
                 addMessage("tool", f"🔧 Calling: {toolName}...");
             });
-            
+
             session.on("agent_tool_end", lambda details: any, agent: any, functionCall: any, result: any -> None {
-                console.log("[tool end]", functionCall, result);
             });
         }
         
@@ -265,11 +248,9 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                     sessionStatus = "DISCONNECTED";
                     return;
                 }
-                
-                console.log("Got ephemeral key, creating multi-agent setup...");
-                
+
                 supervisorTool = createSupervisorTool();
-                
+
                 chatAgentConfig = {
                     "name": "chatAgent",
                     "voice": "sage",
@@ -278,26 +259,18 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                 };
                 chatAgent = Reflect.construct(RealtimeAgent, [chatAgentConfig]);
 
-                console.log("Chat Agent created with supervisor tool");
-
                 session = Reflect.construct(RealtimeSession, [chatAgent]);
-                
-                console.log("Session created, setting up event listeners...");
-                
+
                 # Set up session event listeners
                 setupSessionEventListeners(session);
-                
-                console.log("Connecting to OpenAI...");
-                
+
                 await session.connect({"apiKey": api_key});
-                
-                console.log("Successfully connected to OpenAI Realtime API with multi-agent setup!");
+
                 sessionRef.current = session;
                 sessionStatus = "CONNECTED";
 
                 # Load user's existing graph when they connect
                 username = getUsernameFromToken();
-                console.log("Loading graph for username:", username);
                 await refreshGraphState(username);
 
                 addMessage("system", "Connected! Algo is ready. Say 'hi' to start!");
@@ -314,7 +287,6 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
         # Disconnect from OpenAI Realtime API
         def disconnectFromRealtime(resetPTTState: any) -> None {
             if sessionRef.current {
-                console.log("Disconnecting session...");
                 sessionRef.current.close();
                 sessionRef.current = None;
             }

@@ -17,20 +17,16 @@ def:pub useGraph(addMessage: any) -> any {
     async def refreshGraphState(username: str) -> None {
         try {
             result = await getTaskGraph(username);
-            console.log("Fetched updated graph:", result);
 
             if result.success and result.data {
                 graph_data = result.data;
-                console.log("Graph data received:", graph_data);
 
                 if graph_data.dotCode != None {
                     newDotCode = String(graph_data.dotCode);
-                    console.log("Setting new DOT code, length:", newDotCode.length);
                     graphDotCode = newDotCode;
                 }
                 if graph_data.edges != None {
                     newEdges = Array.from(graph_data.edges);
-                    console.log("Setting new edges, count:", newEdges.length);
                     graphEdges = newEdges;
                 }
                 if graph_data.lastTask {
@@ -50,7 +46,6 @@ def:pub useGraph(addMessage: any) -> any {
             username = getUsernameFromToken();
 
             result = await clearTaskGraph(username);
-            console.log("Clear graph response:", result);
 
             if result.success {
                 data = result.data;
