@@ -1880,4 +1880,481 @@ def parse_timestamp_parts(timestamp: str) -> dict {
     return {"hour": hour_str, "day": day_name};
 }
 
+# ========== Enhanced Analytics Walker Implementations ==========
+
+impl discover_patterns.find_patterns {
+    user_graph = find_user_graph(here, self.username);
+
+    if not user_graph {
+        report {"success": False, "patterns": []};
+        return;
+    }
+
+    # Gather data for pattern discovery
+    activity_events = [user_graph-->](?:ActivityEvent);
+    graph_result = get_user_graph_structure(user_graph);
+
+    event_data = [];
+    for event in activity_events {
+        if hasattr(event, "timestamp") and event.timestamp {
+            event_data.append({
+                "event_type": event.event_type,
+                "timestamp": event.timestamp,
+                "task_context": event.task_context if hasattr(event, "task_context") else ""
+            });
+        }
+    }
+
+    task_nodes = [];
+    task_edges = [];
+    if graph_result and len(graph_result) >= 2 {
+        task_nodes = graph_result[0];
+        task_edges = graph_result[1];
+    }
+
+    # Use semantic function to discover patterns
+    patterns = discover_routine_patterns(
+        activity_events=event_data,
+        task_graph_nodes=task_nodes,
+        task_graph_edges=task_edges,
+        time_window_days=self.time_window_days
+    );
+
+    # Convert to dict format
+    pattern_list = [];
+    if patterns {
+        for pattern in patterns {
+            pattern_dict = {
+                "pattern_name": pattern.pattern_name,
+                "task_sequence": pattern.task_sequence,
+                "frequency": pattern.frequency,
+                "confidence": pattern.confidence,
+                "time_context": pattern.time_context,
+                "description": pattern.description
+            };
+            pattern_list.append(pattern_dict);
+        }
+    }
+
+    report {
+        "success": True,
+        "patterns": pattern_list,
+        "count": len(pattern_list)
+    };
+}
+
+impl get_temporal_insights.analyze_temporal {
+    user_graph = find_user_graph(here, self.username);
+
+    if not user_graph {
+        report {"success": False, "insights": []};
+        return;
+    }
+
+    activity_events = [user_graph-->](?:ActivityEvent);
+
+    event_data = [];
+    for event in activity_events {
+        if hasattr(event, "timestamp") and event.timestamp {
+            event_data.append({
+                "event_type": event.event_type,
+                "timestamp": event.timestamp
+            });
+        }
+    }
+
+    # Use semantic function for temporal analysis
+    temporal_insights = analyze_temporal_patterns(
+        activity_events=event_data,
+        lookback_days=self.lookback_days
+    );
+
+    insight_list = [];
+    if temporal_insights {
+        for insight in temporal_insights {
+            insight_dict = {
+                "insight_type": insight.insight_type,
+                "description": insight.description,
+                "peak_hours": insight.peak_hours,
+                "peak_days": insight.peak_days,
+                "confidence": insight.confidence,
+                "actionable_recommendation": insight.actionable_recommendation
+            };
+            insight_list.append(insight_dict);
+        }
+    }
+
+    report {
+        "success": True,
+        "insights": insight_list,
+        "count": len(insight_list)
+    };
+}
+
+impl get_comparative_insights.compare_periods {
+    user_graph = find_user_graph(here, self.username);
+
+    if not user_graph {
+        report {"success": False, "comparisons": []};
+        return;
+    }
+
+    activity_events = [user_graph-->](?:ActivityEvent);
+    current_time = datetime.now();
+
+    # Calculate period boundaries
+    if self.period_type == "week" {
+        current_start = (current_time - timedelta(days=7)).strftime("%Y-%m-%dT00:00:00");
+        previous_start = (current_time - timedelta(days=14)).strftime("%Y-%m-%dT00:00:00");
+        previous_end = (current_time - timedelta(days=7)).strftime("%Y-%m-%dT23:59:59");
+    } else {
+        current_start = (current_time - timedelta(days=30)).strftime("%Y-%m-%dT00:00:00");
+        previous_start = (current_time - timedelta(days=60)).strftime("%Y-%m-%dT00:00:00");
+        previous_end = (current_time - timedelta(days=30)).strftime("%Y-%m-%dT23:59:59");
+    }
+
+    current_events = [];
+    previous_events = [];
+
+    for event in activity_events {
+        if hasattr(event, "timestamp") and event.timestamp {
+            if event.timestamp >= current_start {
+                current_events.append({
+                    "event_type": event.event_type,
+                    "timestamp": event.timestamp
+                });
+            } elif event.timestamp >= previous_start and event.timestamp <= previous_end {
+                previous_events.append({
+                    "event_type": event.event_type,
+                    "timestamp": event.timestamp
+                });
+            }
+        }
+    }
+
+    # Use semantic function for comparison
+    comparisons = generate_comparative_insights(
+        current_period_events=current_events,
+        previous_period_events=previous_events,
+        period_type=self.period_type
+    );
+
+    comparison_list = [];
+    if comparisons {
+        for comp in comparisons {
+            comparison_dict = {
+                "comparison_type": comp.comparison_type,
+                "current_period": comp.current_period,
+                "previous_period": comp.previous_period,
+                "change_percentage": comp.change_percentage,
+                "trend": comp.trend,
+                "narrative": comp.narrative
+            };
+            comparison_list.append(comparison_dict);
+        }
+    }
+
+    report {
+        "success": True,
+        "comparisons": comparison_list,
+        "count": len(comparison_list)
+    };
+}
+
+# ========== Goal Management Implementations ==========
+
+impl create_goal.initialize_goal {
+    user_graph = find_user_graph(here, self.username);
+
+    if not user_graph {
+        user_graph = here ++> user_graph_data(username=self.username);
+    }
+
+    goal = here ++> UserGoal(
+        goal_type=self.goal_type,
+        target_value=self.target_value,
+        current_value=0,
+        created_at=datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        achieved=False,
+        achieved_at=""
+    );
+
+    user_graph ++> goal;
+
+    report {
+        "success": True,
+        "goal_id": str(id(goal)),
+        "goal_type": self.goal_type,
+        "target_value": self.target_value,
+        "created_at": goal.created_at
+    };
+}
+
+impl get_goals.fetch_goals {
+    user_graph = find_user_graph(here, self.username);
+
+    goal_list = [];
+
+    if user_graph {
+        goals = [user_graph-->](?:UserGoal);
+        for goal in goals {
+            goal_dict = {
+                "goal_id": str(id(goal)),
+                "goal_type": goal.goal_type,
+                "target_value": goal.target_value,
+                "current_value": goal.current_value,
+                "created_at": goal.created_at,
+                "achieved": goal.achieved,
+                "achieved_at": goal.achieved_at
+            };
+            goal_list.append(goal_dict);
+        }
+    }
+
+    report {
+        "success": True,
+        "goals": goal_list,
+        "count": len(goal_list)
+    };
+}
+
+impl update_goal.update_goal {
+    user_graph = find_user_graph(here, self.username);
+
+    if user_graph {
+        goals = [user_graph-->](?:UserGoal);
+        for goal in goals {
+            if goal.goal_type == self.goal_type {
+                old_value = goal.current_value;
+                goal.current_value = self.progress;
+
+                # Check if achieved
+                if goal.current_value >= goal.target_value and not goal.achieved {
+                    goal.achieved = True;
+                    goal.achieved_at = datetime.now().strftime("%Y-%m-%dT%H:%M:%S");
+
+                    # Log achievement event
+                    log_event = ActivityEvent(
+                        event_type="goal_achieved",
+                        timestamp=datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                        event_data={"goal_type": goal.goal_type, "target_value": goal.target_value}
+                    );
+                    user_graph ++> log_event;
+                }
+
+                report {
+                    "success": True,
+                    "goal_type": goal.goal_type,
+                    "old_value": old_value,
+                    "new_value": goal.current_value,
+                    "target_value": goal.target_value,
+                    "achieved": goal.achieved
+                };
+                return;
+            }
+        }
+    }
+
+    report {"success": False, "error": "Goal not found"};
+}
+
+# ========== Achievement System Implementations ==========
+
+impl check_achievements.evaluate_achievements {
+    user_graph = find_user_graph(here, self.username);
+
+    newly_unlocked = [];
+
+    if user_graph {
+        # Get user stats for achievement checking
+        graph_result = get_user_graph_structure(user_graph);
+        total_tasks = 0;
+        total_edges = 0;
+        if graph_result and len(graph_result) >= 2 {
+            total_tasks = len(graph_result[0]);
+            total_edges = len(graph_result[1]);
+        }
+
+        activity_events = [user_graph-->](?:ActivityEvent);
+        voice_count = 0;
+        for event in activity_events {
+            if hasattr(event, "event_type") and event.event_type == "voice_interaction" {
+                voice_count = voice_count + 1;
+            }
+        }
+
+        # Check streak
+        activity_data = analyze_activity_events(activity_events);
+        active_days = activity_data["active_days"];
+
+        # Get existing achievements
+        existing_achievements = [user_graph-->](?:Achievement);
+        existing_ids = {};
+        for ach in existing_achievements {
+            existing_ids[ach.achievement_id] = True;
+        }
+
+        # Check achievement conditions
+        achievements_to_check = [
+            {"id": "first_task", "title": "First Step", "description": "Create your first task", "rarity": "common", "condition": total_tasks >= 1},
+            {"id": "three_day_streak", "title": "On a Roll", "description": "3-day activity streak", "rarity": "common", "condition": active_days >= 3},
+            {"id": "week_warrior", "title": "Week Warrior", "description": "7-day activity streak", "rarity": "rare", "condition": active_days >= 7},
+            {"id": "monthly_master", "title": "Monthly Master", "description": "30-day activity streak", "rarity": "legendary", "condition": active_days >= 30},
+            {"id": "voice_first", "title": "Voice Activated", "description": "First voice command", "rarity": "common", "condition": voice_count >= 1},
+            {"id": "voice_regular", "title": "Voice Regular", "description": "50 voice interactions", "rarity": "rare", "condition": voice_count >= 50},
+            {"id": "centurion", "title": "Centurion", "description": "100 total tasks", "rarity": "rare", "condition": total_tasks >= 100}
+        ];
+
+        for ach in achievements_to_check {
+            if ach["condition"] and ach["id"] not in existing_ids {
+                new_achievement = here ++> Achievement(
+                    achievement_id=ach["id"],
+                    title=ach["title"],
+                    description=ach["description"],
+                    rarity=ach["rarity"],
+                    unlocked_at=datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+                );
+                user_graph ++> new_achievement;
+                newly_unlocked.append({
+                    "achievement_id": ach["id"],
+                    "title": ach["title"],
+                    "description": ach["description"],
+                    "rarity": ach["rarity"]
+                });
+            }
+        }
+    }
+
+    report {
+        "success": True,
+        "newly_unlocked": newly_unlocked,
+        "count": len(newly_unlocked)
+    };
+}
+
+impl get_achievements.fetch_achievements {
+    user_graph = find_user_graph(here, self.username);
+
+    achievement_list = [];
+
+    if user_graph {
+        achievements = [user_graph-->](?:Achievement);
+        for ach in achievements {
+            achievement_dict = {
+                "achievement_id": ach.achievement_id,
+                "title": ach.title,
+                "description": ach.description,
+                "rarity": ach.rarity,
+                "unlocked_at": ach.unlocked_at
+            };
+            achievement_list.append(achievement_dict);
+        }
+    }
+
+    report {
+        "success": True,
+        "achievements": achievement_list,
+        "total_count": len(achievement_list)
+    };
+}
+
+# ========== Proactive Insights Implementation ==========
+
+impl get_proactive_insights.generate_proactive {
+    user_graph = find_user_graph(here, self.username);
+
+    if not user_graph {
+        report {"success": True, "insights": []};
+        return;
+    }
+
+    # Gather user data
+    activity_events = [user_graph-->](?:ActivityEvent);
+    goals = [user_graph-->](?:UserGoal);
+
+    recent_events = [];
+    for event in activity_events {
+        if hasattr(event, "timestamp") and event.timestamp {
+            recent_events.append({
+                "event_type": event.event_type,
+                "timestamp": event.timestamp
+            });
+        }
+    }
+
+    # Get current streak
+    activity_data = analyze_activity_events(activity_events);
+    current_streak = activity_data["active_days"];
+
+    # Get goal data
+    goal_data = [];
+    for goal in goals {
+        goal_data.append({
+            "goal_type": goal.goal_type,
+            "target_value": goal.target_value,
+            "current_value": goal.current_value,
+            "achieved": goal.achieved
+        });
+    }
+
+    # Use semantic function to check for proactive triggers
+    trigger_result = should_trigger_proactive_insight(
+        recent_events=recent_events,
+        user_goals=goal_data,
+        current_streak=current_streak,
+        last_insight_time="",
+        user_context={}
+    );
+
+    if trigger_result and trigger_result["should_trigger"] {
+        report {
+            "success": True,
+            "has_proactive": True,
+            "insight_type": trigger_result["insight_type"],
+            "urgency": trigger_result["urgency"],
+            "message": trigger_result["message"]
+        };
+    } else {
+        report {"success": True, "has_proactive": False};
+    }
+}
+
+# ========== Insight Feedback Implementations ==========
+
+impl mark_insight_viewed.mark_viewed {
+    # Find insight by ID and mark as viewed
+    insights = [-->](?:UserInsight);
+    for insight in insights {
+        if str(id(insight)) == self.insight_id {
+            insight.viewed = True;
+            report {"success": True, "insight_id": self.insight_id};
+            return;
+        }
+    }
+    report {"success": False, "error": "Insight not found"};
+}
+
+impl mark_insight_acted.mark_acted {
+    insights = [-->](?:UserInsight);
+    for insight in insights {
+        if str(id(insight)) == self.insight_id {
+            insight.acted_upon = True;
+            report {"success": True, "insight_id": self.insight_id};
+            return;
+        }
+    }
+    report {"success": False, "error": "Insight not found"};
+}
+
+impl dismiss_insight.dismiss {
+    insights = [-->](?:UserInsight);
+    for insight in insights {
+        if str(id(insight)) == self.insight_id {
+            insight.dismissed = True;
+            report {"success": True, "insight_id": self.insight_id, "reason": self.reason};
+            return;
+        }
+    }
+    report {"success": False, "error": "Insight not found"};
+}
 

@@ -3,6 +3,18 @@
 #
 # Run with: jac test tests/analytics_utils_test.jac
 
+import {
+    get_connection_patterns,
+    get_connection_patterns_percentages,
+    calculate_productivity_scores,
+    parse_timestamp_parts,
+    discover_routine_patterns,
+    analyze_temporal_patterns,
+    generate_comparative_insights,
+    should_trigger_proactive_insight,
+    calculate_insight_relevance
+}
+
 test "get_connection_patterns counts sequential edges" {
     edges = [
         {"from": "A", "to": "B", "label": "then"},
