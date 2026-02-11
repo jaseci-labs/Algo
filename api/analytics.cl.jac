@@ -153,7 +153,7 @@ async def:pub getInsights(category: str = "all") -> any {
 }
 
 # Log an activity event for analytics tracking
-async def:pub logActivityEvent(eventType: str, eventData: dict = {}, sessionId: str = "") -> any {
+async def:pub logActivityEvent(eventType: str, eventData: dict = {}, sessionId: str = "", taskContext: str = "", emotionalContext: str = "", durationMs: int = 0) -> any {
     try {
         username = getUsernameFromToken();
 
@@ -161,7 +161,10 @@ async def:pub logActivityEvent(eventType: str, eventData: dict = {}, sessionId: 
             username=username,
             event_type=eventType,
             event_data=eventData,
-            session_id=sessionId
+            session_id=sessionId,
+            task_context=taskContext,
+            emotional_context=emotionalContext,
+            duration_ms=durationMs
         );
 
         if response and response.reports and response.reports.length > 0 {

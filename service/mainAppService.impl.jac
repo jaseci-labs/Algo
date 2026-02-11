@@ -130,7 +130,10 @@ impl update_task_graph.update_graph {
             "previous_task": self.previous_task,
             "edge_label": self.edge_label
         },
-        session_id=""
+        session_id="",
+        task_context=self.task_name,
+        emotional_context="",
+        duration_ms=0
     );
 
     graph_data = get_graph_structure(here);
@@ -1446,7 +1449,10 @@ impl log_activity_event.log_event {
         event_type=self.event_type,
         timestamp=timestamp_str,
         event_data=self.event_data,
-        session_id=self.session_id
+        session_id=self.session_id,
+        task_context=self.task_context,
+        emotional_context=self.emotional_context,
+        duration_ms=self.duration_ms
     );
 
     # Connect event to user graph via temporal edge
@@ -2137,7 +2143,11 @@ impl update_goal.update_goal {
                     log_event = ActivityEvent(
                         event_type="goal_achieved",
                         timestamp=datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-                        event_data={"goal_type": goal.goal_type, "target_value": goal.target_value}
+                        event_data={"goal_type": goal.goal_type, "target_value": goal.target_value},
+                        session_id="",
+                        task_context="",
+                        emotional_context="",
+                        duration_ms=0
                     );
                     user_graph ++> log_event;
                 }
