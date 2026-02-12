@@ -38,6 +38,9 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
 
     sessionRef = useRef(None);
 
+    # Track accumulated response text per item (for handling empty transcript in done event)
+    responseAccumulatedText = useRef({});
+
     # Computed values
     isConnected = sessionStatus == "CONNECTED";
     isConnecting = sessionStatus == "CONNECTING";
@@ -126,26 +129,27 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                     return;
                 }
 
-                if item.type == "message" {
-                    itemId = item.itemId or item.item_id or "";
+                itemType = item.type or "";
+                itemId = item.itemId or item.item_id or "";
+
+                if itemType == "message" {
                     role = item.role or "";
                     content = item.content or [];
-                    
+
                     text = extractMessageText(content);
-                    
+
                     if role == "user" and not text {
                         text = "[Transcribing...]";
                     }
-                    
+
                     if role == "assistant" and not text {
                         text = "...";
                     }
-                    
+
                     if role and itemId {
                         addTranscriptItem(itemId, role, text);
                     }
-                } elif item.type == "function_call" {
-                    itemId = item.itemId or item.item_id or "";
+                } elif itemType == "function_call" {
                     toolName = item.name or "tool";
                     addTranscriptItem(itemId, "tool", "🔧 Calling: " + toolName + "...");
                 }
@@ -156,55 +160,70 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                 if not items or not items.length {
                     return;
                 }
-                
+
                 for item in items {
                     if not item {
                         continue;
                     }
-                    
-                    if item.type == "message" {
-                        itemId = item.itemId or item.item_id or "";
+
+                    itemType = item.type or "";
+                    itemId = item.itemId or item.item_id or "";
+
+                    if itemType == "message" {
                         role = item.role or "";
                         content = item.content or [];
-                        
+
                         text = extractMessageText(content);
-                        
+
                         if text and itemId {
                             addTranscriptItem(itemId, role, text);
                             updateTranscriptItem(itemId, text);
                         }
-                    } elif item.type == "function_call" {
-                        itemId = item.itemId or item.item_id or "";
+                    } elif itemType == "function_call" {
                         toolName = item.name or "tool";
                         status = item.status or "";
-                        
+
                         if status == "completed" {
                             updateTranscriptItem(itemId, "✓ " + toolName + " completed");
                         }
                     }
                 }
             });
-            
+
             # Listen for transport events (audio transcription)
             session.on("transport_event", lambda event: any -> None {
+                itemId = event.item_id or "";
                 eventType = event.type or "";
+                transcriptText = event.transcript or "";
+                deltaText = event.delta or "";
 
                 if eventType == "conversation.item.input_audio_transcription.completed" {
-                    itemId = event.item_id or "";
-                    transcriptText = event.transcript or "[inaudible]";
-                    if transcriptText == "\n" {
-                        transcriptText = "[inaudible]";
+                    if itemId {
+                        finalText = transcriptText or "[inaudible]";
+                        if finalText == "\n" {
+                            finalText = "[inaudible]";
+                        }
+                        updateTranscriptItem(itemId, finalText);
                     }
-                    updateTranscriptItem(itemId, transcriptText);
                 } elif eventType == "response.output_audio_transcript.delta" {
-                    itemId = event.item_id or "";
-                    deltaText = event.delta or "";
-                    addTranscriptItem(itemId, "assistant", "");
-                    appendTranscriptItem(itemId, deltaText);
+                    if itemId and deltaText {
+                        # Initialize item on first delta
+                        if not responseAccumulatedText.current[itemId] {
+                            responseAccumulatedText.current[itemId] = "";
+                            addTranscriptItem(itemId, "assistant", "");
+                        }
+                        # Accumulate and append delta
+                        responseAccumulatedText.current[itemId] = responseAccumulatedText.current[itemId] + deltaText;
+                        appendTranscriptItem(itemId, deltaText);
+                    }
                 } elif eventType == "response.output_audio_transcript.done" {
-                    itemId = event.item_id or "";
-                    transcriptText = event.transcript or "";
-                    updateTranscriptItem(itemId, transcriptText);
+                    if itemId {
+                        # Use transcript from event, or fall back to accumulated
+                        finalText = transcriptText or responseAccumulatedText.current[itemId] or "";
+                        if finalText {
+                            updateTranscriptItem(itemId, finalText);
+                        }
+                    }
                 }
             });
             
