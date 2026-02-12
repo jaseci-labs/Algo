@@ -45,10 +45,12 @@ jobs:
           python-version: '3.12'
 
       # Install required packages
+      # Install jac-scale from fork branch (kube_secrets) to get K8s secrets support
       - name: Install Jaseci packages
         run: |
           pip install --upgrade pip
-          pip install jaclang jac-client jac-scale byllm
+          pip install jaclang jac-client byllm
+          pip install "jac-scale @ git+https://github.com/udithishanka/jaseci.git@kube_secrets#subdirectory=jac-scale"
 
       # Destroy existing deployment
       - name: Destroy existing deployment
@@ -57,26 +59,12 @@ jobs:
           sleep 15
         continue-on-error: true
 
-      # Deploy using jac-scale
+      # Deploy using jac-scale (secrets resolved from env via [plugins.scale.secrets])
       - name: Deploy Algo with jac-scale
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          jac start main.jac --scale
-
-      # Create API keys secret (recreated each deploy, survives jac destroy)
-      - name: Create API keys secret
-        run: |
-          kubectl delete secret algo-api-keys -n algo-test --ignore-not-found=true
-          kubectl create secret generic algo-api-keys \
-            --namespace=algo-test \
-            --from-literal=OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
-
-      # Inject secret into deployment
-      - name: Inject API keys into deployment
-        run: |
-          kubectl patch deployment algo-test -n algo-test --type='json' \
-            -p='[{"op": "add", "path": "/spec/template/spec/containers/0/envFrom", "value": [{"secretRef": {"name": "algo-api-keys"}}]}]'
-          echo "Waiting for rollout..."
-          kubectl rollout status deployment/algo-test -n algo-test --timeout=300s
+          jac start main.jac --scale --experimental
 
       # Get deployment status
       - name: Verify deployment
