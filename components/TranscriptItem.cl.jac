@@ -55,9 +55,8 @@ def:pub TranscriptItem(item: any, showThinking: bool = True) -> any {
         tasks = thinking.tasks or "";
         pattern = thinking.pattern or "";
         hasThinking = emotional != "" or intent != "" or tasks != "" or pattern != "";
-        console.log("hasThinking:", hasThinking);
     }
-    
+
     return <div className={containerClass}>
         {hasThinking and (
             <div className="flex flex-col gap-1 max-w-lg w-full">

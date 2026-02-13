@@ -705,3 +705,270 @@ Return:
 - missing_labels: List of descriptions for missing labels (e.g., ["condition on 'raining' edge"])
 - incorrect_labels: List of descriptions for incorrect labels
 """;
+
+#===========================================================
+#               ANALYTICS INSIGHTS FUNCTIONS
+#===========================================================
+
+"""Personalized insight for analytics"""
+obj PersonalizedInsight {
+    has title: str;
+    has description: str;
+    has category: str;
+    has actionable: bool;
+}
+
+"""Generate personalized insights based on user's activity patterns"""
+def generate_personalized_insights(
+    total_tasks: int,
+    consistency_score: float,
+    efficiency_score: float,
+    current_streak: int,
+    peak_hour: str,
+    peak_day: str,
+    total_events: int,
+    emotion_distribution: dict,
+    connection_patterns: dict
+) -> list[PersonalizedInsight] by llm();
+
+sem generate_personalized_insights = """
+Generate 3-4 personalized, actionable insights based on the user's actual activity data.
+
+INPUT ANALYSIS:
+- total_tasks: How many tasks user has created (higher = more active)
+- consistency_score: 0-100 (higher = more consistent daily activity)
+- efficiency_score: 0-100 (higher = better task connections/routine complexity)
+- current_streak: Consecutive days of activity
+- peak_hour: Hour (0-23) when user is most active
+- peak_day: Day of week when user is most active
+- total_events: Total tracked events
+- emotion_distribution: Distribution of emotional states (stressed, excited, focused, etc.)
+- connection_patterns: How user connects tasks (sequential, parallel, conditional, convergent)
+
+INSIGHT CATEGORIES:
+1. PRODUCTIVITY: Patterns in task creation, peak productivity times, streaks
+2. CONSISTENCY: Daily activity patterns, engagement trends
+3. BEHAVIORAL: Emotional patterns, connection style preferences
+4. RECOMMENDATIONS: Actionable suggestions based on data
+
+GENERATION RULES:
+- Each insight MUST be based on the actual numeric data provided
+- Be specific: mention actual numbers (e.g., "12 tasks", "85% score", "5-day streak")
+- Be encouraging but honest about areas for improvement
+- Make recommendations actionable (specific things to try)
+- Vary categories - don't give all productivity or all behavioral insights
+- For new users (total_tasks < 5): Focus on getting started insights
+- For active users (total_tasks >= 5): Focus on optimization insights
+
+EXAMPLE INSIGHTS:
+PRODUCTIVITY (when streak > 3):
+- title: "On Fire!"
+- description: "You're on a 5-day streak! Your consistency is impressive. Keep the momentum going."
+- category: "productivity"
+- actionable: false
+
+PRODUCTIVITY (when peak_hour shows clear pattern):
+- title: "Peak Productivity"
+- description: "You're most active around 9 AM. Schedule your most important tasks then for maximum productivity."
+- category: "productivity"
+- actionable: true
+
+CONSISTENCY (when consistency_score is high):
+- title: "Rock Steady"
+- description: "Your 85% consistency score shows real dedication. You're building great habits!"
+- category: "consistency"
+- actionable: false
+
+BEHAVIORAL (when emotion_distribution shows stressed):
+- title: "Take It Easy"
+- description: "You seem stressed during your sessions. Consider breaking larger tasks into smaller, manageable steps."
+- category: "behavioral"
+- actionable: true
+
+RECOMMENDATIONS (when connection_patterns are mostly sequential):
+- title: "Try Parallel Tasks"
+- description: "You mostly use sequential connections. Try using 'while' to create parallel workflows and save time."
+- category: "recommendations"
+- actionable: true
+
+RECOMMENDATIONS (when total_events is low):
+- title: "Build Your Routine"
+- description: "Start by adding 3-5 tasks you do every day. Track them to see your patterns emerge."
+- category: "recommendations"
+- actionable: true
+
+OUTPUT FORMAT:
+Return a list of PersonalizedInsight objects with exactly these fields:
+- title: Short, catchy headline (2-4 words)
+- description: 1-2 sentences explaining the insight
+- category: "productivity" | "consistency" | "behavioral" | "recommendations"
+- actionable: true if user can take action, false if just observation
+""";
+
+# ========== Enhanced Analytics Semantic Functions ==========
+
+"""Represents a discovered routine pattern"""
+obj RoutinePattern {
+    has pattern_name: str;
+    has task_sequence: list[str];
+    has frequency: int;
+    has confidence: float;
+    has time_context: str;
+    has description: str;
+}
+
+"""Discover repeated task sequences that form routines"""
+def discover_routine_patterns(
+    activity_events: list[dict],
+    task_graph_nodes: list[str],
+    task_graph_edges: list[dict],
+    time_window_days: int = 30
+) -> list[RoutinePattern] by llm();
+
+sem discover_routine_patterns = """
+Analyze activity events and task graph to discover repeated task sequences that form routines.
+
+INPUT:
+- activity_events: List of events with timestamps and task names
+- task_graph_nodes: All task names in the graph
+- task_graph_edges: Connections between tasks with labels
+- time_window_days: Lookback period for analysis
+
+ANALYSIS:
+1. Identify task sequences that repeat across multiple sessions/days
+2. Look for common patterns like morning routines, work workflows, evening wind-downs
+3. Consider time context (morning, afternoon, evening, night, weekend)
+4. Calculate confidence based on frequency and consistency
+
+OUTPUT:
+Return list of RoutinePattern objects:
+- pattern_name: Descriptive name (e.g., "Morning Routine", "Work Start")
+- task_sequence: Ordered list of task names in the pattern
+- frequency: How many times this pattern was detected
+- confidence: 0.0-1.0 score of pattern reliability
+- time_context: "morning", "afternoon", "evening", "night", "weekend", "any"
+- description: Brief description of the pattern
+
+Only return patterns with frequency >= 2 and confidence >= 0.5.
+""";
+
+"""Represents temporal pattern insights"""
+obj TemporalInsight {
+    has insight_type: str;
+    has description: str;
+    has peak_hours: list[int];
+    has peak_days: list[str];
+    has confidence: float;
+    has actionable_recommendation: str;
+}
+
+"""Analyze temporal patterns in user activity"""
+def analyze_temporal_patterns(
+    activity_events: list[dict],
+    lookback_days: int = 30
+) -> list[TemporalInsight] by llm();
+
+sem analyze_temporal_patterns = """
+Analyze activity timestamps to discover when user is most active and productive.
+
+INPUT:
+- activity_events: List of events with timestamps (format: YYYY-MM-DDTHH:MM:SS)
+- lookback_days: How many days to analyze
+
+ANALYSIS:
+1. Extract hour (0-23) and day of week from timestamps
+2. Identify peak hours (most activity) and peak days
+3. Look for patterns like "weekend warrior", "morning person", "night owl"
+4. Calculate confidence based on data consistency
+
+OUTPUT:
+Return list of TemporalInsight objects:
+- insight_type: "peak_hours", "peak_days", "productivity_windows", "temporal_pattern"
+- description: Human-readable description of the pattern
+- peak_hours: List of hours (0-23) with highest activity
+- peak_days: List of day names with highest activity
+- confidence: 0.0-1.0 score
+- actionable_recommendation: Suggestion based on pattern
+
+Be specific with times. Instead of "morning", say "9-11 AM".
+""";
+
+"""Represents comparison insights between time periods"""
+obj ComparisonInsight {
+    has comparison_type: str;
+    has current_period: dict;
+    has previous_period: dict;
+    has change_percentage: float;
+    has trend: str;
+    has narrative: str;
+}
+
+"""Generate comparative insights between time periods"""
+def generate_comparative_insights(
+    current_period_events: list[dict],
+    previous_period_events: list[dict],
+    period_type: str = "week"
+) -> list[ComparisonInsight] by llm();
+
+sem generate_comparative_insights = """
+Compare activity between two time periods to identify trends.
+
+INPUT:
+- current_period_events: Events from current period (this week/month)
+- previous_period_events: Events from previous period (last week/month)
+- period_type: "week" or "month"
+
+ANALYSIS:
+1. Count events in each period
+2. Calculate percentage change
+3. Determine trend: "improving", "declining", "stable"
+4. Generate narrative explaining the change
+
+OUTPUT:
+Return list of ComparisonInsight objects:
+- comparison_type: "week_over_week" or "month_over_month"
+- current_period: Dict with current stats (total_events, active_days, etc.)
+- previous_period: Dict with previous stats
+- change_percentage: Percentage change (positive = increase)
+- trend: "improving", "declining", or "stable"
+- narrative: Human-readable explanation of the change
+
+Focus on meaningful changes. Small fluctuations (<10%) should be marked "stable".
+""";
+
+"""Check if proactive insight should be triggered"""
+def should_trigger_proactive_insight(
+    recent_events: list[dict],
+    user_goals: list[dict],
+    current_streak: int,
+    last_insight_time: str,
+    user_context: dict
+) -> dict by llm();
+
+sem should_trigger_proactive_insight = """
+Determine if a proactive insight should be triggered based on user state.
+
+INPUT:
+- recent_events: Recent activity events
+- user_goals: Current user goals with progress
+- current_streak: Current activity streak
+- last_insight_time: When last insight was delivered
+- user_context: Additional context (time since last activity, session count, etc.)
+
+TRIGGERS:
+1. STREAK_AT_RISK: User hasn't been active today but has active streak
+2. ACHIEVEMENT_UNLOCKED: User earned a new achievement
+3. GOAL_MILESTONE: User reached 50%, 75%, or 100% of goal
+4. PATTERN_DETECTED: New routine pattern discovered
+5. ENCOURAGEMENT_NEEDED: User activity declined significantly
+6. RETURNING_USER: User back after absence
+
+OUTPUT:
+Return dict with:
+- should_trigger: true or false
+- insight_type: Type of insight to trigger
+- urgency: "low", "medium", or "high"
+- message: Specific message for the insight
+
+Only trigger if truly valuable. Avoid spam.
+""";
