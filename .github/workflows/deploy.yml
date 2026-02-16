@@ -49,8 +49,7 @@ jobs:
       - name: Install Jaseci packages
         run: |
           pip install --upgrade pip
-          pip install jaclang jac-client byllm
-          pip install "jac-scale @ git+https://github.com/udithishanka/jaseci.git@kube_secrets#subdirectory=jac-scale"
+          pip install jaclang jac-client byllm jac-scale
 
       # Destroy existing deployment
       - name: Destroy existing deployment
@@ -64,7 +63,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          jac start main.jac --scale --experimental
+          jac start main.jac --scale
 
       # Get deployment status
       - name: Verify deployment

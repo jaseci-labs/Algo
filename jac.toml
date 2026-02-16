@@ -13,13 +13,15 @@ plugins = ["tailwindcss()"]
 lib_imports = ["import tailwindcss from '@tailwindcss/vite'"]
 
 
-
-
 [plugins.scale.kubernetes]
-app_name = "algo-test"
-namespace = "algo-test"
-jaseci_repo_url = "https://github.com/udithishanka/jaseci.git"
-jaseci_branch = "kube_secrets"
+app_name = "algo-test2"
+namespace = "algo-test2"
+# deployment_strategy = "rolling"
+# jaseci_repo_url = "https://github.com/juzailmlwork/jaseci.git"
+# jaseci_branch = "support-horizontal-scaling"
+# min_replicas = 2
+# max_replicas = 4
+# cpu_utilization_target = 50
 
 [plugins.scale.secrets]
 OPENAI_API_KEY = "${OPENAI_API_KEY}"
