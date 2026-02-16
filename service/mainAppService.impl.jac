@@ -1,5 +1,7 @@
-import from datetime { datetime }
+import from datetime { datetime, timedelta }
 import from time { time }
+
+# ========== Session Token ==========
 
 impl get_session_token.fetch {
     try {
@@ -119,6 +121,21 @@ impl update_task_graph.update_graph {
     here ++> new_node;
     prev_node +>: TaskFlow(label=self.edge_label) :+> new_node;
     here.last_task = self.task_name;
+
+    # Log task creation event for analytics
+    here spawn log_activity_event(
+        username=self.username,
+        event_type="task_created",
+        event_data={
+            "task_name": self.task_name,
+            "previous_task": self.previous_task,
+            "edge_label": self.edge_label
+        },
+        session_id="",
+        task_context=self.task_name,
+        emotional_context="",
+        duration_ms=0
+    );
 
     graph_data = get_graph_structure(here);
     report {
@@ -889,6 +906,17 @@ impl call_manager.orchestrate{
             return;
         }
 
+        # Log voice interaction event for analytics
+        here spawn log_activity_event(
+            username=self.username,
+            event_type="voice_interaction",
+            event_data={
+                "message_length": len(self.context_from_user or ""),
+                "conversation_turn": len(self.conversation_history or [])
+            },
+            session_id=""
+        );
+
         root spawn call_graph_agent(
             conversation_history=self.conversation_history,
             context_from_user=self.context_from_user,
@@ -921,302 +949,6 @@ impl call_manager.orchestrate{
     }
 }
 
-def parse_printgraph_output(dot_output: str) -> tuple {
-    node_list = [];
-    edge_list = [];
-    node_map = {};
-
-    if not dot_output {
-        return (node_list, edge_list);
-    }
-
-    dot_output = dot_output.replace("&#x27;", "'");
-    dot_output = dot_output.replace("&quot;", '"');
-    lines = dot_output.split("\n");
-
-    # FIRST PASS: Parse all node definitions
-    for line in lines {
-        line = line.strip();
-        if "[label=" in line and "->" not in line {
-            parts = line.split("[label=");
-            if len(parts) == 2 {
-                node_id = parts[0].strip();
-                label = parts[1];
-                if "TaskState(task_name=" in label {
-                    start = label.find("task_name=") + 11;
-                    end = label.find("'", start + 1);
-                    if end > start {
-                        task_name = label[start:end];
-                        node_map[node_id] = task_name;
-                        node_list.append(task_name);
-                    }
-                }
-            }
-        }
-    }
-
-    # SECOND PASS: Parse edges (now that we have all nodes)
-    for line in lines {
-        line = line.strip();
-        if "->" in line and not line.startswith("//") {
-            parts = line.split("->");
-            if len(parts) == 2 {
-                from_id = parts[0].strip();
-                to_part = parts[1].strip();
-                to_id = "";
-                if "[" in to_part {
-                    to_id = to_part.split("[")[0].strip();
-                } else {
-                    to_id = to_part.strip().rstrip(";");
-                }
-
-                edge_label = "";
-                if "TaskFlow(label=" in to_part {
-                    label_idx = to_part.find("TaskFlow(label=");
-                    if label_idx >= 0 {
-                        rest = to_part[label_idx + 15:];
-                        if len(rest) > 1 and rest[0] == "'" {
-                            quote_end = rest.find("'", 1);
-                            if quote_end > 1 {
-                                edge_label = rest[1:quote_end];
-                            }
-                        }
-                    }
-                }
-
-                if from_id in node_map and to_id in node_map {
-                    edge_list.append({
-                        "from": node_map[from_id],
-                        "to": node_map[to_id],
-                        "label": edge_label
-                    });
-                }
-            }
-        }
-    }
-
-    return (node_list, edge_list);
-}
-
-def generate_dot_code_from_lists(node_list: list[str], edge_list: list[dict]) -> str {
-    if len(node_list) == 0 {
-        return "";
-    }
-
-    lines = ["digraph TaskGraph {"];
-    lines.append("  rankdir=TB;");
-    lines.append("  node [shape=box, style=rounded, fontname=\"Arial\"];");
-    lines.append("  edge [fontname=\"Arial\", fontsize=10];");
-    lines.append("");
-
-    for task_node in node_list {
-        if task_node == "Start" {
-            lines.append(f'  {task_node} [shape=circle, style=filled, fillcolor="#22c55e", fontcolor=white];');
-        } else {
-            lines.append(f'  {task_node} [style="rounded,filled", fillcolor="#3b82f6", fontcolor=white];');
-        }
-    }
-
-    lines.append("");
-
-    for conn in edge_list {
-        from_task = conn.get("from", "");
-        to_task = conn.get("to", "");
-        conn_label = conn.get("label", "");
-        if conn_label {
-            lines.append(f'  {from_task} -> {to_task} [label="{conn_label}"];');
-        } else {
-            lines.append(f'  {from_task} -> {to_task};');
-        }
-    }
-
-    lines.append("}");
-    return "\n".join(lines);
-}
-
-def find_leaf_nodes(edge_list: list[dict], node_list: list[str]) -> list[str] {
-    nodes_with_outgoing = {};
-    for edge in edge_list {
-        from_task = edge.get("from", "");
-        if from_task {
-            nodes_with_outgoing[from_task] = True;
-        }
-    }
-
-    # Leaf nodes are those without outgoing edges (excluding Start)
-    leaf_nodes = [];
-    for node in node_list {
-        if node != "Start" and node not in nodes_with_outgoing {
-            leaf_nodes.append(node);
-        }
-    }
-
-    if len(leaf_nodes) == 0 and len(node_list) > 1 {
-        return [node_list[-1]];
-    }
-
-    return leaf_nodes;
-}
-
-"""Find user's graph or return None"""
-def find_user_graph(root_node: node, username: str) -> (node | None) {
-    all_graphs = [root_node-->](?:user_graph_data);
-    for graph in all_graphs {
-        if graph?.username and graph.username == username {
-            return graph;
-        }
-    }
-    return None;
-}
-
-"""Find manager comm data node or return None"""
-def find_manager_comm_data(root_node: node, username: str) -> (node | None) {
-    all_comm_data = [root_node-->](?:manager_comm_data);
-    for comm_data in all_comm_data {
-        if comm_data?.username and comm_data.username == username {
-            return comm_data;
-        }
-    }
-    return None;
-}
-
-"""Find Start node in graph - only direct children of user_graph"""
-def find_start_node(graph_node: node) -> (node | None) {
-    direct_task_nodes = [graph_node-->](?:TaskState);
-    for node in direct_task_nodes {
-        if node?.task_name and node.task_name == "Start" {
-            return node;
-        }
-    }
-    return None;
-}
-
-"""Get graph structure as node/edge lists and DOT code"""
-def get_graph_structure(graph_node: node) -> tuple {
-    start_node = find_start_node(graph_node);
-    node_list = [];
-    edge_list = [];
-    if start_node {
-        dot_output = printgraph(node=start_node);
-        result = parse_printgraph_output(dot_output);
-        node_list = result[0];
-        edge_list = result[1];
-    }
-    dot_code = generate_dot_code_from_lists(node_list, edge_list);
-    return (node_list, edge_list, dot_code);
-}
-
-"""Get user-specific graph structure with bounded traversal"""
-def get_user_graph_structure(user_graph_node: node) -> tuple {
-    node_list = [];
-    edge_list = [];
-
-    direct_nodes = [user_graph_node-->](?:TaskState);
-    node_map = {};
-    for node in direct_nodes {
-        if node?.task_name {
-            node_map[id(node)] = node.task_name;
-            node_list.append(node.task_name);
-        }
-    }
-
-    for from_node in direct_nodes {
-        if from_node?.task_name {
-            successors = [from_node-->](?:TaskState);
-            for to_node in successors {
-                if id(to_node) in node_map {
-                    edge_label = extract_edge_label_via_printgraph(from_node, to_node);
-                    edge_list.append({
-                        "from": from_node.task_name,
-                        "to": to_node.task_name,
-                        "label": edge_label
-                    });
-                }
-            }
-        }
-    }
-
-    return (node_list, edge_list);
-}
-
-# Extract edge label between two nodes using printgraph
-def extract_edge_label_via_printgraph(from_node: node, to_node: node) -> str {
-    try {
-        dot_output = printgraph(node=from_node, depth=1);
-        if not dot_output {
-            return "";
-        }
-
-        dot_output = dot_output.replace("&#x27;", "'");
-        dot_output = dot_output.replace("&quot;", '"');
-        lines = dot_output.split("\n");
-
-        to_task_name = to_node.task_name if hasattr(to_node, 'task_name') else None;
-        if not to_task_name {
-            return "";
-        }
-        
-        # FIRST PASS: Build node ID -> task_name map
-        node_map = {};
-        for line in lines {
-            line = line.strip();
-            if "[label=" in line and "->" not in line {
-                parts = line.split("[label=");
-                if len(parts) == 2 {
-                    node_id = parts[0].strip();
-                    label = parts[1];
-                    if "TaskState(task_name=" in label {
-                        start = label.find("task_name=") + 11;
-                        end = label.find("'", start + 1);
-                        if end > start {
-                            node_map[node_id] = label[start:end];
-                        }
-                    }
-                }
-            }
-        }
-
-        target_node_id = None;
-        for node_id in node_map {
-            if node_map[node_id] == to_task_name {
-                target_node_id = node_id;
-                break;
-            }
-        }
-
-        if not target_node_id {
-            return "";
-        }
-        
-        # SECOND PASS: Find edge to target and extract TaskFlow label
-        for line in lines {
-            line = line.strip();
-            if "->" in line and not line.startswith("//") {
-                parts = line.split("->");
-                if len(parts) == 2 {
-                    to_part = parts[1].strip();
-                    to_id = to_part.split("[")[0].strip() if "[" in to_part else to_part.strip().rstrip(";");
-
-                    if to_id == target_node_id and "TaskFlow(label=" in to_part {
-                        label_idx = to_part.find("TaskFlow(label=");
-                        rest = to_part[label_idx + 15:];
-                        if len(rest) > 1 and rest[0] == "'" {
-                            quote_end = rest.find("'", 1);
-                            if quote_end > 1 {
-                                return rest[1:quote_end];
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } except Exception as e {
-        # Silently fail and return empty label
-        return "";
-    }
-
-    return "";
-}
 
 impl validate_graph_output.validate {
     manager_data = find_manager_comm_data(here, self.username);
@@ -1388,3 +1120,1252 @@ impl validate_graph_output.validate {
         }
     }
 }
+# ========== Analytics Walker Implementations ==========
+
+# Get activity report for the user
+impl get_activity_report.generate_report {
+    user_node = find_user_graph(here, self.username);
+
+    total_tasks: int = 0;
+    current_task_count: int = 0;
+    current_edge_count: int = 0;
+
+    if user_node {
+        # Get the actual graph structure - returns tuple (node_list, edge_list, dot_code)
+        graph_result = get_user_graph_structure(user_node);
+        if graph_result and len(graph_result) >= 2 {
+            node_list = graph_result[0];
+            edge_list = graph_result[1];
+            total_tasks = user_node.total_tasks if user_node?.total_tasks else len(node_list);
+            current_task_count = len(node_list);
+            current_edge_count = len(edge_list);
+        }
+    }
+
+    report {
+        "success": True,
+        "total_tasks": total_tasks,
+        "total_sessions": 1,
+        "current_task_count": current_task_count,
+        "current_edge_count": current_edge_count,
+        "peak_activity_hour": 0,
+        "days_tracked": 1,
+        "total_events": total_tasks + 1
+    };
+}
+
+impl get_trend_analysis.analyze_trends {
+    user_graph = find_user_graph(here, self.username);
+
+    hourly_activity: dict = {
+        "0": 0, "1": 0, "2": 0, "3": 0, "4": 0, "5": 0,
+        "6": 0, "7": 0, "8": 0, "9": 0, "10": 0, "11": 0,
+        "12": 0, "13": 0, "14": 0, "15": 0, "16": 0, "17": 0,
+        "18": 0, "19": 0, "20": 0, "21": 0, "22": 0, "23": 0
+    };
+
+    daily_activity: dict = {"Monday": 0, "Tuesday": 0, "Wednesday": 0, "Thursday": 0,
+                            "Friday": 0, "Saturday": 0, "Sunday": 0};
+
+    total_events = 0;
+    peak_hour = "0";
+    peak_day = "Monday";
+
+    if user_graph {
+        activity_events = [user_graph-->](?:ActivityEvent);
+        activity_data = analyze_activity_events(activity_events);
+        event_counts = activity_data["event_counts"];
+
+        for event in activity_events {
+            if hasattr(event, "timestamp") and event.timestamp {
+                total_events = total_events + 1;
+                parts = parse_timestamp_parts(event.timestamp);
+                hour_str = parts["hour"];
+                day_name = parts["day"];
+
+                if hour_str in hourly_activity {
+                    hourly_activity[hour_str] = hourly_activity[hour_str] + 1;
+                    if hourly_activity[hour_str] > hourly_activity[peak_hour] {
+                        peak_hour = hour_str;
+                    }
+                }
+
+                if day_name in daily_activity {
+                    daily_activity[day_name] = daily_activity[day_name] + 1;
+                    if daily_activity[day_name] > daily_activity[peak_day] {
+                        peak_day = day_name;
+                    }
+                }
+            }
+        }
+    } else {
+        event_counts = {"task_created": 0, "voice_interaction": 0, "insights_requested": 0, "task_connected": 0};
+    }
+
+    daily_totals = [];
+    for day_name in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] {
+        if day_name in daily_activity {
+            daily_totals.append({"date": day_name, "count": daily_activity[day_name]});
+        }
+    }
+
+    report {
+        "success": True,
+        "hourly_activity": hourly_activity,
+        "daily_activity": daily_activity,
+        "daily_totals": daily_totals,
+        "peak_hour": peak_hour,
+        "peak_day": peak_day,
+        "period": self.period,
+        "total_events": total_events,
+        "event_counts": event_counts
+    };
+}
+
+impl analyze_behavioral_patterns.extract_patterns {
+    user_graph = find_user_graph(here, self.username);
+
+    emotion_counts: dict = {"neutral": 0, "stressed": 0, "excited": 0, "focused": 0, "confused": 0, "frustrated": 0};
+    emotion_timeline = [];
+    total_emotions = 0;
+
+    connection_patterns: dict = {"sequential": 0, "parallel": 0, "conditional": 0, "convergent": 0};
+    average_complexity = 0.5;
+
+    if user_graph {
+        # Get emotion data from manager_comm_data
+        comm_nodes = [-->](?:manager_comm_data);
+        for comm in comm_nodes {
+            if hasattr(comm, "username") and comm.username == self.username {
+                if hasattr(comm, "last_emotional_state") and comm.last_emotional_state {
+                    emotion = comm.last_emotional_state;
+                    if emotion in emotion_counts {
+                        emotion_counts[emotion] = emotion_counts[emotion] + 1;
+                        total_emotions = total_emotions + 1;
+                    }
+                    emotion_timeline.append({"emotion": emotion});
+                }
+            }
+        }
+
+        # Get connection patterns using shared utility
+        graph_result = get_user_graph_structure(user_graph);
+        if graph_result and len(graph_result) >= 2 {
+            connection_patterns = get_connection_patterns(graph_result[1]);
+            node_count = len(graph_result[0]);
+            edge_count = len(graph_result[1]);
+            if node_count > 0 {
+                average_complexity = min(1.0, edge_count / (node_count * 2));
+            }
+        }
+
+        # Get intent counts from activity events
+        activity_events = [user_graph-->](?:ActivityEvent);
+        for event in activity_events {
+            if hasattr(event, "event_type") and event.event_type == "voice_interaction" {
+                emotion_counts["neutral"] = emotion_counts["neutral"] + 1;
+                total_emotions = total_emotions + 1;
+            }
+        }
+    }
+
+    # Calculate emotion distribution
+    emotion_distribution: dict = {};
+    for emotion_name in emotion_counts {
+        if total_emotions > 0 {
+            emotion_distribution[emotion_name] = emotion_counts[emotion_name] / total_emotions;
+        } else {
+            emotion_distribution[emotion_name] = 0.0;
+        }
+    }
+
+    complexity_trend = [{"timestamp": datetime.now().strftime("%Y-%m-%d"), "complexity": average_complexity}];
+
+    report {
+        "success": True,
+        "emotion_distribution": emotion_distribution,
+        "emotion_timeline": emotion_timeline,
+        "intent_distribution": emotion_distribution,
+        "complexity_trend": complexity_trend,
+        "average_complexity": average_complexity,
+        "connection_patterns": connection_patterns
+    };
+}
+
+impl calculate_productivity_metrics.compute_metrics {
+    user_graph = find_user_graph(here, self.username);
+
+    total_tasks: int = 0;
+    total_edges: int = 0;
+    task_created_count: int = 0;
+
+    if user_graph {
+        graph_result = get_user_graph_structure(user_graph);
+        if graph_result and len(graph_result) >= 2 {
+            total_tasks = len(graph_result[0]);
+            total_edges = len(graph_result[1]);
+        }
+        activity_events = [user_graph-->](?:ActivityEvent);
+        activity_data = analyze_activity_events(activity_events);
+        voice_interaction_count = activity_data["voice_interaction_count"];
+        total_sessions = activity_data["total_sessions"];
+        active_days = activity_data["active_days"];
+        task_created_count = activity_data["event_counts"]["task_created"];
+    } else {
+        voice_interaction_count = 0;
+        total_sessions = 0;
+        active_days = 0;
+    }
+
+    days_tracked = max(1, active_days);
+    scores = calculate_productivity_scores(total_tasks, total_edges, active_days);
+
+    if total_sessions > 0 {
+        avg_tasks_per_session = float(total_tasks) / float(total_sessions);
+    } else {
+        avg_tasks_per_session = float(total_tasks);
+    }
+
+    report {
+        "success": True,
+        "total_tasks_created": total_tasks,
+        "total_sessions": total_sessions,
+        "active_days": active_days,
+        "days_tracked": days_tracked,
+        "avg_tasks_per_session": avg_tasks_per_session,
+        "consistency_score": scores["consistency_score"],
+        "efficiency_score": scores["efficiency_score"],
+        "current_streak": scores["current_streak"],
+        "total_interactions": voice_interaction_count,
+        "total_events": task_created_count + voice_interaction_count
+    };
+}
+
+impl generate_insights.create_insights {
+    user_graph = find_user_graph(here, self.username);
+
+    total_tasks: int = 0;
+    total_edges: int = 0;
+    active_days: int = 0;
+    emotion_distribution: dict = {"neutral": 1.0};
+
+    if user_graph {
+        graph_result = get_user_graph_structure(user_graph);
+        if graph_result and len(graph_result) >= 2 {
+            total_tasks = len(graph_result[0]);
+            total_edges = len(graph_result[1]);
+            connection_patterns = get_connection_patterns(graph_result[1]);
+        } else {
+            connection_patterns = {"sequential": 0, "parallel": 0, "conditional": 0, "convergent": 0};
+        }
+
+        activity_events = [user_graph-->](?:ActivityEvent);
+        activity_data = analyze_activity_events(activity_events);
+        active_days = activity_data["active_days"];
+    } else {
+        connection_patterns = {"sequential": 0, "parallel": 0, "conditional": 0, "convergent": 0};
+    }
+
+    connection_patterns_pct = get_connection_patterns_percentages(connection_patterns);
+    scores = calculate_productivity_scores(total_tasks, total_edges, active_days);
+
+    insights = generate_personalized_insights(
+        total_tasks=total_tasks,
+        consistency_score=scores["consistency_score"],
+        efficiency_score=scores["efficiency_score"],
+        current_streak=scores["current_streak"],
+        peak_hour="0",
+        peak_day="Monday",
+        total_events=0,
+        emotion_distribution=emotion_distribution,
+        connection_patterns=connection_patterns_pct
+    );
+
+    # Convert PersonalizedInsight objects to dict format
+    insight_list = [];
+    if insights {
+        for insight in insights {
+            if hasattr(insight, "title") and insight.title {
+                insight_list.append({
+                    "title": insight.title,
+                    "description": insight.description,
+                    "category": insight.category,
+                    "actionable": insight.actionable
+                });
+            }
+        }
+    }
+
+    # Fallback insights if LLM fails
+    if len(insight_list) == 0 {
+        if total_tasks == 0 {
+            insight_list = [{
+                "title": "Getting Started",
+                "description": "Start creating tasks to track your progress and build productive routines.",
+                "category": "recommendations",
+                "actionable": True
+            }];
+        } else {
+            insight_list = [
+                {
+                    "title": "Building Momentum",
+                    "description": f"You've created {total_tasks} tasks. Keep building your routines!",
+                    "category": "productivity",
+                    "actionable": False
+                },
+                {
+                    "title": "Daily Tracker",
+                    "description": f"Your consistency score is {Math.round(scores["consistency_score"])}%. Keep tracking daily to improve.",
+                    "category": "consistency",
+                    "actionable": True
+                }
+            ];
+        }
+    }
+
+    report {
+        "success": True,
+        "insights": insight_list,
+        "category": self.category,
+        "count": len(insight_list)
+    };
+}
+
+# ========== Activity Event Logging ==========
+
+impl log_activity_event.log_event {
+    # Create or connect to user's activity event stream
+    user_node = find_user_graph(here, self.username);
+
+    if not user_node {
+        # Create user graph if doesn't exist
+        user_node = here ++> user_graph_data(username=self.username);
+    }
+
+    # Generate timestamp
+    timestamp_str = datetime.now().strftime("%Y-%m-%dT%H:%M:%S");
+
+    # Create the activity event
+    event_node = ActivityEvent(
+        event_type=self.event_type,
+        timestamp=timestamp_str,
+        event_data=self.event_data,
+        session_id=self.session_id,
+        task_context=self.task_context,
+        emotional_context=self.emotional_context,
+        duration_ms=self.duration_ms
+    );
+
+    # Connect event to user graph via temporal edge
+    user_node ++> event_node;
+
+    report {
+        "success": True,
+        "event_id": str(id(event_node)),
+        "timestamp": timestamp_str
+    };
+}
+
+def parse_printgraph_output(dot_output: str) -> tuple {
+    node_list = [];
+    edge_list = [];
+    node_map = {};
+
+    if not dot_output {
+        return (node_list, edge_list);
+    }
+
+    dot_output = dot_output.replace("&#x27;", "'");
+    dot_output = dot_output.replace("&quot;", '"');
+    lines = dot_output.split("\n");
+
+    # FIRST PASS: Parse all node definitions
+    for line in lines {
+        line = line.strip();
+        if "[label=" in line and "->" not in line {
+            parts = line.split("[label=");
+            if len(parts) == 2 {
+                node_id = parts[0].strip();
+                label = parts[1];
+                if "TaskState(task_name=" in label {
+                    start = label.find("task_name=") + 11;
+                    end = label.find("'", start + 1);
+                    if end > start {
+                        task_name = label[start:end];
+                        node_map[node_id] = task_name;
+                        node_list.append(task_name);
+                    }
+                }
+            }
+        }
+    }
+
+    # SECOND PASS: Parse edges (now that we have all nodes)
+    for line in lines {
+        line = line.strip();
+        if "->" in line and not line.startswith("//") {
+            parts = line.split("->");
+            if len(parts) == 2 {
+                from_id = parts[0].strip();
+                to_part = parts[1].strip();
+                to_id = "";
+                if "[" in to_part {
+                    to_id = to_part.split("[")[0].strip();
+                } else {
+                    to_id = to_part.strip().rstrip(";");
+                }
+
+                edge_label = "";
+                if "TaskFlow(label=" in to_part {
+                    label_idx = to_part.find("TaskFlow(label=");
+                    if label_idx >= 0 {
+                        rest = to_part[label_idx + 15:];
+                        if len(rest) > 1 and rest[0] == "'" {
+                            quote_end = rest.find("'", 1);
+                            if quote_end > 1 {
+                                edge_label = rest[1:quote_end];
+                            }
+                        }
+                    }
+                }
+
+                if from_id in node_map and to_id in node_map {
+                    edge_list.append({
+                        "from": node_map[from_id],
+                        "to": node_map[to_id],
+                        "label": edge_label
+                    });
+                }
+            }
+        }
+    }
+
+    return (node_list, edge_list);
+}
+
+def generate_dot_code_from_lists(node_list: list, edge_list: list) -> str {
+    if len(node_list) == 0 {
+        return "";
+    }
+
+    lines = ["digraph TaskGraph {"];
+    lines.append("  rankdir=TB;");
+    lines.append("  node [shape=box, style=rounded, fontname=\"Arial\"];");
+    lines.append("  edge [fontname=\"Arial\", fontsize=10];");
+    lines.append("");
+
+    for task_node in node_list {
+        if task_node == "Start" {
+            lines.append("  " + task_node + " [shape=circle, style=filled, fillcolor=\"#22c55e\", fontcolor=white];");
+        } else {
+            lines.append("  " + task_node + " [style=\"rounded,filled\", fillcolor=\"#3b82f6\", fontcolor=white];");
+        }
+    }
+
+    lines.append("");
+
+    for conn in edge_list {
+        from_task = conn.get("from", "");
+        to_task = conn.get("to", "");
+        conn_label = conn.get("label", "");
+        if conn_label {
+            lines.append("  " + from_task + " -> " + to_task + " [label=\"" + conn_label + "\"];");
+        } else {
+            lines.append("  " + from_task + " -> " + to_task + ";");
+        }
+    }
+
+    lines.append("}");
+    return "\n".join(lines);
+}
+
+def find_leaf_nodes(edge_list: list, node_list: list) -> list {
+    nodes_with_outgoing = {};
+    for edge in edge_list {
+        from_task = edge.get("from", "");
+        if from_task {
+            nodes_with_outgoing[from_task] = True;
+        }
+    }
+
+    # Leaf nodes are those without outgoing edges (excluding Start)
+    leaf_nodes = [];
+    for node in node_list {
+        if node != "Start" and node not in nodes_with_outgoing {
+            leaf_nodes.append(node);
+        }
+    }
+
+    if len(leaf_nodes) == 0 and len(node_list) > 1 {
+        return [node_list[-1]];
+    }
+
+    return leaf_nodes;
+}
+
+"""Find user's graph or return None"""
+def find_user_graph(root_node: node, username: str) {
+    all_graphs = [root_node-->](?:user_graph_data);
+    for graph in all_graphs {
+        if graph?.username and graph.username == username {
+            return graph;
+        }
+    }
+    return None;
+}
+
+"""Find manager comm data node or return None"""
+def find_manager_comm_data(root_node: node, username: str) {
+    all_comm_data = [root_node-->](?:manager_comm_data);
+    for comm_data in all_comm_data {
+        if comm_data?.username and comm_data.username == username {
+            return comm_data;
+        }
+    }
+    return None;
+}
+
+"""Find Start node in graph - only direct children of user_graph"""
+def find_start_node(graph_node: node) {
+    direct_task_nodes = [graph_node-->](?:TaskState);
+    for node in direct_task_nodes {
+        if node?.task_name and node.task_name == "Start" {
+            return node;
+        }
+    }
+    return None;
+}
+
+"""Get graph structure as node/edge lists and DOT code"""
+def get_graph_structure(graph_node: node) {
+    start_node = find_start_node(graph_node);
+    node_list = [];
+    edge_list = [];
+    if start_node {
+        dot_output = printgraph(node=start_node);
+        result = parse_printgraph_output(dot_output);
+        node_list = result[0];
+        edge_list = result[1];
+    }
+    dot_code = generate_dot_code_from_lists(node_list, edge_list);
+    return (node_list, edge_list, dot_code);
+}
+
+"""Get user-specific graph structure with bounded traversal"""
+def get_user_graph_structure(user_graph_node: node) {
+    node_list = [];
+    edge_list = [];
+
+    direct_nodes = [user_graph_node-->](?:TaskState);
+    node_map = {};
+    for node in direct_nodes {
+        if node?.task_name {
+            node_map[id(node)] = node.task_name;
+            node_list.append(node.task_name);
+        }
+    }
+
+    for from_node in direct_nodes {
+        if from_node?.task_name {
+            successors = [from_node-->](?:TaskState);
+            for to_node in successors {
+                if id(to_node) in node_map {
+                    edge_label = extract_edge_label_via_printgraph(from_node, to_node);
+                    edge_list.append({
+                        "from": from_node.task_name,
+                        "to": to_node.task_name,
+                        "label": edge_label
+                    });
+                }
+            }
+        }
+    }
+
+    return (node_list, edge_list);
+}
+
+# Extract edge label between two nodes using printgraph
+def extract_edge_label_via_printgraph(from_node: node, to_node: node) -> str {
+    try {
+        dot_output = printgraph(node=from_node, depth=1);
+        if not dot_output {
+            return "";
+        }
+
+        dot_output = dot_output.replace("&#x27;", "'");
+        dot_output = dot_output.replace("&quot;", '"');
+        lines = dot_output.split("\n");
+
+        to_task_name = to_node.task_name if hasattr(to_node, 'task_name') else None;
+        if not to_task_name {
+            return "";
+        }
+        
+        # FIRST PASS: Build node ID -> task_name map
+        node_map = {};
+        for line in lines {
+            line = line.strip();
+            if "[label=" in line and "->" not in line {
+                parts = line.split("[label=");
+                if len(parts) == 2 {
+                    node_id = parts[0].strip();
+                    label = parts[1];
+                    if "TaskState(task_name=" in label {
+                        start = label.find("task_name=") + 11;
+                        end = label.find("'", start + 1);
+                        if end > start {
+                            node_map[node_id] = label[start:end];
+                        }
+                    }
+                }
+            }
+        }
+
+        target_node_id = None;
+        for node_id in node_map {
+            if node_map[node_id] == to_task_name {
+                target_node_id = node_id;
+                break;
+            }
+        }
+
+        if not target_node_id {
+            return "";
+        }
+        
+        # SECOND PASS: Find edge to target and extract TaskFlow label
+        for line in lines {
+            line = line.strip();
+            if "->" in line and not line.startswith("//") {
+                parts = line.split("->");
+                if len(parts) == 2 {
+                    to_part = parts[1].strip();
+                    to_id = to_part.split("[")[0].strip() if "[" in to_part else to_part.strip().rstrip(";");
+
+                    if to_id == target_node_id and "TaskFlow(label=" in to_part {
+                        label_idx = to_part.find("TaskFlow(label=");
+                        rest = to_part[label_idx + 15:];
+                        if len(rest) > 1 and rest[0] == "'" {
+                            quote_end = rest.find("'", 1);
+                            if quote_end > 1 {
+                                return rest[1:quote_end];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } except Exception as e {
+        # Silently fail and return empty label
+        return "";
+    }
+
+    return "";
+}
+
+# ========== Analytics Utilities ==========
+
+# Shared helper: Extract connection patterns from edge list
+def get_connection_patterns(edge_list: list) -> dict {
+    patterns: dict = {"sequential": 0, "parallel": 0, "conditional": 0, "convergent": 0};
+    for edge in edge_list {
+        label = edge.get("label", "").lower();
+        if label in ["then", "after", "next"] {
+            patterns["sequential"] = patterns["sequential"] + 1;
+        } elif label in ["while", "as", "same time", "parallel"] {
+            patterns["parallel"] = patterns["parallel"] + 1;
+        } elif label in ["if", "when", "else", "otherwise"] {
+            patterns["conditional"] = patterns["conditional"] + 1;
+        } elif label in ["either way", "merge", "converge"] {
+            patterns["convergent"] = patterns["convergent"] + 1;
+        } else {
+            patterns["sequential"] = patterns["sequential"] + 1;
+        }
+    }
+    return patterns;
+}
+
+# Shared helper: Convert connection patterns to percentages
+def get_connection_patterns_percentages(patterns: dict) -> dict {
+    total = 0;
+    for conn_type in patterns {
+        total = total + patterns[conn_type];
+    }
+    if total > 0 {
+        result = {};
+        for conn_type in patterns {
+            result[conn_type] = float(patterns[conn_type]) / float(total);
+        }
+        return result;
+    }
+    return {"sequential": 1.0, "parallel": 0.0, "conditional": 0.0, "convergent": 0.0};
+}
+
+# Shared helper: Calculate productivity scores
+def calculate_productivity_scores(total_tasks: int, total_edges: int, active_days: int) -> dict {
+    consistency_score = 50.0;
+    if total_tasks > 0 and active_days > 0 {
+        tasks_per_day = float(total_tasks) / float(active_days);
+        consistency_score = min(100.0, tasks_per_day * 20.0 + 30.0);
+    }
+
+    efficiency_score = 50.0;
+    if total_tasks > 0 {
+        edge_ratio = float(total_edges) / float(total_tasks);
+        efficiency_score = min(100.0, edge_ratio * 40.0 + 40.0);
+    }
+
+    current_streak = max(1, active_days);
+
+    return {
+        "consistency_score": consistency_score,
+        "efficiency_score": efficiency_score,
+        "current_streak": current_streak
+    };
+}
+
+# Shared helper: Count activity events and track active days
+def analyze_activity_events(activity_events: list) -> dict {
+    event_counts: dict = {"task_created": 0, "voice_interaction": 0, "insights_requested": 0, "task_connected": 0};
+    voice_interaction_count = 0;
+    total_sessions = 0;
+    active_days_set: dict = {};
+
+    for event in activity_events {
+        if hasattr(event, "event_type") {
+            event_type = event.event_type;
+            if event_type in event_counts {
+                event_counts[event_type] = event_counts[event_type] + 1;
+            }
+            if event_type == "voice_interaction" {
+                voice_interaction_count = voice_interaction_count + 1;
+                total_sessions = total_sessions + 1;
+            } elif event_type == "insights_requested" {
+                total_sessions = total_sessions + 1;
+            }
+        }
+        if hasattr(event, "timestamp") and event.timestamp {
+            date_parts = event.timestamp.split("T");
+            if len(date_parts) > 0 {
+                active_days_set[date_parts[0]] = True;
+            }
+        }
+    }
+
+    return {
+        "event_counts": event_counts,
+        "voice_interaction_count": voice_interaction_count,
+        "total_sessions": total_sessions,
+        "active_days": len(active_days_set),
+        "active_days_set": active_days_set
+    };
+}
+
+# Shared helper: Parse timestamp and extract hour/day
+def parse_timestamp_parts(timestamp: str) -> dict {
+    time_parts = timestamp.split("T");
+    hour_str = "0";
+    day_name = "Monday";
+
+    if len(time_parts) > 1 {
+        hour_parts = time_parts[1].split(":");
+        if len(hour_parts) > 0 {
+            hour_str = hour_parts[0];
+        }
+    }
+
+    if len(time_parts) > 0 {
+        date_parts = time_parts[0].split("-");
+        if len(date_parts) == 3 {
+            date_obj = datetime(int(date_parts[0]), int(date_parts[1]), int(date_parts[2]));
+            weekday_index = int(date_obj.strftime("%w"));
+            days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+            day_name = days[weekday_index];
+        }
+    }
+
+    return {"hour": hour_str, "day": day_name};
+}
+
+# ========== Enhanced Analytics Walker Implementations ==========
+
+impl discover_patterns.find_patterns {
+    user_graph = find_user_graph(here, self.username);
+
+    if not user_graph {
+        report {"success": True, "patterns": [], "count": 0};
+        return;
+    }
+
+    # Gather data for pattern discovery
+    activity_events = [user_graph-->](?:ActivityEvent);
+    graph_result = get_user_graph_structure(user_graph);
+
+    event_data = [];
+    for event in activity_events {
+        if hasattr(event, "timestamp") and event.timestamp {
+            event_data.append({
+                "event_type": event.event_type,
+                "timestamp": event.timestamp,
+                "task_context": event.task_context if hasattr(event, "task_context") else ""
+            });
+        }
+    }
+
+    task_nodes = [];
+    task_edges = [];
+    if graph_result and len(graph_result) >= 2 {
+        task_nodes = graph_result[0];
+        task_edges = graph_result[1];
+    }
+
+    # Use semantic function to discover patterns
+    patterns = discover_routine_patterns(
+        activity_events=event_data,
+        task_graph_nodes=task_nodes,
+        task_graph_edges=task_edges,
+        time_window_days=self.time_window_days
+    );
+
+    # Convert to dict format
+    pattern_list = [];
+    if patterns {
+        for pattern in patterns {
+            pattern_dict = {
+                "pattern_name": pattern.pattern_name,
+                "task_sequence": pattern.task_sequence,
+                "frequency": pattern.frequency,
+                "confidence": pattern.confidence,
+                "time_context": pattern.time_context,
+                "description": pattern.description
+            };
+            pattern_list.append(pattern_dict);
+        }
+    }
+
+    report {
+        "success": True,
+        "patterns": pattern_list,
+        "count": len(pattern_list)
+    };
+}
+
+impl get_temporal_insights.analyze_temporal {
+    user_graph = find_user_graph(here, self.username);
+
+    if not user_graph {
+        report {"success": False, "insights": []};
+        return;
+    }
+
+    activity_events = [user_graph-->](?:ActivityEvent);
+
+    event_data = [];
+    for event in activity_events {
+        if hasattr(event, "timestamp") and event.timestamp {
+            event_data.append({
+                "event_type": event.event_type,
+                "timestamp": event.timestamp
+            });
+        }
+    }
+
+    # Use semantic function for temporal analysis
+    temporal_insights = analyze_temporal_patterns(
+        activity_events=event_data,
+        lookback_days=self.lookback_days
+    );
+
+    insight_list = [];
+    if temporal_insights {
+        for insight in temporal_insights {
+            insight_dict = {
+                "insight_type": insight.insight_type,
+                "description": insight.description,
+                "peak_hours": insight.peak_hours,
+                "peak_days": insight.peak_days,
+                "confidence": insight.confidence,
+                "actionable_recommendation": insight.actionable_recommendation
+            };
+            insight_list.append(insight_dict);
+        }
+    }
+
+    report {
+        "success": True,
+        "insights": insight_list,
+        "count": len(insight_list)
+    };
+}
+
+impl get_comparative_insights.compare_periods {
+    user_graph = find_user_graph(here, self.username);
+
+    if not user_graph {
+        report {"success": False, "comparisons": []};
+        return;
+    }
+
+    activity_events = [user_graph-->](?:ActivityEvent);
+    current_time = datetime.now();
+
+    # Calculate period boundaries
+    if self.period_type == "week" {
+        current_start = (current_time - timedelta(days=7)).strftime("%Y-%m-%dT00:00:00");
+        previous_start = (current_time - timedelta(days=14)).strftime("%Y-%m-%dT00:00:00");
+        previous_end = (current_time - timedelta(days=7)).strftime("%Y-%m-%dT23:59:59");
+    } else {
+        current_start = (current_time - timedelta(days=30)).strftime("%Y-%m-%dT00:00:00");
+        previous_start = (current_time - timedelta(days=60)).strftime("%Y-%m-%dT00:00:00");
+        previous_end = (current_time - timedelta(days=30)).strftime("%Y-%m-%dT23:59:59");
+    }
+
+    current_events = [];
+    previous_events = [];
+
+    for event in activity_events {
+        if hasattr(event, "timestamp") and event.timestamp {
+            if event.timestamp >= current_start {
+                current_events.append({
+                    "event_type": event.event_type,
+                    "timestamp": event.timestamp
+                });
+            } elif event.timestamp >= previous_start and event.timestamp <= previous_end {
+                previous_events.append({
+                    "event_type": event.event_type,
+                    "timestamp": event.timestamp
+                });
+            }
+        }
+    }
+
+    # Use semantic function for comparison
+    comparisons = generate_comparative_insights(
+        current_period_events=current_events,
+        previous_period_events=previous_events,
+        period_type=self.period_type
+    );
+
+    comparison_list = [];
+    if comparisons {
+        for comp in comparisons {
+            comparison_dict = {
+                "comparison_type": comp.comparison_type,
+                "current_period": comp.current_period,
+                "previous_period": comp.previous_period,
+                "change_percentage": comp.change_percentage,
+                "trend": comp.trend,
+                "narrative": comp.narrative
+            };
+            comparison_list.append(comparison_dict);
+        }
+    }
+
+    report {
+        "success": True,
+        "comparisons": comparison_list,
+        "count": len(comparison_list)
+    };
+}
+
+# ========== Goal Management Implementations ==========
+
+impl create_goal.initialize_goal {
+    user_graph = find_user_graph(here, self.username);
+
+    if not user_graph {
+        user_graph = here ++> user_graph_data(username=self.username);
+    }
+
+    goal = here ++> UserGoal(
+        goal_type=self.goal_type,
+        target_value=self.target_value,
+        current_value=0,
+        created_at=datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        achieved=False,
+        achieved_at=""
+    );
+
+    user_graph ++> goal;
+
+    report {
+        "success": True,
+        "goal_id": str(id(goal)),
+        "goal_type": self.goal_type,
+        "target_value": self.target_value,
+        "created_at": goal.created_at
+    };
+}
+
+impl get_goals.fetch_goals {
+    user_graph = find_user_graph(here, self.username);
+
+    goal_list = [];
+
+    if user_graph {
+        goals = [user_graph-->](?:UserGoal);
+        for goal in goals {
+            goal_dict = {
+                "goal_id": str(id(goal)),
+                "goal_type": goal.goal_type,
+                "target_value": goal.target_value,
+                "current_value": goal.current_value,
+                "created_at": goal.created_at,
+                "achieved": goal.achieved,
+                "achieved_at": goal.achieved_at
+            };
+            goal_list.append(goal_dict);
+        }
+    }
+
+    report {
+        "success": True,
+        "goals": goal_list,
+        "count": len(goal_list)
+    };
+}
+
+impl update_goal.update_goal {
+    user_graph = find_user_graph(here, self.username);
+
+    if user_graph {
+        goals = [user_graph-->](?:UserGoal);
+        for goal in goals {
+            if goal.goal_type == self.goal_type {
+                old_value = goal.current_value;
+                goal.current_value = self.progress;
+
+                # Check if achieved
+                if goal.current_value >= goal.target_value and not goal.achieved {
+                    goal.achieved = True;
+                    goal.achieved_at = datetime.now().strftime("%Y-%m-%dT%H:%M:%S");
+
+                    # Log achievement event
+                    log_event = ActivityEvent(
+                        event_type="goal_achieved",
+                        timestamp=datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                        event_data={"goal_type": goal.goal_type, "target_value": goal.target_value},
+                        session_id="",
+                        task_context="",
+                        emotional_context="",
+                        duration_ms=0
+                    );
+                    user_graph ++> log_event;
+                }
+
+                report {
+                    "success": True,
+                    "goal_type": goal.goal_type,
+                    "old_value": old_value,
+                    "new_value": goal.current_value,
+                    "target_value": goal.target_value,
+                    "achieved": goal.achieved
+                };
+                return;
+            }
+        }
+    }
+
+    report {"success": False, "error": "Goal not found"};
+}
+
+# ========== Achievement System Implementations ==========
+
+impl check_achievements.evaluate_achievements {
+    user_graph = find_user_graph(here, self.username);
+
+    newly_unlocked = [];
+
+    if user_graph {
+        # Get user stats for achievement checking
+        graph_result = get_user_graph_structure(user_graph);
+        total_tasks = 0;
+        total_edges = 0;
+        if graph_result and len(graph_result) >= 2 {
+            total_tasks = len(graph_result[0]);
+            total_edges = len(graph_result[1]);
+        }
+
+        activity_events = [user_graph-->](?:ActivityEvent);
+        voice_count = 0;
+        for event in activity_events {
+            if hasattr(event, "event_type") and event.event_type == "voice_interaction" {
+                voice_count = voice_count + 1;
+            }
+        }
+
+        # Check streak
+        activity_data = analyze_activity_events(activity_events);
+        active_days = activity_data["active_days"];
+
+        # Get existing achievements
+        existing_achievements = [user_graph-->](?:Achievement);
+        existing_ids = {};
+        for ach in existing_achievements {
+            existing_ids[ach.achievement_id] = True;
+        }
+
+        # Check achievement conditions
+        achievements_to_check = [
+            {"id": "first_task", "title": "First Step", "description": "Create your first task", "rarity": "common", "condition": total_tasks >= 1},
+            {"id": "three_day_streak", "title": "On a Roll", "description": "3-day activity streak", "rarity": "common", "condition": active_days >= 3},
+            {"id": "week_warrior", "title": "Week Warrior", "description": "7-day activity streak", "rarity": "rare", "condition": active_days >= 7},
+            {"id": "monthly_master", "title": "Monthly Master", "description": "30-day activity streak", "rarity": "legendary", "condition": active_days >= 30},
+            {"id": "voice_first", "title": "Voice Activated", "description": "First voice command", "rarity": "common", "condition": voice_count >= 1},
+            {"id": "voice_regular", "title": "Voice Regular", "description": "50 voice interactions", "rarity": "rare", "condition": voice_count >= 50},
+            {"id": "centurion", "title": "Centurion", "description": "100 total tasks", "rarity": "rare", "condition": total_tasks >= 100}
+        ];
+
+        for ach in achievements_to_check {
+            if ach["condition"] and ach["id"] not in existing_ids {
+                new_achievement = here ++> Achievement(
+                    achievement_id=ach["id"],
+                    title=ach["title"],
+                    description=ach["description"],
+                    rarity=ach["rarity"],
+                    unlocked_at=datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+                );
+                user_graph ++> new_achievement;
+                newly_unlocked.append({
+                    "achievement_id": ach["id"],
+                    "title": ach["title"],
+                    "description": ach["description"],
+                    "rarity": ach["rarity"]
+                });
+            }
+        }
+    }
+
+    report {
+        "success": True,
+        "newly_unlocked": newly_unlocked,
+        "count": len(newly_unlocked)
+    };
+}
+
+impl get_achievements.fetch_achievements {
+    user_graph = find_user_graph(here, self.username);
+
+    achievement_list = [];
+
+    if user_graph {
+        achievements = [user_graph-->](?:Achievement);
+        for ach in achievements {
+            achievement_dict = {
+                "achievement_id": ach.achievement_id,
+                "title": ach.title,
+                "description": ach.description,
+                "rarity": ach.rarity,
+                "unlocked_at": ach.unlocked_at
+            };
+            achievement_list.append(achievement_dict);
+        }
+    }
+
+    report {
+        "success": True,
+        "achievements": achievement_list,
+        "total_count": len(achievement_list)
+    };
+}
+
+# ========== Proactive Insights Implementation ==========
+
+impl get_proactive_insights.generate_proactive {
+    user_graph = find_user_graph(here, self.username);
+
+    if not user_graph {
+        report {"success": True, "insights": []};
+        return;
+    }
+
+    # Gather user data
+    activity_events = [user_graph-->](?:ActivityEvent);
+    goals = [user_graph-->](?:UserGoal);
+
+    recent_events = [];
+    for event in activity_events {
+        if hasattr(event, "timestamp") and event.timestamp {
+            recent_events.append({
+                "event_type": event.event_type,
+                "timestamp": event.timestamp
+            });
+        }
+    }
+
+    # Get current streak
+    activity_data = analyze_activity_events(activity_events);
+    current_streak = activity_data["active_days"];
+
+    # Get goal data
+    goal_data = [];
+    for goal in goals {
+        goal_data.append({
+            "goal_type": goal.goal_type,
+            "target_value": goal.target_value,
+            "current_value": goal.current_value,
+            "achieved": goal.achieved
+        });
+    }
+
+    # Use semantic function to check for proactive triggers
+    trigger_result = should_trigger_proactive_insight(
+        recent_events=recent_events,
+        user_goals=goal_data,
+        current_streak=current_streak,
+        last_insight_time="",
+        user_context={}
+    );
+
+    if trigger_result and trigger_result["should_trigger"] {
+        report {
+            "success": True,
+            "has_proactive": True,
+            "insight_type": trigger_result["insight_type"],
+            "urgency": trigger_result["urgency"],
+            "message": trigger_result["message"]
+        };
+    } else {
+        report {"success": True, "has_proactive": False};
+    }
+}
+
+# ========== Insight Feedback Implementations ==========
+
+impl mark_insight_viewed.mark_viewed {
+    # Find insight by ID and mark as viewed
+    insights = [-->](?:UserInsight);
+    for insight in insights {
+        if str(id(insight)) == self.insight_id {
+            insight.viewed = True;
+            report {"success": True, "insight_id": self.insight_id};
+            return;
+        }
+    }
+    report {"success": False, "error": "Insight not found"};
+}
+
+impl mark_insight_acted.mark_acted {
+    insights = [-->](?:UserInsight);
+    for insight in insights {
+        if str(id(insight)) == self.insight_id {
+            insight.acted_upon = True;
+            report {"success": True, "insight_id": self.insight_id};
+            return;
+        }
+    }
+    report {"success": False, "error": "Insight not found"};
+}
+
+impl dismiss_insight.dismiss {
+    insights = [-->](?:UserInsight);
+    for insight in insights {
+        if str(id(insight)) == self.insight_id {
+            insight.dismissed = True;
+            report {"success": True, "insight_id": self.insight_id, "reason": self.reason};
+            return;
+        }
+    }
+    report {"success": False, "error": "Insight not found"};
+}
+

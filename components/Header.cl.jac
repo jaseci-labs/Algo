@@ -1,13 +1,13 @@
 # Header Component
 # Application header with logo, user info, and controls
 
-import from react { memo }
-import from "lucide-react" { Bot, LogOut, ChevronDown }
+import from react { memo, Fragment }
+import from "lucide-react" { Bot, LogOut, ChevronDown, BarChart3 }
 import from .ThemeToggle { ThemeToggle }
 import from .UserAvatar { UserAvatar }
 import from "@jac/runtime" { jacLogout, useNavigate }
 
-def HeaderComponent(isDarkMode: bool, onToggleTheme: any) -> any {
+def HeaderComponent(isDarkMode: bool, onToggleTheme: any, onToggleAnalytics: any = None) -> any {
     navigate = useNavigate();
     
     def handleLogout(e: any) -> None {
@@ -28,6 +28,11 @@ def HeaderComponent(isDarkMode: bool, onToggleTheme: any) -> any {
 
         <div className="flex items-center gap-3">
             <ThemeToggle isDarkMode={isDarkMode} onToggle={onToggleTheme} />
+            {
+                (<button onClick={onToggleAnalytics} className="control-button w-9 h-9 bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground">
+                    <BarChart3 className="w-4 h-4" />
+                </button>) if onToggleAnalytics else (<Fragment />)
+            }
             <UserAvatar />
             <button onClick={lambda e:any -> None {handleLogout(e);}} className="control-button w-9 h-9 bg-destructive/10 text-destructive hover:bg-destructive/20">
                 <LogOut  className="w-4 h-4" />

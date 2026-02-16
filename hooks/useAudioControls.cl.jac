@@ -69,7 +69,6 @@ def:pub useAudioControls(sessionRef: any, sessionStatus: str) -> any {
     can with (isMicMuted, sessionStatus) entry {
         if sessionRef.current {
             try {
-                console.log("Setting mic mute state to:", isMicMuted);
                 sessionRef.current.mute(isMicMuted);
             } except Exception as e {
                 console.error("Error toggling mic:", e);

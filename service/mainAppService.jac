@@ -20,6 +20,10 @@ import from semantics.semantics {
     InsertValidationResult,
     ReorderValidationResult,
     EdgeLabelValidationResult,
+    PersonalizedInsight,
+    RoutinePattern,
+    TemporalInsight,
+    ComparisonInsight,
     detect_emotional_state,
     analyze_conversation_intent,
     extract_raw_task_names,
@@ -34,7 +38,12 @@ import from semantics.semantics {
     validate_rename_operation,
     validate_insert_operation,
     validate_reorder_operation,
-    validate_edge_labels
+    validate_edge_labels,
+    generate_personalized_insights,
+    discover_routine_patterns,
+    analyze_temporal_patterns,
+    generate_comparative_insights,
+    should_trigger_proactive_insight
 }
 
 node TaskState {
@@ -73,9 +82,70 @@ node user_routines {
     has routines: dict = {};
 }
 
-# with entry {
-#     load_dotenv();
-# }
+# ========== Analytics Nodes ==========
+
+# Activity Event Tracking
+node ActivityEvent {
+    has event_type: str;
+    has timestamp: str;
+    has event_data: dict = {};
+    has session_id: str = "";
+
+    # Enhanced fields for tracking
+    has task_context: str = "";
+    has emotional_context: str = "";
+    has duration_ms: int = 0;
+}
+
+# User Insight - Stores generated insights with tracking
+node UserInsight {
+    has insight_type: str;
+    has title: str;
+    has description: str;
+    has category: str;
+    has actionable: bool = False;
+    has created_at: str = "";
+    has viewed: bool = False;
+    has acted_upon: bool = False;
+    has relevance_score: float = 1.0;
+    has dismissed: bool = False;
+}
+
+# User Goal - Goal setting and tracking
+node UserGoal {
+    has goal_type: str;
+    has target_value: int = 0;
+    has current_value: int = 0;
+    has created_at: str = "";
+    has achieved: bool = False;
+    has achieved_at: str = "";
+}
+
+# Achievement - Gamification
+node Achievement {
+    has achievement_id: str;
+    has title: str;
+    has description: str;
+    has rarity: str = "common";
+    has unlocked_at: str = "";
+}
+
+# Session Data - Deep work tracking
+node SessionData {
+    has session_start: str = "";
+    has session_end: str = "";
+    has tasks_created: int = 0;
+    has voice_interactions: int = 0;
+    has dominant_emotion: str = "neutral";
+}
+
+edge EventFlow {
+    has temporal_order: int = 0;
+}
+
+with entry {
+    load_dotenv();
+}
 
 walker :pub get_session_token {
     can fetch with Root entry;
@@ -177,3 +247,147 @@ walker :pub validate_graph_output {
 
     can validate with Root entry;
 }
+
+# ========== Analytics Walkers ==========
+
+walker :pub get_activity_report {
+    has username: str = "anonymous";
+    has date_range: dict = {};
+
+    can generate_report with Root entry;
+}
+
+walker :pub get_trend_analysis {
+    has username: str = "anonymous";
+    has period: str = "week";
+
+    can analyze_trends with Root entry;
+}
+
+walker :pub analyze_behavioral_patterns {
+    has username: str = "anonymous";
+
+    can extract_patterns with Root entry;
+}
+
+walker :pub calculate_productivity_metrics {
+    has username: str = "anonymous";
+
+    can compute_metrics with Root entry;
+}
+
+walker :pub generate_insights {
+    has username: str = "anonymous";
+    has category: str = "all";
+
+    can create_insights with Root entry;
+}
+
+# Event Logging Walker
+walker :pub log_activity_event {
+    has event_type: str;
+    has event_data: dict = {};
+    has session_id: str = "";
+    has username: str = "anonymous";
+    has task_context: str = "";
+    has emotional_context: str = "";
+    has duration_ms: int = 0;
+    can log_event with Root entry;
+}
+
+# ========== Enhanced Analytics Walkers ==========
+
+# Pattern Discovery
+walker :pub discover_patterns {
+    has username: str = "anonymous";
+    has time_window_days: int = 30;
+
+    can find_patterns with Root entry;
+}
+
+# Temporal Analysis
+walker :pub get_temporal_insights {
+    has username: str = "anonymous";
+    has lookback_days: int = 30;
+
+    can analyze_temporal with Root entry;
+}
+
+# Comparative Insights
+walker :pub get_comparative_insights {
+    has username: str = "anonymous";
+    has period_type: str = "week";
+
+    can compare_periods with Root entry;
+}
+
+# ========== Goal Management Walkers ==========
+
+walker :pub create_goal {
+    has goal_type: str;
+    has username: str = "anonymous";
+    has target_value: int = 0;
+
+    can initialize_goal with Root entry;
+}
+
+walker :pub get_goals {
+    has username: str = "anonymous";
+
+    can fetch_goals with Root entry;
+}
+
+walker :pub update_goal_progress {
+    has goal_type: str;
+    has username: str = "anonymous";
+    has progress: int = 0;
+
+    can update_goal with Root entry;
+}
+
+# ========== Achievement System Walkers ==========
+
+walker :pub check_achievements {
+    has username: str = "anonymous";
+
+    can evaluate_achievements with Root entry;
+}
+
+walker :pub get_achievements {
+    has username: str = "anonymous";
+
+    can fetch_achievements with Root entry;
+}
+
+# ========== Proactive Insights ==========
+
+walker :pub get_proactive_insights {
+    has username: str = "anonymous";
+
+    can generate_proactive with Root entry;
+}
+
+# ========== Insight Feedback Walkers ==========
+
+walker :pub mark_insight_viewed {
+    has username: str = "anonymous";
+    has insight_id: str = "";
+
+    can mark_viewed with Root entry;
+}
+
+walker :pub mark_insight_acted_upon {
+    has username: str = "anonymous";
+    has insight_id: str = "";
+
+    can mark_acted with Root entry;
+}
+
+walker :pub dismiss_insight {
+    has username: str = "anonymous";
+    has insight_id: str = "";
+    has reason: str = "";
+
+    can dismiss with Root entry;
+}
+
