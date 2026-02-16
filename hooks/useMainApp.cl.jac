@@ -124,17 +124,13 @@ def:pub useMainApp() -> any {
             assistantItemId = "assistant-" + String(Date.now());
             addTranscriptItem(assistantItemId, "assistant", "Thinking...");
 
-            console.log("Calling supervisor with message:", message, "username:", username);
             result = await callManager(message, [], username);
-            console.log("Supervisor result:", result);
             if result.success {
                 # Pass thinking data if available
                 thinkingData = None;
                 if result.thinking {
-                    console.log("Found thinking data:", result.thinking);
                     thinkingData = result.thinking;
                 }
-                console.log("Updating transcript with thinking:", thinkingData);
                 updateTranscriptItem(assistantItemId, result.response, thinkingData);
                 await refreshGraphState(username);
 
@@ -178,10 +174,8 @@ def:pub useMainApp() -> any {
                 # Pass thinking data if available
                 thinkingData = None;
                 if result.thinking {
-                    console.log("Found thinking data from suggestion:", result.thinking);
                     thinkingData = result.thinking;
                 }
-                console.log("Updating transcript with thinking:", thinkingData);
                 updateTranscriptItem(assistantItemId, result.response, thinkingData);
                 await refreshGraphState(username);
 
@@ -212,10 +206,9 @@ def:pub useMainApp() -> any {
         
         try {
             username = getUsernameFromToken();
-            
+
             result = await saveRoutine("daily_routine", username);
-            console.log("Save routine response:", result);
-            
+
             if result.success {
                 addMessage("system", "Routine saved! Restarting session...");
                 

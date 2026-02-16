@@ -6,6 +6,7 @@ Algo is a voice-enabled personal AI assistant that helps you visualize and manag
 
 - 🎙️ **Voice Interface** - Natural conversations via OpenAI Realtime API
 - 📊 **Task Graph Visualization** - Interactive directed graph showing your routines
+- 📈 **Analytics & Insights** - Activity tracking, behavioral patterns, and AI-powered recommendations
 - 🤖 **Multi-Agent Architecture** - Manager supervises Graph Agent with intelligent validation
 - ✅ **Automatic Corrections** - Detects and fixes missing tasks, wrong names, and incorrect edge labels
 - 🔄 **Graph Operations** - Rename tasks, insert between tasks, reorder routines
@@ -78,6 +79,26 @@ The Manager validates multiple operation types:
 | **Reorder** | Validates task reordering (no circular refs, correct order) |
 | **Edge Labels** | Validates edge labels match user intent (conditional, parallel, sequential) |
 
+### Analytics System
+
+Algo tracks user activity through `ActivityEvent` nodes connected to user graphs:
+
+| Walker | Description |
+|--------|-------------|
+| **get_activity_report** | Basic stats: task/edge counts, sessions, days tracked |
+| **get_trend_analysis** | Temporal patterns: hourly/daily activity, peak times |
+| **analyze_behavioral_patterns** | Emotion distribution, connection patterns, complexity trends |
+| **calculate_productivity_metrics** | Consistency/efficiency scores, streak tracking |
+| **generate_insights** | AI-powered personalized recommendations |
+| **log_activity_event** | Records events: `task_created`, `voice_interaction`, `insights_requested`, etc. |
+
+**Shared utilities** (`mainAppService.impl.jac`):
+- `get_connection_patterns()` - Extract edge types from graph
+- `get_connection_patterns_percentages()` - Convert to percentages
+- `calculate_productivity_scores()` - Consistency, efficiency, streak
+- `analyze_activity_events()` - Count events, track active days
+- `parse_timestamp_parts()` - Extract hour/day from timestamps
+
 ### Supported Operations
 
 - **Rename**: "rename `MakeCoffee` to `GrabCoffee`"
@@ -104,13 +125,19 @@ Algo/
 ├── main.jac                    # Entry point
 ├── service/
 │   ├── mainAppService.jac     # Service layer definition
-│   └── mainAppService.impl.jac # Implementation (Graph Agent, Manager, helpers)
+│   └── mainAppService.impl.jac # Implementation (Graph Agent, Manager, Analytics, helpers)
 ├── semantics/
-│   └── semantics.jac           # LLM semantic functions (intent, extraction, validation)
+│   └── semantics.jac           # LLM semantic functions (intent, extraction, validation, insights)
 ├── api/
-│   └── api.cl.jac              # Frontend API endpoints
+│   ├── api.cl.jac              # Frontend API endpoints (auth, graph)
+│   └── analytics.cl.jac        # Analytics API endpoints
 ├── hooks/
-│   └── useMainApp.cl.jac       # React composition hooks
+│   ├── useMainApp.cl.jac       # React composition hooks
+│   ├── useTranscript.cl.jac    # Message history
+│   ├── useGraph.cl.jac         # Graph state
+│   ├── useRealtimeSession.cl.jac # OpenAI WebSocket
+│   ├── useAudioControls.cl.jac  # Microphone control
+│   └── useAnalytics.cl.jac      # Analytics data fetching
 ├── pages/
 │   ├── MainApp.cl.jac          # Main app interface
 │   ├── LoginPage.cl.jac        # Login page
