@@ -1642,7 +1642,7 @@ def get_graph_structure(graph_node: node) {
     node_list = [];
     edge_list = [];
     if start_node {
-        dot_output = printgraph(node=start_node);
+        dot_output = printgraph(start_node);
         result = parse_printgraph_output(dot_output);
         node_list = result[0];
         edge_list = result[1];
@@ -1687,7 +1687,7 @@ def get_user_graph_structure(user_graph_node: node) {
 # Extract edge label between two nodes using printgraph
 def extract_edge_label_via_printgraph(from_node: node, to_node: node) -> str {
     try {
-        dot_output = printgraph(node=from_node, depth=1);
+        dot_output = printgraph(from_node, 1);
         if not dot_output {
             return "";
         }
