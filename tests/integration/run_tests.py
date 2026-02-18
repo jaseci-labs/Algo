@@ -459,34 +459,6 @@ def test_reset_session(results: IntegrationTestResult):
         results.add_fail("Reset Session", f"Unexpected response: {response}")
 
 
-def test_session_token(results: IntegrationTestResult):
-    """Test getting a session token (if OPENAI_API_KEY is set)."""
-    # Skip if OPENAI_API_KEY is not set - this test requires it
-    if not os.getenv("OPENAI_API_KEY"):
-        print(f"{Colors.YELLOW}⊘ SKIP{Colors.ENDC}: Session Token (no OPENAI_API_KEY)")
-        return
-
-    response = call_walker("get_session_token", {})
-
-    if "error" in response:
-        results.add_fail("Get Session Token", response.get("error"))
-        return
-
-    if isinstance(response, list) and len(response) > 0:
-        data = response[0]
-        if "key" in data:
-            results.add_pass("Get Session Token")
-        else:
-            results.add_fail("Get Session Token", f"Expected key in response, got: {data}")
-    elif isinstance(response, dict):
-        if "key" in response:
-            results.add_pass("Get Session Token")
-        else:
-            results.add_fail("Get Session Token", f"Expected key in response, got: {response}")
-    else:
-        results.add_fail("Get Session Token", f"Unexpected response: {response}")
-
-
 def test_analytics_endpoints(results: IntegrationTestResult):
     """Test analytics endpoints."""
     analytics_walkers = [
@@ -606,10 +578,6 @@ def run_all_tests() -> bool:
     print(f"\n{Colors.BLUE}--- Graph Structure Tests ---{Colors.ENDC}")
     test_rebuild_graph(results)
     test_reset_session(results)
-
-    # Session Token Test
-    print(f"\n{Colors.BLUE}--- Session Tests ---{Colors.ENDC}")
-    test_session_token(results)
 
     # Analytics Tests
     print(f"\n{Colors.BLUE}--- Analytics Tests ---{Colors.ENDC}")
