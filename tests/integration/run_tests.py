@@ -461,17 +461,14 @@ def test_reset_session(results: IntegrationTestResult):
 
 def test_session_token(results: IntegrationTestResult):
     """Test getting a session token (if OPENAI_API_KEY is set)."""
-    if not os.getenv("OPENAI_API_KEY") and not os.getenv("TEST_MODE"):
+    # Skip if OPENAI_API_KEY is not set - this test requires it
+    if not os.getenv("OPENAI_API_KEY"):
         print(f"{Colors.YELLOW}⊘ SKIP{Colors.ENDC}: Session Token (no OPENAI_API_KEY)")
         return
 
     response = call_walker("get_session_token", {})
 
     if "error" in response:
-        # This is expected if OPENAI_API_KEY is not set
-        if "OPENAI_API_KEY" in response.get("error", ""):
-            print(f"{Colors.YELLOW}⊘ SKIP{Colors.ENDC}: Session Token (OPENAI_API_KEY not configured)")
-            return
         results.add_fail("Get Session Token", response.get("error"))
         return
 
