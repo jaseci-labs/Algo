@@ -38,6 +38,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
+      # Install Bun for client bundling
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
       # Install Jaseci packages
       - name: Install Jaseci packages
         run: |
