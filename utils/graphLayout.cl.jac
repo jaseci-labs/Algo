@@ -40,7 +40,7 @@ def:pub transformGraphData(graphEdges: list) -> dict {
             nodeSet.add(`edge.`from);
         }
         if `edge["to"] {
-            nodeSet.add(item["to"]);
+            nodeSet.add(`edge["to"]);
         }
     }
 

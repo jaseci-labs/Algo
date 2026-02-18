@@ -51,25 +51,19 @@ jobs:
           bun-version: latest
 
       # Install required packages
-      # Install jac-scale from fork branch (kube_secrets) to get K8s secrets support
+      # Install jac-scale from main to get code-server horizontal scaling support
       - name: Install Jaseci packages
         run: |
           pip install --upgrade pip
-          pip install jaclang jac-client byllm jac-scale
-
-      # Destroy existing deployment
-      - name: Destroy existing deployment
-        run: |
-          jac destroy main.jac || echo "No existing deployment to destroy"
-          sleep 15
-        continue-on-error: true
+          pip install jaclang jac-client byllm
+          pip install git+https://github.com/jaseci-labs/jaseci.git@main#subdirectory=jac-scale
 
       # Deploy using jac-scale (secrets resolved from env via [plugins.scale.secrets])
       - name: Deploy Algo with jac-scale
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          jac start main.jac --scale
+          jac start main.jac --scale --experimental
 
       # Get deployment status
       - name: Verify deployment

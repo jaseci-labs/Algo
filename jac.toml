@@ -16,9 +16,8 @@ lib_imports = ["import tailwindcss from '@tailwindcss/vite'"]
 [plugins.scale.kubernetes]
 app_name = "algo-test"
 namespace = "algo-test"
-# deployment_strategy = "rolling"
-# jaseci_repo_url = "https://github.com/juzailmlwork/jaseci.git"
-# jaseci_branch = "support-horizontal-scaling"
+jaseci_repo_url = "https://github.com/jaseci-labs/jaseci.git"
+jaseci_branch = "main"
 # min_replicas = 2
 # max_replicas = 4
 # cpu_utilization_target = 50
