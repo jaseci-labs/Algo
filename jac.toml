@@ -16,8 +16,9 @@ lib_imports = ["import tailwindcss from '@tailwindcss/vite'"]
 [plugins.scale.kubernetes]
 app_name = "algo-test"
 namespace = "algo-test"
-jaseci_repo_url = "https://github.com/jaseci-labs/jaseci.git"
-jaseci_branch = "main"
+jaseci_repo_url = "https://github.com/udithishanka/jaseci.git"
+jaseci_branch = "feat/zero-downtime-deployment"
+deployment_strategy = "rolling"
 # min_replicas = 2
 # max_replicas = 4
 # cpu_utilization_target = 50
@@ -25,7 +26,7 @@ jaseci_branch = "main"
 [plugins.scale.secrets]
 OPENAI_API_KEY = "${OPENAI_API_KEY}"
 
-[plugins.scale.metrics]
+[plugins.scale.monitoring]
 enabled = true
 namespace = "algo_test2"
 walker_metrics = true
