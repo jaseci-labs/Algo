@@ -8,6 +8,9 @@ def:pub TranscriptItem(item: any, showThinking: bool = True) -> any {
     content = item.content;
     thinking = item.thinking;
 
+    console.log("[TranscriptItem] Rendering item:", item);
+    console.log("[TranscriptItem] role:", role, "content:", content);
+
     isUser = role == "user";
     isSystem = role == "system" or role == "tool";
     isAssistant = role == "assistant";

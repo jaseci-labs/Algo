@@ -53,10 +53,9 @@ def:pub useMainApp() -> any {
     graphDotCode = graphHook.graphDotCode;
     graphEdges = graphHook.graphEdges;
     displayEdges = graphHook.displayEdges;
-    # Don't cache lastTask - always read from graphHook to get fresh value
-    isGraphProcessing = graphHook.isProcessing;
-    graphProcessingMessage = graphHook.processingMessage;
+    # Don't cache these - always read from graphHook to get fresh values
     refreshGraphState = graphHook.refreshGraphState;
+    setProcessing = graphHook.setProcessing;
     addPendingNodes = graphHook.addPendingNodes;
     handleClearGraph = graphHook.handleClearGraph;
     
@@ -132,6 +131,9 @@ def:pub useMainApp() -> any {
             assistantItemId = "assistant-" + String(Date.now());
             addTranscriptItem(assistantItemId, "assistant", "Thinking...");
 
+            # IMMEDIATE feedback: show processing state while backend works
+            setProcessing("Processing your request...");
+
             result = await callManager(message, [], username);
             console.log("[useMainApp] callManager result:", result);
             if result.success {
@@ -193,6 +195,9 @@ def:pub useMainApp() -> any {
         try {
             assistantItemId = "assistant-" + String(Date.now());
             addTranscriptItem(assistantItemId, "assistant", "Thinking...");
+
+            # IMMEDIATE feedback: show processing state while backend works
+            setProcessing("Processing your request...");
 
             result = await callManager(suggestionText, [], username);
             if result.success {
@@ -290,9 +295,9 @@ def:pub useMainApp() -> any {
         "lastTask": graphHook.lastTask,  # Read fresh from graphHook
         "suggestions": suggestions,
 
-        # Graph processing state
-        "isGraphProcessing": isGraphProcessing,
-        "graphProcessingMessage": graphProcessingMessage,
+        # Graph processing state - read fresh from graphHook
+        "isGraphProcessing": graphHook.isProcessing,
+        "graphProcessingMessage": graphHook.processingMessage,
 
         # Refs
         "transcriptEndRef": transcriptEndRef,

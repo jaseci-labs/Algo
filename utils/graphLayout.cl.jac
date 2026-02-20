@@ -30,6 +30,16 @@ def addSpacesToCamelCase(word:str) -> str{
 # Transform raw edge data to React Flow nodes and edges format
 def:pub transformGraphData(graphEdges: list) -> dict {
     console.log("[graphLayout] transformGraphData called with:", graphEdges);
+    console.log("[graphLayout] graphEdges type:", typeof(graphEdges));
+    console.log("[graphLayout] graphEdges isArray:", Array.isArray(graphEdges));
+    console.log("[graphLayout] graphEdges length:", graphEdges.length);
+
+    # Ensure graphEdges is an array
+    if not Array.isArray(graphEdges) {
+        console.error("[graphLayout] ERROR: graphEdges is not an array!", graphEdges);
+        graphEdges = [];
+    }
+
     nodeSet = Reflect.construct(Set, []);
 
     # Always include Start node

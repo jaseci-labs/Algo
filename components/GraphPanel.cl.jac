@@ -18,11 +18,23 @@ def:pub GraphPanel(graphEdges: list, onClearGraph: any, isGraphProcessing: bool 
         <div className="flex-1 overflow-hidden bg-background relative rounded-[0.75rem]">
             <GraphViewer graphEdges={graphEdges} />
 
-            # Processing indicator
+            # Processing indicator - more visually engaging
             {
-                (<div className="absolute top-4 left-4 z-10 flex items-center gap-2 px-3 py-2 bg-primary/95 backdrop-blur-sm rounded-lg shadow-lg">
-                    <div className="w-3 h-3 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                    <span className="text-xs font-medium text-primary-foreground">{graphProcessingMessage}</span>
+                (<div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80 backdrop-blur-sm animate-fade-in">
+                    <div className="flex flex-col items-center gap-4 p-6">
+                        <div className="relative">
+                            <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping"></div>
+                            <div className="absolute inset-0 rounded-full bg-primary/30 animate-ping" style={{"animation-delay": "0.2s"}}></div>
+                            <div className="absolute inset-0 rounded-full bg-primary/40 animate-ping" style={{"animation-delay": "0.4s"}}></div>
+                            <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg">
+                                <div className="w-12 h-12 border-3 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                            </div>
+                        </div>
+                        <div className="text-center">
+                            <div className="text-sm font-semibold text-foreground mb-1">{"Updating your graph"}</div>
+                            <div className="text-xs text-muted-foreground">{graphProcessingMessage}</div>
+                        </div>
+                    </div>
                 </div>) if isGraphProcessing else (<Fragment />)
             }
 

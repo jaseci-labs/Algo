@@ -98,6 +98,14 @@ def:pub useGraph(addMessage: any) -> any {
         return merged;
     }
 
+    # Set processing state immediately (before we know task names)
+    # This gives instant visual feedback while backend processes
+    def setProcessing(message: str) -> None {
+        console.log("[DEBUG] setProcessing called:", message);
+        isProcessing = True;
+        processingMessage = message;
+    }
+
     # Add pending nodes optimistically before backend confirms
     def addPendingNodes(taskNames: list, fromTask: str) -> None {
         console.log("[DEBUG] addPendingNodes called:", taskNames, "from:", fromTask);
@@ -183,6 +191,7 @@ def:pub useGraph(addMessage: any) -> any {
         "isProcessing": isProcessing,
         "processingMessage": processingMessage,
         "refreshGraphState": refreshGraphState,
+        "setProcessing": setProcessing,
         "addPendingNodes": addPendingNodes,
         "clearPending": clearPending,
         "handleClearGraph": handleClearGraph

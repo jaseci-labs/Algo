@@ -19,12 +19,12 @@ def:pub useTranscript() -> any {
     # Add a new message to transcript (for system messages)
     def addMessage(role: str, content: str) -> None {
         console.log("[useTranscript] addMessage called:", role, content);
-        # Use ref to always get current value, avoiding closure stale values
-        current = transcriptRef.current;
+        # IMPORTANT: Use transcript state directly, not ref
+        # The ref might be stale during initial render
         itemId = "msg-" + String(Date.now());
         newItem = {"itemId": itemId, "role": role, "content": content, "timestamp": Date.now()};
         # Create new array with new item
-        updated = current.concat([newItem]);
+        updated = transcript.concat([newItem]);
         transcript = updated;
         console.log("[useTranscript] addMessage: new transcript length:", updated.length);
     }
@@ -32,7 +32,7 @@ def:pub useTranscript() -> any {
     # Add a transcript item by itemId (for realtime messages)
     def addTranscriptItem(itemId: str, role: str, content: str, thinking: any = None) -> None {
         console.log("[useTranscript] addTranscriptItem called:", itemId, role, content);
-        # Use ref to always get current value
+        # Use ref for functions called from event listeners (async callbacks)
         current = transcriptRef.current;
         # Check if exists
         exists = current.some(lambda item: any -> bool { return item.itemId == itemId; });
@@ -49,7 +49,7 @@ def:pub useTranscript() -> any {
     # Update a transcript item by itemId
     def updateTranscriptItem(itemId: str, content: str, thinking: any = None) -> None {
         console.log("[useTranscript] updateTranscriptItem called:", itemId, content);
-        # Use ref to always get current value
+        # Use ref for functions called from event listeners (async callbacks)
         current = transcriptRef.current;
         updatedTranscript = current.map(lambda item: any -> any {
             if item.itemId == itemId {
@@ -71,7 +71,7 @@ def:pub useTranscript() -> any {
     # Append text to a transcript item by itemId (for streaming)
     def appendTranscriptItem(itemId: str, deltaText: str) -> None {
         console.log("[useTranscript] appendTranscriptItem called:", itemId, deltaText);
-        # Use ref to always get current value
+        # Use ref for functions called from event listeners (async callbacks)
         current = transcriptRef.current;
         updatedTranscript = current.map(lambda item: any -> any {
             if item.itemId == itemId {
