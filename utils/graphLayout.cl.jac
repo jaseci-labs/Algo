@@ -29,6 +29,7 @@ def addSpacesToCamelCase(word:str) -> str{
 
 # Transform raw edge data to React Flow nodes and edges format
 def:pub transformGraphData(graphEdges: list) -> dict {
+    console.log("[graphLayout] transformGraphData called with:", graphEdges);
     nodeSet = Reflect.construct(Set, []);
 
     # Always include Start node
@@ -60,15 +61,30 @@ def:pub transformGraphData(graphEdges: list) -> dict {
     edges = [];
     idx = 0;
     for item in graphEdges {
-        edges.push({
+        edgeConfig = {
             "id": f"edge-{idx}",
             "source": item["from"],
             "target": item["to"],
             "label": item["label"] or "",
             "type": "bezier"
-        });
+        };
+
+        # Add styling for pending edges
+        if item["pending"] {
+            console.log("[graphLayout] Found pending edge:", item);
+            edgeConfig["style"] = {
+                "stroke": "hsl(var(--primary) / 0.7)",
+                "strokeWidth": 2,
+                "strokeDasharray": "8 4"
+            };
+            edgeConfig["animated"] = True;
+        }
+
+        edges.push(edgeConfig);
         idx = idx + 1;
     }
+
+    console.log("[graphLayout] Returning edges:", edges);
 
     return { "nodes": nodes, "edges": edges };
 }

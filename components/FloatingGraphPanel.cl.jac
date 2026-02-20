@@ -7,6 +7,8 @@ def:pub FloatingGraphPanel(
     onClearGraph: any,
     onToggleGraphPanel: any,
     isGraphPanelVisible: bool,
+    isGraphProcessing: bool = False,
+    graphProcessingMessage: str = "",
 ) -> any {
     return <div>
         <div className="floating-panel fixed inset-0 z-10" ></div>
@@ -15,6 +17,8 @@ def:pub FloatingGraphPanel(
                 <GraphPanel
                     graphEdges={graphEdges}
                     onClearGraph={onClearGraph}
+                    isGraphProcessing={isGraphProcessing}
+                    graphProcessingMessage={graphProcessingMessage}
                 />
             </div>
         </div>

@@ -120,6 +120,7 @@ async def:pub getSessionToken() -> any {
 # @param username - The current user's username
 # @returns Manager response with nextResponse or error
 async def:pub callManager(context_from_user: str, conversation_history: list, username: str) -> any {
+    console.log("[API] callManager called with context:", context_from_user);
     try {
         result = root spawn call_manager(
             conversation_history=conversation_history,
@@ -127,7 +128,9 @@ async def:pub callManager(context_from_user: str, conversation_history: list, us
             username=username
         );
 
+        console.log("[API] result.reports:", result.reports);
         response_data = result.reports[result.reports.length - 1] if result.reports and result.reports.length > 0 else {};
+        console.log("[API] response_data from backend:", response_data);
 
         if response_data and "error" in response_data {
             console.error("Manager error:", response_data);
@@ -157,11 +160,20 @@ async def:pub callManager(context_from_user: str, conversation_history: list, us
             thinking = response_data["thinking"];
         }
 
+        # Extract task_names for incremental graph updates
+        task_names = [];
+        if "task_names" in response_data {
+            task_names = response_data["task_names"];
+            console.log("[API] task_names extracted:", task_names);
+        }
+
+        console.log("[API] Returning from callManager with task_names:", task_names);
         return {
             "success": True,
             "response": next_resp,
             "suggestions": suggestions,
             "thinking": thinking,
+            "task_names": task_names,
             "data": response_data
         };
     } except Exception as e {

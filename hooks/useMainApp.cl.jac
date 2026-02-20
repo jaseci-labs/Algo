@@ -52,8 +52,12 @@ def:pub useMainApp() -> any {
     graphHook = useGraph(addMessage);
     graphDotCode = graphHook.graphDotCode;
     graphEdges = graphHook.graphEdges;
-    lastTask = graphHook.lastTask;
+    displayEdges = graphHook.displayEdges;
+    # Don't cache lastTask - always read from graphHook to get fresh value
+    isGraphProcessing = graphHook.isProcessing;
+    graphProcessingMessage = graphHook.processingMessage;
     refreshGraphState = graphHook.refreshGraphState;
+    addPendingNodes = graphHook.addPendingNodes;
     handleClearGraph = graphHook.handleClearGraph;
     
     # Create a setter function wrapper for suggestions to pass to child hooks
@@ -61,8 +65,12 @@ def:pub useMainApp() -> any {
         suggestions = newSuggestions;
     }
 
-    # Realtime session management (pass updateSuggestions)
-    sessionHook = useRealtimeSession(transcriptHelpers, refreshGraphState, updateSuggestions);
+    # Realtime session management (pass updateSuggestions, addPendingNodes, lastTask getter)
+    # Pass a function that returns fresh lastTask value instead of stale value
+    def getLastTask() -> str {
+        return graphHook.lastTask;
+    }
+    sessionHook = useRealtimeSession(transcriptHelpers, refreshGraphState, updateSuggestions, addPendingNodes, getLastTask);
     sessionStatus = sessionHook.sessionStatus;
     sessionRef = sessionHook.sessionRef;
     isConnected = sessionHook.isConnected;
@@ -125,14 +133,31 @@ def:pub useMainApp() -> any {
             addTranscriptItem(assistantItemId, "assistant", "Thinking...");
 
             result = await callManager(message, [], username);
+            console.log("[useMainApp] callManager result:", result);
             if result.success {
+                # Add pending nodes for incremental update
+                # IMPORTANT: Read lastTask fresh from graphHook to avoid closure stale values
+                currentLastTask = graphHook.lastTask;
+                console.log("[useMainApp] currentLastTask from graphHook:", currentLastTask);
+                if result.task_names and Array.isArray(result.task_names) and result.task_names.length > 0 {
+                    console.log("[useMainApp] Adding pending nodes (text mode):", result.task_names, "fromTask:", currentLastTask);
+                    addPendingNodes(result.task_names, currentLastTask);
+                } else {
+                    console.log("[useMainApp] No task_names in result:", result);
+                }
+
                 # Pass thinking data if available
                 thinkingData = None;
                 if result.thinking {
                     thinkingData = result.thinking;
                 }
                 updateTranscriptItem(assistantItemId, result.response, thinkingData);
-                await refreshGraphState(username);
+
+                # Delay graph refresh to show "adding..." state
+                # The pending state will be cleared in refreshGraphState after 500ms
+                setTimeout(lambda -> None {
+                    refreshGraphState(username);
+                }, 800);
 
                 # Update suggestions if available
                 if result.suggestions and Array.isArray(result.suggestions) {
@@ -171,13 +196,24 @@ def:pub useMainApp() -> any {
 
             result = await callManager(suggestionText, [], username);
             if result.success {
+                # Add pending nodes for incremental update
+                currentLastTask = graphHook.lastTask;
+                if result.task_names and Array.isArray(result.task_names) and result.task_names.length > 0 {
+                    console.log("[useMainApp] Adding pending nodes (suggestion):", result.task_names, "fromTask:", currentLastTask);
+                    addPendingNodes(result.task_names, currentLastTask);
+                }
+
                 # Pass thinking data if available
                 thinkingData = None;
                 if result.thinking {
                     thinkingData = result.thinking;
                 }
                 updateTranscriptItem(assistantItemId, result.response, thinkingData);
-                await refreshGraphState(username);
+
+                # Delay graph refresh to show "adding..." state
+                setTimeout(lambda -> None {
+                    refreshGraphState(username);
+                }, 800);
 
                 # Update suggestions if available
                 if result.suggestions and Array.isArray(result.suggestions) {
@@ -250,8 +286,13 @@ def:pub useMainApp() -> any {
         "transcript": transcript,
         "graphDotCode": graphDotCode,
         "graphEdges": graphEdges,
-        "lastTask": lastTask,
+        "displayEdges": displayEdges,
+        "lastTask": graphHook.lastTask,  # Read fresh from graphHook
         "suggestions": suggestions,
+
+        # Graph processing state
+        "isGraphProcessing": isGraphProcessing,
+        "graphProcessingMessage": graphProcessingMessage,
 
         # Refs
         "transcriptEndRef": transcriptEndRef,

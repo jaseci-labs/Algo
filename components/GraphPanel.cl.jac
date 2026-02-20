@@ -1,8 +1,9 @@
-import from "lucide-react" { BarChart3, Trash2 } 
+import from react { Fragment }
+import from "lucide-react" { BarChart3, Trash2 }
 import from .GraphViewer { GraphViewer }
 
 # Graph Panel - right side showing task visualization
-def:pub GraphPanel(graphEdges: str, onClearGraph: any) -> any {
+def:pub GraphPanel(graphEdges: list, onClearGraph: any, isGraphProcessing: bool = False, graphProcessingMessage: str = "") -> any {
     return <div className="glass-panel flex flex-col h-full">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/30">
             <div className="flex items-center gap-2">
@@ -16,6 +17,14 @@ def:pub GraphPanel(graphEdges: str, onClearGraph: any) -> any {
 
         <div className="flex-1 overflow-hidden bg-background relative rounded-[0.75rem]">
             <GraphViewer graphEdges={graphEdges} />
+
+            # Processing indicator
+            {
+                (<div className="absolute top-4 left-4 z-10 flex items-center gap-2 px-3 py-2 bg-primary/95 backdrop-blur-sm rounded-lg shadow-lg">
+                    <div className="w-3 h-3 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                    <span className="text-xs font-medium text-primary-foreground">{graphProcessingMessage}</span>
+                </div>) if isGraphProcessing else (<Fragment />)
+            }
 
             <ClearGraphButton onClick={onClearGraph} />
         </div>

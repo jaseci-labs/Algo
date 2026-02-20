@@ -123,7 +123,10 @@ def:pub MainApp() -> any {
     graphDotCode = hook.graphDotCode;
     transcriptEndRef = hook.transcriptEndRef;
     suggestions = hook.suggestions;
-    graphEdges = hook.graphEdges;
+    displayEdges = hook.displayEdges;
+    graphEdges = hook.graphEdges;  # Keep for backward compatibility
+    isGraphProcessing = hook.isGraphProcessing;
+    graphProcessingMessage = hook.graphProcessingMessage;
 
     # Handlers
     onToggleConnection = hook.onToggleConnection;
@@ -171,17 +174,21 @@ def:pub MainApp() -> any {
 
                 <div className="hidden md:block w-full md:w-1/2">
                     <GraphPanel
-                        graphEdges={graphEdges}
+                        graphEdges={displayEdges}
                         onClearGraph={handleClearGraph}
+                        isGraphProcessing={isGraphProcessing}
+                        graphProcessingMessage={graphProcessingMessage}
                     />
                 </div>
             </div>
 
             {
                 (<FloatingGraphPanel
-                 graphEdges={graphEdges}
+                 graphEdges={displayEdges}
                  onClearGraph={handleClearGraph}
                  isGraphPanelVisible={isGraphPanelVisible}
+                 isGraphProcessing={isGraphProcessing}
+                 graphProcessingMessage={graphProcessingMessage}
                 onToggleGraphPanel={handleGraphPanelToggle}
             />) if isGraphPanelVisible else (<Fragment />)
             }

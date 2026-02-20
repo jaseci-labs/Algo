@@ -32,7 +32,9 @@ def extractMessageText(content: any) -> str {
 # @param transcriptHelpers - Object containing transcript manipulation functions
 # @param refreshGraphState - Function to refresh graph state after supervisor calls
 # @param setSuggestions - Function to update suggestions state in parent
-def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSuggestions: any) -> any {
+# @param addPendingNodes - Function to add pending nodes for incremental graph updates
+# @param getLastTask - Function that returns the current last task in the graph for attachment point
+def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSuggestions: any, addPendingNodes: any, getLastTask: any) -> any {
     # Reactive state using has variables
     has sessionStatus: str = "DISCONNECTED";
 
@@ -72,6 +74,7 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
         
         # Execute supervisor tool - called by the Chat Agent
         async def executeSupervisorTool(input: any, details: any) -> any {
+            console.log("[useRealtimeSession] executeSupervisorTool called");
             context = input.relevantContextFromLastUserMessage or "";
             history = details.context.history or [];
 
@@ -79,10 +82,24 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
 
             username = getUsernameFromToken();
             result = await callManager(context, filteredHistory, username);
+            console.log("[useRealtimeSession] callManager result:", result);
 
             if not result.success {
                 console.error("Supervisor error:", result.error);
                 return {"error": "Something went wrong."};
+            }
+
+            # Add pending nodes incrementally if task_names were returned
+            # This shows the graph updating immediately before full refresh
+            console.log("[useRealtimeSession] task_names:", result.task_names);
+            # Call getLastTask() to get fresh value instead of stale closure value
+            currentLastTask = getLastTask();
+            console.log("[useRealtimeSession] lastTask for attachment:", currentLastTask);
+            if result.task_names and Array.isArray(result.task_names) and result.task_names.length > 0 {
+                console.log("[useRealtimeSession] Adding pending nodes:", result.task_names, "from:", currentLastTask);
+                addPendingNodes(result.task_names, currentLastTask);
+            } else {
+                console.log("[useRealtimeSession] No task_names to add");
             }
 
             # Fetch updated graph state after supervisor completes

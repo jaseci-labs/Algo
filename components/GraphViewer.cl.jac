@@ -29,6 +29,7 @@ glob DEFAULT_EDGE_OPTIONS = {
 };
 
 def:pub GraphViewer(graphEdges: list) -> any {
+    console.log("[GraphViewer] Rendering with graphEdges:", graphEdges);
     [nodes, setNodes, onNodesChange] = useNodesState([]);
     [edges, setEdges, onEdgesChange] = useEdgesState([]);
     [isLoading, setIsLoading] = useState(True);
@@ -36,6 +37,8 @@ def:pub GraphViewer(graphEdges: list) -> any {
     # Transform and layout graph when edges change
     useEffect(
         lambda -> None {
+            console.log("[GraphViewer] useEffect triggered with graphEdges:", graphEdges);
+
             if not graphEdges or graphEdges.length == 0 {
                 # Empty state - just show Start node centered
                 startNode = {
@@ -57,13 +60,14 @@ def:pub GraphViewer(graphEdges: list) -> any {
                 try {
                     # Transform edge data to React Flow format
                     transformed = transformGraphData(graphEdges);
-
+                    console.log("[GraphViewer] Transformed data:", transformed);
 
                     # Apply ELK layout for automatic positioning (async)
                     layouted = await getLayoutedElements(
                         transformed.nodes,
                         transformed.edges
                     );
+                    console.log("[GraphViewer] Layouted nodes:", layouted.nodes.length, "edges:", layouted.edges.length);
 
                     setNodes(layouted.nodes);
                     setEdges(layouted.edges);
