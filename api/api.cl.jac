@@ -167,6 +167,19 @@ async def:pub callManager(context_from_user: str, conversation_history: list, us
             console.log("[API] task_names extracted:", task_names);
         }
 
+        # Extract graph data directly from response - no separate fetch needed!
+        graph_edges = [];
+        if "graph_edges" in response_data {
+            graph_edges = response_data["graph_edges"];
+            console.log("[API] graph_edges extracted:", graph_edges);
+        }
+
+        graph_last_task = "Start";
+        if "graph_last_task" in response_data {
+            graph_last_task = response_data["graph_last_task"];
+            console.log("[API] graph_last_task extracted:", graph_last_task);
+        }
+
         console.log("[API] Returning from callManager with task_names:", task_names);
         return {
             "success": True,
@@ -174,6 +187,8 @@ async def:pub callManager(context_from_user: str, conversation_history: list, us
             "suggestions": suggestions,
             "thinking": thinking,
             "task_names": task_names,
+            "graph_edges": graph_edges,  # Direct graph data - WebSocket style!
+            "graph_last_task": graph_last_task,
             "data": response_data
         };
     } except Exception as e {

@@ -18,21 +18,35 @@ def:pub GraphPanel(graphEdges: list, onClearGraph: any, isGraphProcessing: bool 
         <div className="flex-1 overflow-hidden bg-background relative rounded-[0.75rem]">
             <GraphViewer graphEdges={graphEdges} />
 
-            # Processing indicator - more visually engaging
+            # Processing indicator - Material Design style animated loader
             {
-                (<div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80 backdrop-blur-sm animate-fade-in">
-                    <div className="flex flex-col items-center gap-4 p-6">
-                        <div className="relative">
-                            <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping"></div>
-                            <div className="absolute inset-0 rounded-full bg-primary/30 animate-ping" style={{"animation-delay": "0.2s"}}></div>
-                            <div className="absolute inset-0 rounded-full bg-primary/40 animate-ping" style={{"animation-delay": "0.4s"}}></div>
-                            <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg">
-                                <div className="w-12 h-12 border-3 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                (<div className="absolute inset-0 z-10 flex items-center justify-center bg-background/90 backdrop-blur-md">
+                    <div className="flex flex-col items-center gap-6 p-8">
+                        <div className="relative w-20 h-20">
+                            <div className="absolute inset-0 rounded-full border-2 border-primary/20 animate-ping" style={{"animation-duration": "1.5s"}}></div>
+                            <div className="absolute inset-2 rounded-full border-2 border-primary/30 animate-ping" style={{"animation-duration": "1.5s", "animation-delay": "0.3s"}}></div>
+                            <div className="absolute inset-4 rounded-full border-2 border-primary/40 animate-ping" style={{"animation-duration": "1.5s", "animation-delay": "0.6s"}}></div>
+
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-16 h-16 rounded-full border-4 border-transparent border-t-primary border-r-primary/80 animate-spin" style={{"animation-duration": "1s"}}></div>
+                                <div className="absolute w-12 h-12 rounded-full border-3 border-transparent border-b-primary/60 border-l-primary/40 animate-spin" style={{"animation-duration": "0.8s", "animation-direction": "reverse"}}></div>
+                            </div>
+
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-3 h-3 rounded-full bg-primary animate-pulse"></div>
                             </div>
                         </div>
-                        <div className="text-center">
-                            <div className="text-sm font-semibold text-foreground mb-1">{"Updating your graph"}</div>
-                            <div className="text-xs text-muted-foreground">{graphProcessingMessage}</div>
+
+                        <div className="flex flex-col items-center gap-2">
+                            <div className="text-sm font-semibold text-foreground animate-pulse">{"Processing"}</div>
+                            <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                <span>{graphProcessingMessage}</span>
+                                <span className="flex gap-1 ml-1">
+                                    <span className="w-1 h-1 rounded-full bg-primary animate-bounce" style={{"animation-delay": "0s"}}></span>
+                                    <span className="w-1 h-1 rounded-full bg-primary animate-bounce" style={{"animation-delay": "0.1s"}}></span>
+                                    <span className="w-1 h-1 rounded-full bg-primary animate-bounce" style={{"animation-delay": "0.2s"}}></span>
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>) if isGraphProcessing else (<Fragment />)

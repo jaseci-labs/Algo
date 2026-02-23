@@ -1,7 +1,6 @@
 # useGraph Hook
 # Custom hook for managing task graph state and operations
-
-import from react { useRef }
+# Graph data now comes directly in the response - WebSocket style!
 
 import from ..api.api {
     getTaskGraph,
@@ -14,121 +13,45 @@ def:pub useGraph(addMessage: any) -> any {
     has graphDotCode: str = "";
     has graphEdges: list = [];
     has lastTask: str = "Start";
-
-    # Track processing state for incremental updates
-    has displayEdges: list = [];  # Merged graphEdges + pendingEdges
-    has pendingEdges: list = [];  # Optimistic pending edges
     has isProcessing: bool = False;
     has processingMessage: str = "";
+    has displayEdges: list = [];  # Computed from graphEdges
 
-    # Refs to always access current state values (avoids closure stale values)
-    graphEdgesRef = useRef([]);
-    pendingEdgesRef = useRef([]);
-
-    # Sync refs with state whenever values change
+    # Reactive effect: update displayEdges when graphEdges changes
     can with [graphEdges] entry {
-        graphEdgesRef.current = graphEdges;
-    }
-    can with [pendingEdges] entry {
-        pendingEdgesRef.current = pendingEdges;
+        console.log("[useGraph] graphEdges changed, updating displayEdges:", graphEdges);
+        displayEdges = Array.from(graphEdges);
     }
 
-    # Fetch and update graph state from backend using service layer
-    async def refreshGraphState(username: str) -> None {
-        console.log("[useGraph] refreshGraphState called for:", username);
-        try {
-            result = await getTaskGraph(username);
-            console.log("[useGraph] getTaskGraph result:", result);
+    # Update graph directly from response data - no separate fetch needed!
+    # This is the WebSocket-style approach: data pushed to frontend
+    def updateGraphFromResponse(edges: list, newLastTask: str) -> None {
+        console.log("[useGraph] updateGraphFromResponse called with edges:", edges, "lastTask:", newLastTask);
 
-            if result.success and result.data {
-                graph_data = result.data;
-                console.log("[useGraph] graph_data:", graph_data);
-
-                if graph_data.dotCode != None {
-                    newDotCode = String(graph_data.dotCode);
-                    graphDotCode = newDotCode;
-                }
-                if graph_data.edges != None {
-                    newEdges = Array.from(graph_data.edges);
-                    graphEdges = newEdges;
-                    console.log("[useGraph] graphEdges updated:", graphEdges);
-                }
-                if graph_data.lastTask {
-                    lastTask = graph_data.lastTask;
-                    console.log("[useGraph] lastTask updated:", lastTask);
-                }
-
-                # Small delay before clearing pending to show "adding..." state
-                setTimeout(lambda -> None {
-                    console.log("[useGraph] Clearing pending after timeout");
-                    clearPending();
-                }, 500);
-            } else {
-                console.error("[useGraph] Failed to fetch graph:", result.error);
-            }
-        } except Exception as graph_error {
-            console.error("Failed to fetch updated graph:", graph_error);
-        }
-    }
-
-    # Update display edges - inlined to avoid closure stale values
-    # NOTE: This is called directly from can with block to get fresh values
-    def updateDisplayEdgesImpl(currentGraphEdges: list, currentPendingEdges: list) -> list {
-        console.log("[useGraph] updateDisplayEdgesImpl called");
-        console.log("[useGraph] currentGraphEdges:", currentGraphEdges);
-        console.log("[useGraph] currentPendingEdges:", currentPendingEdges);
-
-        merged = Array.from(currentGraphEdges);
-
-        # Add any pending edges not already in base - IMMUTABLY
-        for pending in currentPendingEdges {
-            exists = merged.some(lambda edge: any -> bool {
-                return edge.from == pending.from and edge.to == pending.to;
-            });
-
-            if not exists {
-                # CRITICAL: Use concat() instead of + to avoid string concatenation
-                # In JavaScript, array + array = string concatenation!
-                merged = merged.concat([pending]);
-                console.log("[useGraph] Added pending edge:", pending);
-            }
+        if edges and Array.isArray(edges) {
+            graphEdges = Array.from(edges);
         }
 
-        console.log("[useGraph] Final merged edges:", merged);
-        return merged;
+        if newLastTask {
+            lastTask = newLastTask;
+        }
+
+        # Clear processing state after graph is updated
+        isProcessing = False;
+        processingMessage = "";
     }
 
-    # Set processing state immediately (before we know task names)
-    # This gives instant visual feedback while backend processes
+    # Set processing state
     def setProcessing(message: str) -> None {
-        console.log("[DEBUG] setProcessing called:", message);
+        console.log("[useGraph] setProcessing called:", message);
         isProcessing = True;
         processingMessage = message;
     }
 
-    # Add pending nodes optimistically before backend confirms
+    # Add pending nodes - shows processing state immediately
     def addPendingNodes(taskNames: list, fromTask: str) -> None {
-        console.log("[DEBUG] addPendingNodes called:", taskNames, "from:", fromTask);
+        console.log("[useGraph] addPendingNodes called:", taskNames, "from:", fromTask);
 
-        # Use ref to get current pendingEdges value
-        currentPending = pendingEdgesRef.current;
-        console.log("[DEBUG] currentPending from ref:", currentPending);
-
-        # Build new edges array all at once
-        newEdges = [];
-        for name in taskNames {
-            newEdge = {
-                "from": fromTask,
-                "to": name,
-                "label": "adding...",
-                "pending": True
-            };
-            newEdges.push(newEdge);
-        }
-
-        # Use concat to create new array
-        updatedPending = currentPending.concat(newEdges);
-        pendingEdges = updatedPending;
         isProcessing = True;
 
         if taskNames.length == 1 {
@@ -136,50 +59,55 @@ def:pub useGraph(addMessage: any) -> any {
         } else {
             processingMessage = "Adding " + String(taskNames.length) + " tasks...";
         }
-
-        console.log("[DEBUG] pendingEdges after set:", updatedPending);
-        console.log("[DEBUG] isProcessing:", isProcessing);
-    }
-
-    # Clear pending nodes and sync with backend
-    def clearPending() -> None {
-        console.log("[DEBUG] clearPending called");
-        pendingEdges = [];
-        isProcessing = False;
-        processingMessage = "";
-    }
-
-    # Reactive effect: update displayEdges when graphEdges or pendingEdges changes
-    can with [graphEdges, pendingEdges] entry {
-        displayEdges = updateDisplayEdgesImpl(graphEdges, pendingEdges);
     }
 
     # Clear the task graph using service layer
     async def handleClearGraph() -> None {
         console.log("[useGraph] handleClearGraph called!");
+
+        # IMMEDIATE clear - optimistic update for instant feedback
+        graphDotCode = "";
+        graphEdges = [];
+        lastTask = "Start";
+
         try {
             username = getUsernameFromToken();
-            console.log("[useGraph] Clearing graph for user:", username);
-
             result = await clearTaskGraph(username);
             console.log("[useGraph] clearTaskGraph result:", result);
 
             if result.success {
-                data = result.data;
-                console.log("[useGraph] Graph data after clear:", data);
-                graphDotCode = data.dotCode or "";
-                graphEdges = data.edges or [];
-                lastTask = data.lastTask or "Start";
-
-                console.log("[useGraph] Calling addMessage for system notification");
+                # Already cleared locally, just add confirmation message
                 addMessage("system", "Graph cleared! Starting fresh.");
-                console.log("[useGraph] addMessage called successfully");
             } else {
                 addMessage("error", "Failed to clear graph");
             }
         } except Exception as e {
             console.error("Clear graph error:", e);
             addMessage("error", "Error clearing graph");
+        }
+    }
+
+    # Load initial graph on mount
+    async def loadInitialGraph() -> None {
+        try {
+            username = getUsernameFromToken();
+            result = await getTaskGraph(username);
+            console.log("[useGraph] loadInitialGraph result:", result);
+
+            if result.success and result.data {
+                graph_data = result.data;
+                if graph_data.dotCode != None {
+                    graphDotCode = String(graph_data.dotCode);
+                }
+                if graph_data.edges != None {
+                    graphEdges = Array.from(graph_data.edges);
+                }
+                if graph_data.lastTask {
+                    lastTask = graph_data.lastTask;
+                }
+            }
+        } except Exception as e {
+            console.error("Failed to load initial graph:", e);
         }
     }
 
@@ -190,10 +118,10 @@ def:pub useGraph(addMessage: any) -> any {
         "lastTask": lastTask,
         "isProcessing": isProcessing,
         "processingMessage": processingMessage,
-        "refreshGraphState": refreshGraphState,
+        "updateGraphFromResponse": updateGraphFromResponse,
         "setProcessing": setProcessing,
         "addPendingNodes": addPendingNodes,
-        "clearPending": clearPending,
-        "handleClearGraph": handleClearGraph
+        "handleClearGraph": handleClearGraph,
+        "loadInitialGraph": loadInitialGraph
     };
 }

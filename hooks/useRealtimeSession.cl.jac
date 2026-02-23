@@ -30,11 +30,12 @@ def extractMessageText(content: any) -> str {
 
 # Hook for managing OpenAI Realtime session
 # @param transcriptHelpers - Object containing transcript manipulation functions
-# @param refreshGraphState - Function to refresh graph state after supervisor calls
+# @param updateGraphFromResponse - Function to update graph from response data (WebSocket style)
 # @param setSuggestions - Function to update suggestions state in parent
 # @param addPendingNodes - Function to add pending nodes for incremental graph updates
 # @param getLastTask - Function that returns the current last task in the graph for attachment point
-def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSuggestions: any, addPendingNodes: any, getLastTask: any) -> any {
+# @param loadInitialGraph - Function to load initial graph data
+def:pub useRealtimeSession(transcriptHelpers: any, updateGraphFromResponse: any, setSuggestions: any, addPendingNodes: any, getLastTask: any, loadInitialGraph: any = None) -> any {
     # Reactive state using has variables
     has sessionStatus: str = "DISCONNECTED";
 
@@ -89,21 +90,16 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                 return {"error": "Something went wrong."};
             }
 
-            # Add pending nodes incrementally if task_names were returned
-            # This shows the graph updating immediately before full refresh
-            console.log("[useRealtimeSession] task_names:", result.task_names);
-            # Call getLastTask() to get fresh value instead of stale closure value
-            currentLastTask = getLastTask();
-            console.log("[useRealtimeSession] lastTask for attachment:", currentLastTask);
-            if result.task_names and Array.isArray(result.task_names) and result.task_names.length > 0 {
-                console.log("[useRealtimeSession] Adding pending nodes:", result.task_names, "from:", currentLastTask);
+            # WEBSOCKET STYLE: Update graph directly from response data!
+            if result.graph_edges or result.graph_last_task {
+                console.log("[useRealtimeSession] Graph data in response! edges:", result.graph_edges, "lastTask:", result.graph_last_task);
+                updateGraphFromResponse(result.graph_edges or [], result.graph_last_task or "Start");
+            } elif result.task_names and Array.isArray(result.task_names) and result.task_names.length > 0 {
+                # Fallback: show processing if task_names but no graph data
+                currentLastTask = getLastTask();
+                console.log("[useRealtimeSession] task_names but no graph data:", result.task_names);
                 addPendingNodes(result.task_names, currentLastTask);
-            } else {
-                console.log("[useRealtimeSession] No task_names to add");
             }
-
-            # Fetch updated graph state after supervisor completes
-            await refreshGraphState(username);
 
             # Update suggestions if available
             if result.suggestions and Array.isArray(result.suggestions) {
@@ -306,8 +302,9 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                 sessionStatus = "CONNECTED";
 
                 # Load user's existing graph when they connect
-                username = getUsernameFromToken();
-                await refreshGraphState(username);
+                if loadInitialGraph {
+                    await loadInitialGraph();
+                }
 
                 addMessage("system", "Connected! Algo is ready. Say 'hi' to start!");
                 

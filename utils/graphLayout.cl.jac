@@ -79,17 +79,6 @@ def:pub transformGraphData(graphEdges: list) -> dict {
             "type": "bezier"
         };
 
-        # Add styling for pending edges
-        if item["pending"] {
-            console.log("[graphLayout] Found pending edge:", item);
-            edgeConfig["style"] = {
-                "stroke": "hsl(var(--primary) / 0.7)",
-                "strokeWidth": 2,
-                "strokeDasharray": "8 4"
-            };
-            edgeConfig["animated"] = True;
-        }
-
         edges.push(edgeConfig);
         idx = idx + 1;
     }

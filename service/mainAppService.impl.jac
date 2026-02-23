@@ -750,10 +750,25 @@ impl call_graph_agent.call{
         user_graph_after = find_user_graph(here, self.username);
         after_nodes = [];
         after_edges = [];
+        last_task = "Start";
         if user_graph_after {
             graph_data = get_user_graph_structure(user_graph_after);
             after_nodes = graph_data[0];
             after_edges = graph_data[1];
+
+            # Find last task (node with no outgoing edges)
+            if len(after_edges) > 0 {
+                last_edge_targets = [];
+                for edge in after_edges {
+                    last_edge_targets.append(edge["to"]);  # edge.to
+                }
+                for node in after_nodes {
+                    if node != "Start" and node not in last_edge_targets {
+                        last_task = node;
+                        break;
+                    }
+                }
+            }
         }
 
         manager_data = find_manager_comm_data(here, self.username);
@@ -766,6 +781,9 @@ impl call_graph_agent.call{
         manager_data.last_thinking = thinking;
         manager_data.last_task_names = task_names;
         manager_data.last_emotional_state = emotional_state.state;
+        # Store graph data directly in manager_data for immediate frontend access
+        manager_data.last_graph_edges = after_edges;
+        manager_data.last_graph_last_task = last_task;
 
         intent_dict = {
             "conversation_context": {
@@ -931,12 +949,41 @@ impl call_manager.orchestrate{
         # Read the result from manager_comm_data (stored by call_graph_agent)
         manager_data = find_manager_comm_data(here, self.username);
         if manager_data and manager_data.last_response {
+            # Fetch FRESH graph data directly from graph nodes - not from manager_data
+            # This avoids race conditions where manager_data hasn't been updated yet
+            user_graph = find_user_graph(here, self.username);
+            graph_edges = [];
+            graph_last_task = "Start";
+
+            if user_graph {
+                graph_structure = get_user_graph_structure(user_graph);
+                graph_edges = graph_structure[1];  # Edges are at index 1
+
+                # Find last task (node with no outgoing edges)
+                if len(graph_edges) > 0 {
+                    edge_targets = [];
+                    for edge in graph_edges {
+                        edge_targets.append(edge["to"]);
+                    }
+                    nodes = graph_structure[0];
+                    for node in nodes {
+                        if node != "Start" and node not in edge_targets {
+                            graph_last_task = node;
+                            break;
+                        }
+                    }
+                }
+            }
+
             graph_agent_result = {
                 "response": manager_data.last_response,
                 "emotional_state": manager_data.last_emotional_state or "neutral",
                 "suggestions": manager_data.last_suggestions or [],
                 "thinking": manager_data.last_thinking or {},
-                "task_names": manager_data.last_task_names or []
+                "task_names": manager_data.last_task_names or [],
+                # Fresh graph data fetched directly - no race conditions!
+                "graph_edges": graph_edges,
+                "graph_last_task": graph_last_task
             };
             report graph_agent_result;
         } else {

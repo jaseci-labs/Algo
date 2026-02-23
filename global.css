@@ -517,3 +517,26 @@ body {
     box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
   }
 }
+
+/* Pending edge animation */
+@keyframes dash-flow {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.react-flow__edge-path.pending {
+  stroke: hsl(var(--primary) / 0.7);
+  stroke-width: 2;
+  stroke-dasharray: 8 4;
+  animation: dash-flow 1s linear infinite;
+}
+
+/* Animated edge class for React Flow */
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 8;
+  animation: dash-flow 1s linear infinite;
+}
