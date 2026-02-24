@@ -44,6 +44,12 @@ jobs:
         with:
           python-version: '3.12'
 
+      # Install Bun for client bundling
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
       # Install required packages
       # Install jac-scale from main to get code-server horizontal scaling support
       - name: Install Jaseci packages

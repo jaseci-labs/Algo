@@ -120,9 +120,23 @@ def extract_raw_task_names(
 ) -> ExtractedTasks by llm();
 
 sem extract_raw_task_names = """
-Extract task names and generate unique names.
+Extract CORE action task names. Strip conditional/temporal prefixes - they go in edge labels ONLY.
 
-CRITICAL: ALWAYS EXTRACT TASK NAMES even when they already exist in the graph!
+STRIP THESE PREFIXES from task names:
+- "if X, I'll Y" → extract Y, put "if X" in edge label
+- "otherwise I'll Y" → extract Y, put "otherwise" in edge label
+- "when X, I'll Y" → extract Y, put "when X" in edge label
+- "after X, I'll Y" → extract Y, put "after X" in edge label
+- "then I'll Y" → extract Y, put "then" in edge label
+
+Examples:
+- "if it is raining I'll listen to the radio" → ListenToRadio
+- "otherwise I'll do some gardening" → DoGardening
+- "when I get home I'll check emails" → CheckEmails
+- "after lunch I'll take a nap" → TakeANap
+- "then I'll go to the gym" → GoToGym
+
+Convert to CamelCase. Extract ALL actions mentioned.
 
 RENAME MODE (correction_type='rename'):
 - Populate the 'renamed_to' field with the NEW task name (the one being renamed TO)

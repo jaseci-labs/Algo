@@ -1,0 +1,118 @@
+# Integration Tests for Algo
+# Runs full-stack tests on every PR to main and on push to main
+# This prevents breaking changes from being merged
+
+name: Integration Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  integration-test:
+    name: Full-stack Integration Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Set up Python
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Cache pip dependencies for faster builds
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('tests/integration/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # Install Bun for client bundling
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      # Install Jaseci packages
+      - name: Install Jaseci packages
+        run: |
+          pip install --upgrade pip
+          pip install jaclang jac-client byllm
+
+      # Install Python test dependencies
+      - name: Install test dependencies
+        run: |
+          pip install requests pytest
+
+      # Start Jac server in background
+      - name: Start Jac server
+        run: |
+          echo "Starting Jac server..."
+          jac start main.jac > /tmp/jac_server.log 2>&1 &
+          JAC_PID=$!
+          echo "Jac server PID: $JAC_PID"
+          echo $JAC_PID > /tmp/jac_pid.txt
+
+      # Wait for server to be ready
+      - name: Wait for server
+        run: |
+          echo "Waiting for server to start..."
+          for i in {1..60}; do
+            if curl -s http://localhost:8000/app/health > /dev/null 2>&1; then
+              echo "Server is ready!"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "Server did not start within 60 seconds"
+              echo "=== Server Log ==="
+              cat /tmp/jac_server.log
+              exit 1
+            fi
+            sleep 1
+          done
+
+      # Show server status
+      - name: Show server status
+        run: |
+          echo "=== Jac Server Status ==="
+          cat /tmp/jac_server.log || true
+          curl -s http://localhost:8000/ || true
+
+      # Run integration tests
+      - name: Run integration tests
+        run: |
+          python tests/integration/run_tests.py
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TEST_MODE: ci
+
+      # Capture server logs on failure
+      - name: Capture server logs on failure
+        if: failure()
+        run: |
+          echo "=== Server Logs ==="
+          cat /tmp/jac_server.log || true
+          echo "=== Process Status ==="
+          ps aux | grep jac || true
+
+      # Shutdown server
+      - name: Shutdown server
+        if: always()
+        run: |
+          if [ -f /tmp/jac_pid.txt ]; then
+            JAC_PID=$(cat /tmp/jac_pid.txt)
+            kill $JAC_PID 2>/dev/null || true
+            echo "Killed Jac server (PID: $JAC_PID)"
+          fi
+          pkill -f "jac start" 2>/dev/null || true

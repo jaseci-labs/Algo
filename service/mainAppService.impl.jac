@@ -54,6 +54,11 @@ impl init_user_graph.initialize{
         here ++> manager_comm_data();
     }
     visit [-->](?:user_routines) else { here ++> user_routines(); }
+
+    report {
+        "success": True,
+        "message": "User graph initialized with Start node"
+    };
 }
 
 # WALKER: update_task_graph
@@ -2077,7 +2082,7 @@ impl create_goal.initialize_goal {
         user_graph = here ++> user_graph_data(username=self.username);
     }
 
-    goal = here ++> UserGoal(
+    goal_list = here ++> UserGoal(
         goal_type=self.goal_type,
         target_value=self.target_value,
         current_value=0,
@@ -2086,15 +2091,23 @@ impl create_goal.initialize_goal {
         achieved_at=""
     );
 
-    user_graph ++> goal;
+    goal = goal_list[0] if len(goal_list) > 0 else None;
+    if goal {
+        user_graph ++> goal;
 
-    report {
-        "success": True,
-        "goal_id": str(id(goal)),
-        "goal_type": self.goal_type,
-        "target_value": self.target_value,
-        "created_at": goal.created_at
-    };
+        report {
+            "success": True,
+            "goal_id": str(id(goal)),
+            "goal_type": self.goal_type,
+            "target_value": self.target_value,
+            "created_at": goal.created_at
+        };
+    } else {
+        report {
+            "success": False,
+            "error": "Failed to create goal"
+        };
+    }
 }
 
 impl get_goals.fetch_goals {
