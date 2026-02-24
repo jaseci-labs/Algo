@@ -393,6 +393,213 @@ For parallel tasks detected: 'These happen at the same time' or 'These happen wh
 Keep all bullets under 10 words. Be conversational and natural.
 """;
 
+# ========== Unified Semantic Functions for Latency Optimization ==========
+
+"""Combined result from unified analysis"""
+obj UnifiedAnalysisResult {
+    has emotional_state: EmotionalState;
+    has intent_analysis: IntentAnalysis;
+    has extracted_tasks: ExtractedTasks;
+    has attachment_analysis: AttachmentPointAnalysis;
+}
+
+"""Combined result from unified build and respond"""
+obj UnifiedBuildResult {
+    has relationships: list[TaskRelationship];
+    has response: str;
+    has thinking_summary: ThinkingSummary;
+}
+
+"""Unified analysis: emotion, intent, extraction, attachment in ONE LLM call"""
+def unified_analyze_and_extract(
+    user_message: str,
+    conversation_history: list[dict[str, str]],
+    existing_nodes: list[str],
+    last_task: str
+) -> UnifiedAnalysisResult by llm();
+
+sem unified_analyze_and_extract = """
+You are Algo's unified analyzer. Process the user's message comprehensively in ONE pass and return ALL 4 analysis results.
+
+1. EMOTION DETECTION:
+Classify the user's emotional state as: stressed | excited | indecisive | fatigued | neutral
+- state = The detected emotion
+- confidence = Score 0.0-1.0
+- reasoning = Brief explanation
+
+2. INTENT CLASSIFICATION:
+- should_create_tasks = TRUE if user mentions ANY action/task (even casual: "check messages", "grab lunch"). Only FALSE for explicit questions ("what should I do?") or pure uncertainty ("maybe", "not sure")
+- intent = COMMIT_ACTION (default for any action) | CORRECT_PREVIOUS (keywords: "actually", "before", "first") | CLARIFY_PREVIOUS ("no i meant", "after X") | ASK_QUESTION (explicit questions) | THINK_ALOUD ("maybe", "wondering")
+- referring_to_task = EXACT task name from existing_nodes being referenced (e.g., "rename X to Y"→"X", "before Y"→"Y"). Empty if none.
+- correction_type = rename (change task name) | insert_before | insert_after | insert_first | reorder | replace | empty
+- needs_graph_rebuild = TRUE for corrections/clarifications with existing tasks, FALSE for simple additions
+- is_insertion = TRUE if inserting task BETWEEN existing tasks
+- tasks_to_move = List of existing task names being repositioned
+- confidence = 0.0-1.0
+
+3. TASK EXTRACTION (convert to CamelCase):
+IMPORTANT - Strip these prefixes from task names (they go in edge labels ONLY):
+- "if X, I'll Y" → extract Y only, put "if X" in edge label
+- "otherwise I'll Y" → extract Y only, put "otherwise" in edge label
+- "when X, I'll Y" → extract Y only, put "when X" in edge label
+- "after X, I'll Y" → extract Y only, put "after X" in edge label
+- "then I'll Y" → extract Y only, put "then" in edge label
+
+Examples:
+- "if it is raining I'll listen to the radio" → ListenToRadio
+- "otherwise I'll do some gardening" → DoGardening
+- "when I get home I'll check emails" → CheckEmails
+- "after lunch I'll take a nap" → TakeANap
+- "then I'll go to the gym" → GoToGym
+
+SPECIAL MODES:
+- RENAME MODE (correction_type='rename'): Populate renamed_to with NEW name only. raw_names=[], unique_names=[]
+- REORDER MODE (correction_type='reorder' OR tasks_to_move populated): Use EXISTING names without numbers
+- INSERTION MODE (is_insertion=True): Use existing names if they exist in existing_nodes
+- NORMAL MODE: Append numbers for duplicates (MakeCoffee exists → MakeCoffee2)
+
+4. ATTACHMENT POINTS:
+- attachment_nodes = [last_task] default for additions. For "after X": [X]. For "before Y": find predecessor of Y in existing_nodes
+- is_convergent = TRUE if multiple attachment points (parallel branches merging)
+- reasoning = Brief explanation
+- user_specified = TRUE if user explicitly named attachment task
+
+Return ALL 4 results in proper JSON structure with no concatenation.
+""";
+
+"""Unified build: relationships, response, thinking in ONE LLM call"""
+def unified_build_and_respond(
+    user_message: str,
+    emotional_state: EmotionalState,
+    intent_analysis: IntentAnalysis,
+    extracted_tasks: ExtractedTasks,
+    attachment_analysis: AttachmentPointAnalysis,
+    conversation_context: ConversationContext,
+    current_edges: list[dict[str, str]]
+) -> UnifiedBuildResult by llm();
+
+sem unified_build_and_respond = """
+You are Algo's unified builder. Build task relationships AND generate response AND generate thinking summary in ONE pass.
+
+1. BUILD TASK RELATIONSHIPS:
+CRITICAL DEFAULT BEHAVIOR - INCREMENTAL ADDITION:
+For normal COMMIT_ACTION with needs_graph_rebuild=False: Return ONLY NEW relationships being added (do NOT include existing edges)
+
+FULL REBUILD MODE (needs_graph_rebuild=True):
+Return ALL relationships to reconstruct complete graph INCLUDING ALL EXISTING EDGES from current_edges
+- Start by INCLUDING all relationships from current_edges
+- For INSERTION: remove the edge being split (e.g., inserting between A->C, remove A->C)
+- Add new edges: A->NewTask, NewTask->C
+
+CONNECTION TYPES:
+- SEQUENTIAL: "then", "after", "next", "afterwards"
+- PARALLEL: "while", "as", "at same time", "simultaneously", "and" (tasks happening together)
+- CONDITIONAL: "if", "when", "else", "otherwise"
+- CONVERGENT: "either way" (ONLY for conditional branches merging)
+
+EDGE LABELS:
+- "then" or "afterwards": Default for sequential
+- "while" or "at same time": For parallel
+- "if X" or "otherwise": For conditional
+- "either way": ONLY for conditional convergence (not parallel)
+
+PARALLEL TASKS RULE:
+When user says "while X do Y and Z":
+- Create N relationships, ALL with SAME from_task (attachment_nodes[0])
+- ALL use connection_type = PARALLEL
+- Each goes to a different task
+- sequence_order: 1, 2, 3...
+
+Example: "have drink while chatting with buddies, then head home"
+→ HaveDrink[from=HeadToThePub, label="while"], ChatWithBuddies[from=HeadToThePub, label="while"]
+→ HeadHome[from=HaveDrink, label="then"], HeadHome[from=ChatWithBuddies, label="then"]
+
+CONDITIONAL EXAMPLE:
+"if raining read book otherwise walk either way go home"
+→ IfRaining→ReadBook[label="if raining"], Otherwise→Walk[label="otherwise"]
+→ ReadBook→GoHome[label="either way"], Walk→GoHome[label="either way"]
+
+Each TaskRelationship must have separate fields:
+{
+  "connection_type": "SEQUENTIAL",
+  "from_task": "CheckMessages",
+  "to_task": "MakeBreakfast",
+  "edge_label": "then",
+  "sequence_order": 1
+}
+
+2. GENERATE RESPONSE:
+Match the emotional_state tone. Natural acknowledgment ("Got it!", "Alright!", "Sounds good!") - NOT "Task added". 1-3 sentences, use contractions, no jargon.
+
+3. GENERATE THINKING SUMMARY:
+- emotional_insight = "You seem {state} right now" (empty if confidence < 0.7)
+- intent_insight = "You're [action]" for corrections, empty for simple COMMIT_ACTION
+- task_insight = "Adding: [TaskName]" for single OR "Extracted: [Task1], [Task2]" for multiple. Add "(parallel)" if parallel pattern detected
+- pattern_insight = Empty for simple sequential. For parallel: "These happen at the same time". For conditional: "These are conditional options"
+
+Keep all bullets under 10 words. Conversational and natural.
+
+Return ALL 3 results in proper JSON structure.
+""";
+
+# ========== Fast Response Functions ==========
+
+"""Quick response result for immediate feedback"""
+obj QuickResponseResult {
+    has emotional_state: EmotionalState;
+    has intent_analysis: IntentAnalysis;
+    has extracted_tasks: ExtractedTasks;
+    has attachment_analysis: AttachmentPointAnalysis;
+    has response: str;
+    has thinking: dict[str, str];
+}
+
+"""Fast analysis and response in ONE LLM call - for immediate user feedback"""
+def quick_analyze_and_respond(
+    user_message: str,
+    conversation_history: list[dict[str, str]],
+    existing_nodes: list[str],
+    last_task: str
+) -> QuickResponseResult by llm();
+
+sem quick_analyze_and_respond = """
+You are Algo. Analyze the user's message and respond IMMEDIATELY. Do everything in ONE pass.
+
+1. EMOTION DETECTION:
+Classify emotional state: stressed | excited | indecisive | fatigued | neutral
+- state = detected emotion
+- confidence = 0.0-1.0
+- reasoning = brief explanation
+
+2. INTENT CLASSIFICATION:
+- should_create_tasks = TRUE if user mentions ANY action/task (even casual). Only FALSE for explicit questions
+- intent = COMMIT_ACTION (default) | CORRECT_PREVIOUS | CLARIFY_PREVIOUS | ASK_QUESTION | THINK_ALOUD
+- referring_to_task = EXACT task name from existing_nodes being referenced
+- correction_type = rename | insert_before | insert_after | insert_first | reorder | replace | empty
+- needs_graph_rebuild = TRUE for corrections, FALSE for simple additions
+- confidence = 0.0-1.0
+
+3. TASK EXTRACTION (convert to CamelCase):
+Strip prefixes: "if X, I'll Y" → extract Y only, put "if X" in edge label
+"otherwise I'll Y" → extract Y only, put "otherwise" in edge label
+
+SPECIAL MODES:
+- RENAME MODE: renamed_to = NEW name only, raw_names=[]
+- REORDER MODE: use EXISTING names without numbers
+- INSERTION MODE: use existing names if in existing_nodes
+- NORMAL MODE: Append numbers for duplicates
+
+4. ATTACHMENT POINTS:
+- attachment_nodes = [last_task] default for additions
+- is_convergent = TRUE if multiple attachment points
+- reasoning = brief explanation
+
+5. GENERATE RESPONSE:
+Match emotional_state tone. Natural acknowledgment ("Got it!", "Alright!", "Sounds good!") - NOT "Task added". 1-3 sentences, use contractions, no jargon.
+
+Return ALL 5 results in proper JSON structure.
+""";
+
 """Task validation result"""
 obj TaskValidationResult {
     has is_valid: bool;

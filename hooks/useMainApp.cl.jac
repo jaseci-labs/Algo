@@ -14,6 +14,8 @@ import from .useAudioControls { useAudioControls }
 # Import services
 import from ..api.api {
     callManager,
+    getQuickResponse,
+    getPendingUpdates,
     saveRoutine,
     getUsernameFromToken
 }
@@ -26,8 +28,10 @@ def:pub useMainApp() -> any {
     has userText: str = "";
     has suggestions: list = [];
 
-    # Ref for auto-scroll
+    # Ref for auto-scroll and graph update polling
     transcriptEndRef = useRef(None);
+    graphUpdatePollRef = useRef(None);
+    lastGraphUpdateIdRef = useRef(0);
     
     # ========== Compose Sub-Hooks ==========
     
@@ -55,14 +59,14 @@ def:pub useMainApp() -> any {
     lastTask = graphHook.lastTask;
     refreshGraphState = graphHook.refreshGraphState;
     handleClearGraph = graphHook.handleClearGraph;
-    
+
     # Create a setter function wrapper for suggestions to pass to child hooks
     def updateSuggestions(newSuggestions: list) -> None {
         suggestions = newSuggestions;
     }
 
-    # Realtime session management (pass updateSuggestions)
-    sessionHook = useRealtimeSession(transcriptHelpers, refreshGraphState, updateSuggestions);
+    # Realtime session management (pass updateSuggestions and poll function)
+    sessionHook = useRealtimeSession(transcriptHelpers, refreshGraphState, updateSuggestions, startGraphUpdatePoll);
     sessionStatus = sessionHook.sessionStatus;
     sessionRef = sessionHook.sessionRef;
     isConnected = sessionHook.isConnected;
@@ -92,7 +96,48 @@ def:pub useMainApp() -> any {
             suggestions = [];
         }
     }
-    
+
+    # Start polling for graph updates after quick response
+    def startGraphUpdatePoll() -> None {
+        # Clear any existing interval
+        if graphUpdatePollRef.current {
+            clearInterval(graphUpdatePollRef.current);
+        }
+
+        # Increment update ID
+        lastGraphUpdateIdRef.current = lastGraphUpdateIdRef.current + 1;
+        currentUpdateId = lastGraphUpdateIdRef.current;
+        username = getUsernameFromToken();
+
+        # Poll every 1 second, max 10 attempts
+        attempts = 0;
+        graphUpdatePollRef.current = setInterval(lambda -> None {
+            attempts = attempts + 1;
+            if attempts > 10 {
+                clearInterval(graphUpdatePollRef.current);
+                graphUpdatePollRef.current = None;
+                return;
+            }
+
+            # Check if this poll is still valid (not superseded by newer update)
+            if currentUpdateId != lastGraphUpdateIdRef.current {
+                clearInterval(graphUpdatePollRef.current);
+                return;
+            }
+
+            # Async refresh
+            async def doCheck() -> None {
+                result = await getPendingUpdates(username);
+                if result.success and not result.update_in_progress {
+                    clearInterval(graphUpdatePollRef.current);
+                    graphUpdatePollRef.current = None;
+                    await refreshGraphState(username);
+                }
+            }
+            doCheck();
+        }, 1000);
+    }
+
     # ========== Connection Handlers ==========
     
     def onToggleConnection() -> None {
@@ -119,33 +164,23 @@ def:pub useMainApp() -> any {
             return;
         }
 
-        # Text-only mode: call supervisor directly using service layer
+        # Text-only mode: use fast response
         try {
             assistantItemId = "assistant-" + String(Date.now());
             addTranscriptItem(assistantItemId, "assistant", "Thinking...");
 
-            result = await callManager(message, [], username);
+            result = await getQuickResponse(message, [], username);
             if result.success {
-                # Pass thinking data if available
-                thinkingData = None;
-                if result.thinking {
-                    thinkingData = result.thinking;
-                }
+                thinkingData = result.thinking if result.thinking else {};
                 updateTranscriptItem(assistantItemId, result.response, thinkingData);
-                await refreshGraphState(username);
-
-                # Update suggestions if available
-                if result.suggestions and Array.isArray(result.suggestions) {
-                    suggestions = result.suggestions;
-                } else {
-                    suggestions = [];
-                }
+                # Start polling for graph update
+                startGraphUpdatePoll();
             } else {
                 updateTranscriptItem(assistantItemId, "Error: " + (result.error or "Unknown error"));
                 suggestions = [];
             }
-        } except Exception as e {
-            console.error("Text chat error:", e);
+        } catch {
+            console.error("Text chat error");
             addMessage("system", "Error: Failed to get response");
             suggestions = [];
         }
@@ -164,26 +199,33 @@ def:pub useMainApp() -> any {
             return;
         }
 
-        # Text-only mode: call supervisor
+        # Text-only mode: use fast response
         try {
             assistantItemId = "assistant-" + String(Date.now());
             addTranscriptItem(assistantItemId, "assistant", "Thinking...");
 
-            result = await callManager(suggestionText, [], username);
+            result = await getQuickResponse(suggestionText, [], username);
             if result.success {
-                # Pass thinking data if available
-                thinkingData = None;
-                if result.thinking {
-                    thinkingData = result.thinking;
-                }
+                thinkingData = result.thinking if result.thinking else {};
                 updateTranscriptItem(assistantItemId, result.response, thinkingData);
-                await refreshGraphState(username);
 
-                # Update suggestions if available
-                if result.suggestions and Array.isArray(result.suggestions) {
-                    suggestions = result.suggestions;
-                } else {
-                    suggestions = [];
+                # Smart polling for graph updates
+                maxAttempts = 20;
+                attempt = 0;
+                while attempt < maxAttempts {
+                    await std.sleep(500);
+                    await refreshGraphState(username);
+
+                    updatesResult = await getPendingUpdates(username);
+                    if updatesResult.success {
+                        if updatesResult.suggestions and Array.isArray(updatesResult.suggestions) {
+                            suggestions = updatesResult.suggestions;
+                        }
+                        if not updatesResult.update_in_progress {
+                            break;
+                        }
+                    }
+                    attempt = attempt + 1;
                 }
             } else {
                 updateTranscriptItem(assistantItemId, "Error: " + (result.error or "Unknown error"));

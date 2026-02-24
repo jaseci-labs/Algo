@@ -173,6 +173,88 @@ async def:pub callManager(context_from_user: str, conversation_history: list, us
     }
 }
 
+# ============================================
+# Fast Response Service (for low latency)
+# ============================================
+
+# Get quick response immediately without waiting for graph update
+# @param context_from_user - The relevant context from user's message
+# @param conversation_history - Array of conversation history items
+# @param username - The current user's username
+# @returns Immediate response with basic info
+async def:pub getQuickResponse(context_from_user: str, conversation_history: list, username: str) -> any {
+    try {
+        result = root spawn quick_response(
+            conversation_history=conversation_history,
+            context_from_user=context_from_user,
+            username=username
+        );
+
+        response_data = result.reports[result.reports.length - 1] if result.reports and result.reports.length > 0 else {};
+
+        if response_data and "error" in response_data {
+            console.error("Quick response error:", response_data);
+            return {
+                "success": False,
+                "error": response_data.error or "Quick response error"
+            };
+        }
+
+        return {
+            "success": True,
+            "response": response_data["response"] or "Got it!",
+            "emotional_state": response_data["emotional_state"] or "neutral",
+            "suggestions": response_data["suggestions"] or [],
+            "thinking": response_data["thinking"] or {},
+            "task_names": response_data["task_names"] or [],
+            "validation_passed": response_data["validation_passed"] or True
+        };
+    } except Exception as e {
+        console.error("getQuickResponse error:", e);
+        return {
+            "success": False,
+            "error": String(e)
+        };
+    }
+}
+
+# Get pending updates (graph, suggestions) after quick response
+# @param username - The current user's username
+# @returns Updated graph data and suggestions when ready
+async def:pub getPendingUpdates(username: str) -> any {
+    try {
+        result = root spawn get_pending_updates(username=username);
+
+        response_data = result.reports[result.reports.length - 1] if result.reports and result.reports.length > 0 else {};
+
+        if response_data and "error" in response_data {
+            return {
+                "success": False,
+                "error": response_data.error
+            };
+        }
+
+        return {
+            "success": True,
+            "has_updates": response_data["has_updates"] or False,
+            "graph_updated": response_data["graph_updated"] or False,
+            "update_in_progress": response_data["update_in_progress"] or False,
+            "dotCode": response_data["dotCode"] or "",
+            "edges": response_data["edges"] or [],
+            "lastTask": response_data["lastTask"] or "Start",
+            "suggestions_ready": response_data["suggestions_ready"] or False,
+            "suggestions": response_data["suggestions"] or [],
+            "thinking": response_data["thinking"] or {}
+        };
+    } except Exception as e {
+        console.error("getPendingUpdates error:", e);
+        return {
+            "success": False,
+            "error": String(e)
+        };
+    }
+}
+
 # Legacy function - redirects to callManager for backward compatibility
 async def:pub callSupervisor(context_from_user: str, conversation_history: list, username: str) -> any {
     return await callManager(context_from_user, conversation_history, username);

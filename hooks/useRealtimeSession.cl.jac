@@ -8,6 +8,8 @@ import from ..constants.constants { CHAT_AGENT_INSTRUCTIONS }
 import from ..api.api {
     getSessionToken,
     callManager,
+    getQuickResponse,
+    getPendingUpdates,
     getUsernameFromToken
 }
 
@@ -32,7 +34,8 @@ def extractMessageText(content: any) -> str {
 # @param transcriptHelpers - Object containing transcript manipulation functions
 # @param refreshGraphState - Function to refresh graph state after supervisor calls
 # @param setSuggestions - Function to update suggestions state in parent
-def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSuggestions: any) -> any {
+# @param startGraphPoll - Function to start polling for graph updates
+def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSuggestions: any, startGraphPoll: any) -> any {
     # Reactive state using has variables
     has sessionStatus: str = "DISCONNECTED";
 
@@ -78,15 +81,14 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
             filteredHistory = history.filter(lambda log: any -> bool { return log.type == "message"; });
 
             username = getUsernameFromToken();
-            result = await callManager(context, filteredHistory, username);
+
+            # Fast response: get response immediately
+            result = await getQuickResponse(context, filteredHistory, username);
 
             if not result.success {
-                console.error("Supervisor error:", result.error);
+                console.error("Quick response error:", result.error);
                 return {"error": "Something went wrong."};
             }
-
-            # Fetch updated graph state after supervisor completes
-            await refreshGraphState(username);
 
             # Update suggestions if available
             if result.suggestions and Array.isArray(result.suggestions) {
@@ -95,8 +97,11 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                 setSuggestions([]);
             }
 
-            # Get response from service result
-            next_resp = result.response or "I apologize, I couldn't get a response.";
+            # Get response immediately
+            next_resp = result.response or "Got it!";
+            # Start polling for graph update
+            startGraphPoll();
+
             return {"nextResponse": next_resp};
         }
         

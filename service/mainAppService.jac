@@ -43,7 +43,15 @@ import from semantics.semantics {
     discover_routine_patterns,
     analyze_temporal_patterns,
     generate_comparative_insights,
-    should_trigger_proactive_insight
+    should_trigger_proactive_insight,
+    # Unified functions for latency optimization
+    UnifiedAnalysisResult,
+    UnifiedBuildResult,
+    unified_analyze_and_extract,
+    unified_build_and_respond,
+    # Fast response functions
+    QuickResponseResult,
+    quick_analyze_and_respond
 }
 
 node TaskState {
@@ -73,8 +81,12 @@ node manager_comm_data {
     has validation_type: str = "";
     has correction_needed: bool = False;
     has missing_tasks: list[str] = [];
-    has incorrect_task: str = "";      # Existing task with wrong name that should be renamed
-    has correct_task_name: str = "";    # What the task should be renamed to
+    has incorrect_task: str = "";
+    has correct_task_name: str = "";
+    has pending_analysis: any = None;
+    has pending_user_message: str = "";
+    has graph_update_in_progress: bool = False;
+    has pending_relationships: list[TaskRelationship] = [];
 }
 
 node user_routines {
@@ -233,6 +245,29 @@ walker :pub call_manager {
     has username: str = "anonymous";
 
     can orchestrate with Root entry;
+}
+
+# ========== Fast Response Walkers ==========
+
+walker :pub quick_response {
+    has conversation_history: list;
+    has context_from_user: str;
+    has username: str = "anonymous";
+
+    can respond with Root entry;
+}
+
+walker :pub update_graph_background {
+    has context_from_user: str;
+    has username: str = "anonymous";
+
+    can update with Root entry;
+}
+
+walker :pub get_pending_updates {
+    has username: str = "anonymous";
+
+    can get_updates with Root entry;
 }
 
 walker :pub validate_graph_output {

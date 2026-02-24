@@ -416,17 +416,18 @@ impl call_graph_agent.call{
         before_nodes = current_nodes.copy();
         before_edges = current_edges.copy();
 
-        emotional_state = detect_emotional_state(
-            user_message=self.context_from_user,
-            conversation_history=self.conversation_history
-        );
-
-        intent_analysis = analyze_conversation_intent(
+        # Unified analysis: emotion, intent, extraction, attachment in ONE LLM call
+        # Replaces: detect_emotional_state, analyze_conversation_intent, extract_raw_task_names, determine_attachment_points
+        unified_analysis = unified_analyze_and_extract(
             user_message=self.context_from_user,
             conversation_history=self.conversation_history,
             existing_nodes=current_nodes,
             last_task=last_task
         );
+        emotional_state = unified_analysis.emotional_state;
+        intent_analysis = unified_analysis.intent_analysis;
+        extracted_tasks = unified_analysis.extracted_tasks;
+        attachment_analysis = unified_analysis.attachment_analysis;
 
         if intent_analysis.conversation_context.correction_type == "rename" {
             referring_to = intent_analysis.conversation_context.referring_to_task;
@@ -446,24 +447,26 @@ impl call_graph_agent.call{
                 }
             }
 
-            extracted_tasks = extract_raw_task_names(
-                user_message=self.context_from_user,
-                conversation_context=intent_analysis.conversation_context,
-                existing_nodes=current_nodes
-            );
-
             new_name = extracted_tasks.renamed_to;
 
             if old_name != "Start" and new_name {
-                new_nodes = [new_name if n == old_name else n for n in current_nodes];
-                new_edges = [
-                    {
+                new_nodes = [];
+                for n in current_nodes {
+                    if n == old_name {
+                        new_nodes.append(new_name);
+                    } else {
+                        new_nodes.append(n);
+                    }
+                }
+                new_edges = [];
+                for e in current_edges {
+                    new_edge = {
                         "from": new_name if e.get("from") == old_name else e.get("from"),
                         "to": new_name if e.get("to") == old_name else e.get("to"),
                         "label": e.get("label", "")
-                    }
-                    for e in current_edges
-                ];
+                    };
+                    new_edges.append(new_edge);
+                }
 
                 here spawn rebuild_graph(username=self.username, new_nodes=new_nodes, new_edges=new_edges);
 
@@ -499,7 +502,7 @@ impl call_graph_agent.call{
                     here ++> manager_data;
                 }
                 manager_data.last_response = response;
-                manager_data.last_suggestions = [];
+                manager_data.last_suggestions = [];;
                 manager_data.last_thinking = {
                     "emotional": f"You seem {emotional_state.state} right now",
                     "intent": "You're renaming a task",
@@ -522,18 +525,10 @@ impl call_graph_agent.call{
         }
 
         relationships = [];
-        extracted_tasks = None;
-        attachment_analysis = None;
         convergence_intent = None;
         edge_to_split = None;
 
         if intent_analysis.should_create_tasks {
-            extracted_tasks = extract_raw_task_names(
-                user_message=self.context_from_user,
-                conversation_context=intent_analysis.conversation_context,
-                existing_nodes=current_nodes
-            );
-
             correction_type = intent_analysis.conversation_context.correction_type;
             referring_to = intent_analysis.conversation_context.referring_to_task;
 
@@ -548,33 +543,41 @@ impl call_graph_agent.call{
                     }
                 } elif correction_type == "insert_after" and referring_to {
                     last_task = referring_to;
-                    edge_to_split = next((e for e in current_edges if e.get("from") == referring_to), None);
+                    edge_to_split = None;
+                    for e in current_edges {
+                        if e.get("from") == referring_to {
+                            edge_to_split = e;
+                            break;
+                        }
+                    }
                 } elif correction_type == "insert_first" {
                     last_task = "Start";
                 }
             }
 
-            attachment_analysis = determine_attachment_points(
-                user_message=self.context_from_user,
-                last_task=last_task,
-                existing_nodes=current_nodes,
-                conversation_context=intent_analysis.conversation_context
-            );
+            # Only check convergence for complex cases
+            if len(current_edges) > 2 or len(current_nodes) > 3 {
+                convergence_intent = detect_convergence_intent(
+                    user_message=self.context_from_user,
+                    last_task=last_task,
+                    current_edges=current_edges
+                );
+            }
 
-            convergence_intent = detect_convergence_intent(
+            # Unified build: relationships, response, thinking in ONE LLM call
+            # Replaces: build_task_relationships, generate_friendly_response, generate_thinking_summary
+            unified_build = unified_build_and_respond(
                 user_message=self.context_from_user,
-                last_task=last_task,
-                current_edges=current_edges
-            );
-
-            relationships = build_task_relationships(
-                user_message=self.context_from_user,
+                emotional_state=emotional_state,
+                intent_analysis=intent_analysis,
                 extracted_tasks=extracted_tasks,
                 attachment_analysis=attachment_analysis,
-                convergence_intent=convergence_intent,
                 conversation_context=intent_analysis.conversation_context,
                 current_edges=current_edges
             );
+            relationships = unified_build.relationships;
+            response = unified_build.response;
+            thinking_summary = unified_build.thinking_summary;
 
             if intent_analysis.conversation_context.needs_graph_rebuild
             and len(current_nodes) > 1 {
@@ -600,7 +603,7 @@ impl call_graph_agent.call{
                 }
 
                 edge_map = {};
-                tasks_to_move = intent_analysis.conversation_context.tasks_to_move if hasattr(intent_analysis.conversation_context, 'tasks_to_move') else [];
+                tasks_to_move = intent_analysis.conversation_context.tasks_to_move if intent_analysis.conversation_context.tasks_to_move else [];
 
                 if len(tasks_to_move) > 0 {
                     for edge in current_edges {
@@ -631,7 +634,7 @@ impl call_graph_agent.call{
                     if edge_to_split {
                         split_key = f"{edge_to_split.get('from', '')}->{edge_to_split.get('to', '')}";
                         if split_key in edge_map {
-                            del edge_map[split_key];
+                            edge_map.pop(split_key);
                         }
                     }
 
@@ -649,7 +652,7 @@ impl call_graph_agent.call{
 
                     for edge_key in edges_to_remove {
                         if edge_key in edge_map {
-                            del edge_map[edge_key];
+                            edge_map.pop(edge_key);
                         }
                     }
                 }
@@ -696,15 +699,26 @@ impl call_graph_agent.call{
             }
         }
 
-        thinking_summary = generate_thinking_summary(
-            user_message=self.context_from_user,
-            emotional_state=emotional_state,
-            intent_analysis=intent_analysis,
-            extracted_tasks=extracted_tasks,
-            attachment_analysis=attachment_analysis,
-            convergence_intent=convergence_intent
-        );
 
+        # If no tasks were created, generate response separately
+        if len(relationships) == 0 {
+            response = generate_friendly_response(
+                user_message=self.context_from_user,
+                emotional_state=emotional_state,
+                action_taken="none",
+                task_names = [],
+            )
+            thinking_summary = generate_thinking_summary(
+                user_message=self.context_from_user,
+                emotional_state=emotional_state,
+                intent_analysis=intent_analysis,
+                extracted_tasks=extracted_tasks,
+                attachment_analysis=attachment_analysis,
+                convergence_intent=convergence_intent
+            );
+        }
+
+        # Extract task_names from relationships
         task_names = [];
         for rel in relationships {
             if rel.to_task not in task_names {
@@ -712,40 +726,14 @@ impl call_graph_agent.call{
             }
         }
 
-        response = generate_friendly_response(
-            user_message=self.context_from_user,
-            emotional_state=emotional_state,
-            action_taken="task_added" if intent_analysis.should_create_tasks else "none",
-            task_names=task_names
-        );
-
-        suggestions = [];
-        try {
-            recent_tasks = [];
-            task_count = 0;
-            for i in range(len(current_nodes) - 1, -1, -1) {
-                if current_nodes[i] != "Start" and task_count < 3 {
-                    recent_tasks.insert(0, current_nodes[i]);
-                    task_count = task_count + 1;
-                }
-            }
-
-            suggestions = generate_next_suggestions(
-                last_task=last_task,
-                recent_tasks=recent_tasks,
-                conversation_context=self.context_from_user,
-                emotional_state=emotional_state.state
-            );
-        } except Exception as e {
-            suggestions = [];
-        }
-
         thinking = {
             "emotional": thinking_summary.emotional_insight if thinking_summary.emotional_insight else "",
             "intent": thinking_summary.intent_insight if thinking_summary.intent_insight else "",
             "tasks": thinking_summary.task_insight if thinking_summary.task_insight else "",
             "pattern": thinking_summary.pattern_insight if thinking_summary.pattern_insight else ""
-        };
+        }
+
+        suggestions = [];
 
         user_graph_after = find_user_graph(here, self.username);
         after_nodes = [];
@@ -2382,3 +2370,366 @@ impl dismiss_insight.dismiss {
     report {"success": False, "error": "Insight not found"};
 }
 
+# ========== Fast Response Walkers for Latency Optimization ==========
+
+# WALKER: quick_response
+# Returns response immediately without waiting for graph update
+impl quick_response.respond {
+    try {
+        api_key = getenv("OPENAI_API_KEY");
+        if not api_key {
+            report {"error": "OPENAI_API_KEY not set"};
+            return;
+        }
+
+        # Load current graph state for context
+        current_nodes = [];
+        last_task = "Start";
+
+        user_graph = find_user_graph(here, self.username);
+        if not user_graph {
+            user_graph = here ++> user_graph_data(username=self.username);
+            user_graph ++> TaskState(task_name="Start");
+        }
+
+        if user_graph {
+            last_task = user_graph?.last_task or "Start";
+            start_node = find_start_node(user_graph);
+
+            if start_node {
+                graph_data = get_user_graph_structure(user_graph);
+                current_nodes = graph_data[0];
+
+                leaf_nodes = find_leaf_nodes(graph_data[1], current_nodes);
+                if len(leaf_nodes) > 1 {
+                    last_task = "|".join(leaf_nodes);
+                } elif len(leaf_nodes) == 1 {
+                    last_task = leaf_nodes[0];
+                }
+            }
+        }
+
+        # Single LLM call for analysis + response
+        quick_result = quick_analyze_and_respond(
+            user_message=self.context_from_user,
+            conversation_history=self.conversation_history,
+            existing_nodes=current_nodes,
+            last_task=last_task
+        );
+
+        # Store analysis for background graph update
+        manager_data = find_manager_comm_data(here, self.username);
+        if not manager_data {
+            manager_data = manager_comm_data(username=self.username);
+            here ++> manager_data;
+        }
+
+        # Build rule-based relationships for simple cases (no LLM needed)
+        relationships = [];
+        extracted_names = quick_result.extracted_tasks.unique_names or [];
+        attachment_nodes = quick_result.attachment_analysis.attachment_nodes or [last_task];
+
+        if quick_result.intent_analysis.should_create_tasks and len(extracted_names) > 0 {
+            # Simple sequential relationship building
+            prev_task = attachment_nodes[0] if len(attachment_nodes) > 0 else last_task;
+            for task_name in extracted_names {
+                rel = TaskRelationship(
+                    connection_type=ConnectionType.SEQUENTIAL,
+                    from_task=prev_task,
+                    to_task=task_name,
+                    edge_label="then",
+                    sequence_order=len(relationships) + 1
+                );
+                relationships.append(rel);
+                prev_task = task_name;
+            }
+        }
+
+        # Store the analysis and relationships for background processing
+        manager_data.pending_analysis = quick_result;
+        manager_data.pending_user_message = self.context_from_user;
+        manager_data.pending_relationships = relationships;
+        manager_data.graph_update_in_progress = True;
+
+        # Build thinking summary
+        thinking = {
+            "emotional": f"You seem {quick_result.emotional_state.state} right now",
+            "intent": "",
+            "tasks": "",
+            "pattern": ""
+        };
+
+        if quick_result.intent_analysis.conversation_context.intent {
+            intent_str = str(quick_result.intent_analysis.conversation_context.intent);
+            if "COMMIT_ACTION" in intent_str {
+                thinking["tasks"] = f"Adding tasks to your routine";
+            } elif "CORRECT_PREVIOUS" in intent_str {
+                thinking["intent"] = "You're updating your routine";
+            }
+        }
+
+        # Trigger background graph update (fire and forget)
+        here spawn update_graph_background(
+            context_from_user=self.context_from_user,
+            username=self.username
+        );
+
+        # Return immediately with response
+        report {
+            "response": quick_result.response,
+            "emotional_state": quick_result.emotional_state.state,
+            "suggestions": [],  # Will be populated asynchronously
+            "thinking": thinking,
+            "task_names": quick_result.extracted_tasks.unique_names or [],
+            "validation_passed": True
+        };
+    } except Exception as e {
+        report {"error": str(e)};
+    }
+}
+
+# WALKER: update_graph_background
+# Runs after response is returned to update graph in background
+impl update_graph_background.update {
+    try {
+        # Retrieve pending analysis
+        manager_data = find_manager_comm_data(here, self.username);
+        if not manager_data or not manager_data.pending_analysis {
+            report {"error": "No pending analysis found"};
+            return;
+        }
+
+        quick_result = manager_data.pending_analysis;
+        user_message = manager_data.pending_user_message or self.context_from_user;
+
+        # Clear pending data
+        manager_data.pending_analysis = None;
+        manager_data.pending_user_message = None;
+
+        # Load current graph state
+        current_nodes = [];
+        current_edges = [];
+        last_task = "Start";
+
+        user_graph = find_user_graph(here, self.username);
+        if user_graph {
+            last_task = user_graph?.last_task or "Start";
+            start_node = find_start_node(user_graph);
+
+            if start_node {
+                graph_data = get_user_graph_structure(user_graph);
+                current_nodes = graph_data[0];
+                current_edges = graph_data[1];
+
+                leaf_nodes = find_leaf_nodes(current_edges, current_nodes);
+                if len(leaf_nodes) > 1 {
+                    last_task = "|".join(leaf_nodes);
+                } elif len(leaf_nodes) == 1 {
+                    last_task = leaf_nodes[0];
+                }
+            }
+        }
+
+        emotional_state = quick_result.emotional_state;
+        intent_analysis = quick_result.intent_analysis;
+        extracted_tasks = quick_result.extracted_tasks;
+        attachment_analysis = quick_result.attachment_analysis;
+        relationships = [];
+        response = quick_result.response;
+
+        # Handle rename case
+        if intent_analysis.conversation_context.correction_type == "rename" {
+            referring_to = intent_analysis.conversation_context.referring_to_task;
+
+            old_name = None;
+            if referring_to and referring_to in current_nodes {
+                old_name = referring_to;
+            } else {
+                for node in current_nodes {
+                    if referring_to and node.lower() == referring_to.lower() {
+                        old_name = node;
+                        break;
+                    }
+                }
+                if not old_name {
+                    old_name = last_task.split("|")[0] if "|" in last_task else last_task;
+                }
+            }
+
+            new_name = extracted_tasks.renamed_to;
+
+            if old_name != "Start" and new_name {
+                new_nodes = [];
+                for n in current_nodes {
+                    if n == old_name {
+                        new_nodes.append(new_name);
+                    } else {
+                        new_nodes.append(n);
+                    }
+                }
+                new_edges = [];
+                for e in current_edges {
+                    new_edge = {
+                        "from": new_name if e.get("from") == old_name else e.get("from"),
+                        "to": new_name if e.get("to") == old_name else e.get("to"),
+                        "label": e.get("label", "")
+                    };
+                    new_edges.append(new_edge);
+                }
+
+                here spawn rebuild_graph(username=self.username, new_nodes=new_nodes, new_edges=new_edges);
+
+                manager_data.last_response = response;
+                manager_data.last_suggestions = [];
+                manager_data.last_thinking = {
+                    "emotional": f"You seem {emotional_state.state} right now",
+                    "intent": "You're renaming a task",
+                    "tasks": f"Renamed: {old_name} → {new_name}",
+                    "pattern": ""
+                };
+                manager_data.last_task_names = [new_name];
+                manager_data.last_emotional_state = emotional_state.state;
+
+                report {"success": True, "updated": True};
+                return;
+            }
+        }
+
+        # Handle task creation
+        if intent_analysis.should_create_tasks {
+            # Use pre-built relationships if available (no LLM needed for simple cases)
+            if manager_data.pending_relationships and len(manager_data.pending_relationships) > 0 {
+                relationships = manager_data.pending_relationships;
+            } else {
+                # Fallback to LLM for complex cases only
+                relationships = build_task_relationships(
+                    user_message=user_message,
+                    emotional_state=emotional_state,
+                    intent_analysis=intent_analysis,
+                    extracted_tasks=extracted_tasks,
+                    attachment_analysis=attachment_analysis,
+                    conversation_context=intent_analysis.conversation_context,
+                    current_edges=current_edges
+                );
+            }
+
+            # Create nodes and edges
+            for rel in relationships {
+                to_task = rel.to_task;
+                from_task = rel.from_task;
+
+                if to_task not in current_nodes and to_task != "Start" {
+                    user_graph ++> TaskState(task_name=to_task, created_at=std.now_str());
+                    current_nodes.append(to_task);
+                }
+
+                if from_task not in current_nodes and from_task != "Start" {
+                    user_graph ++> TaskState(task_name=from_task, created_at=std.now_str());
+                    current_nodes.append(from_task);
+                }
+
+                edge_label = rel.edge_label or "then";
+                existing_edge = None;
+                for edge in current_edges {
+                    if edge.get("from") == from_task and edge.get("to") == to_task {
+                        existing_edge = edge;
+                        break;
+                    }
+                }
+
+                if not existing_edge {
+                    from_node = None;
+                    to_node = None;
+                    nodes = [user_graph-->](?:TaskState);
+                    for node in nodes {
+                        if node.task_name == from_task {
+                            from_node = node;
+                        }
+                        if node.task_name == to_task {
+                            to_node = node;
+                        }
+                    }
+
+                    if from_node and to_node {
+                        from_node +>: TaskFlow(label=edge_label) :+> to_node;
+                    }
+                }
+            }
+
+            # Update last_task
+            if len(relationships) > 0 {
+                last_relationship = relationships[len(relationships) - 1];
+                user_graph.last_task = last_relationship.to_task;
+            }
+        }
+
+        # Store in manager data
+        manager_data.last_response = response;
+        manager_data.last_suggestions = [];
+        manager_data.last_thinking = {
+            "emotional": f"You seem {emotional_state.state} right now",
+            "intent": "",
+            "tasks": f"Added: {extracted_tasks.unique_names}" if extracted_tasks.unique_names else "",
+            "pattern": ""
+        };
+        manager_data.last_task_names = extracted_tasks.unique_names or [];
+        manager_data.last_emotional_state = emotional_state.state;
+
+        # Mark update as complete and clear pending relationships
+        manager_data.graph_update_in_progress = False;
+        manager_data.pending_relationships = [];
+
+        report {"success": True, "updated": True};
+    } except Exception as e {
+        # Clear flag on error too
+        if manager_data {
+            manager_data.graph_update_in_progress = False;
+            manager_data.pending_relationships = [];
+        }
+        report {"error": str(e)};
+    }
+}
+
+# WALKER: get_pending_updates
+# Returns graph and suggestions when ready (for frontend polling)
+impl get_pending_updates.get_updates {
+    try {
+        manager_data = find_manager_comm_data(here, self.username);
+
+        if not manager_data {
+            report {
+                "has_updates": False,
+                "graph_updated": True,
+                "update_in_progress": False,
+                "suggestions_ready": True,
+                "suggestions": [],
+                "thinking": {}
+            };
+            return;
+        }
+
+        # Get current graph state
+        user_graph = find_user_graph(here, self.username);
+        graph_data = None;
+        if user_graph {
+            graph_data = get_user_graph_structure(user_graph);
+            dot_code = generate_dot_code_from_lists(graph_data[0], graph_data[1]);
+        } else {
+            dot_code = "digraph G { Start; }";
+        }
+
+        report {
+            "has_updates": True,
+            "graph_updated": True,
+            "update_in_progress": manager_data.graph_update_in_progress or False,
+            "dotCode": dot_code or "",
+            "edges": graph_data[1] if graph_data else [],
+            "lastTask": user_graph?.last_task or "Start" if user_graph else "Start",
+            "suggestions_ready": True,
+            "suggestions": manager_data.last_suggestions or [],
+            "thinking": manager_data.last_thinking or {}
+        };
+    } except Exception as e {
+        report {"error": str(e)};
+    }
+}
