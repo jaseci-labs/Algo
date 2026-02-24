@@ -1,10 +1,12 @@
 # Integration Tests for Algo
-# Runs full-stack tests on every PR to main and on push to main
-# This prevents breaking changes from being merged
+# Runs full-stack tests on every PR to main, push to main, and every 6 hours
+# This prevents breaking changes from being merged and catches upstream Jaseci issues
 
 name: Integration Tests
 
 on:
+  schedule:
+    - cron: '0 0,6,12,18 * * *'  # Runs at 00:00, 06:00, 12:00, 18:00 UTC daily
   pull_request:
     branches:
       - main
@@ -12,6 +14,14 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      jaseci_ref:
+        description: 'Jaseci branch/tag/SHA to test against'
+        required: false
+        default: 'main'
+
+permissions:
+  contents: read
 
 jobs:
   integration-test:
@@ -44,16 +54,37 @@ jobs:
         with:
           bun-version: latest
 
-      # Install Jaseci packages
-      - name: Install Jaseci packages
+      # Clone jaseci repo for source installation
+      - name: Clone jaseci repo
+        run: |
+          REF="${{ github.event.inputs.jaseci_ref || 'main' }}"
+          git clone --depth 1 --recurse-submodules --branch "$REF" \
+            https://github.com/jaseci-labs/jaseci.git /tmp/jaseci
+          echo "JASECI_SHA=$(git -C /tmp/jaseci rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "Cloned jaseci at $(git -C /tmp/jaseci rev-parse HEAD)"
+
+      # Install Jaseci packages from source
+      - name: Install jaseci packages from source
         run: |
           pip install --upgrade pip
-          pip install jaclang jac-client byllm
+          pip install -e /tmp/jaseci/jac
+          pip install -e /tmp/jaseci/jac-byllm
+          pip install -e /tmp/jaseci/jac-client
 
       # Install Python test dependencies
       - name: Install test dependencies
         run: |
           pip install requests pytest
+
+      # Verify installation
+      - name: Verify installation
+        run: |
+          echo "=== Jac Version ==="
+          jac --version
+          echo "=== Plugins ==="
+          jac plugins list
+          echo "=== Jaseci SHA ==="
+          echo "${{ env.JASECI_SHA }}"
 
       # Start Jac server in background
       - name: Start Jac server
@@ -116,3 +147,16 @@ jobs:
             echo "Killed Jac server (PID: $JAC_PID)"
           fi
           pkill -f "jac start" 2>/dev/null || true
+
+      # Job summary
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## Algo Integration Test" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Jaseci SHA** | \`${{ env.JASECI_SHA }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Jaseci ref** | \`${{ github.event.inputs.jaseci_ref || 'main' }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status** | \`${{ job.status }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Trigger** | \`${{ github.event_name }}\` |" >> $GITHUB_STEP_SUMMARY
