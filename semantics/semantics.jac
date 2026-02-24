@@ -11,6 +11,10 @@ obj EmotionalState {
     has reasoning: str;
 }
 
+sem EmotionalState.state = "User's current emotional state: stressed, excited, indecisive, fatigued, or neutral";
+sem EmotionalState.confidence = "Confidence score between 0.0 and 1.0";
+sem EmotionalState.reasoning = "Brief explanation of why this state was detected";
+
 """Detect the user's emotional state from their message and conversation context"""
 def detect_emotional_state(
     user_message: str,
@@ -18,11 +22,12 @@ def detect_emotional_state(
 ) -> EmotionalState by llm();
 
 sem detect_emotional_state = """
-Detect emotional state: stressed | excited | indecisive | fatigued | neutral
-
-state = "Current emotional state";
-confidence = "Score 0.0-1.0";
-reasoning = "Brief detection rationale";
+Detect emotional state from message:
+- stressed: frustration, overwhelm
+- excited: enthusiasm, accomplishments
+- indecisive: uncertainty, questions
+- fatigued: tired, exhausted
+- neutral: normal tone
 """;
 
 """Generate a natural, conversational response matching user's emotional state"""
@@ -57,12 +62,23 @@ obj ConversationContext {
     has tasks_to_move: list[str];
 }
 
+sem ConversationContext.intent = "COMMIT_ACTION: new task commitment | CORRECT_PREVIOUS: 'actually', 'before', 'first' corrections | CLARIFY_PREVIOUS: 'no i meant', 'after X' clarifications | ASK_QUESTION: questions | THINK_ALOUD: wondering/maybe";
+sem ConversationContext.referring_to_task = "Which existing task is user referring to? Empty if none, or exact task name from existing_nodes";
+sem ConversationContext.correction_type = "For CORRECT_PREVIOUS: 'rename', 'insert_before', 'insert_after', 'insert_first', 'reorder', 'replace' | For CLARIFY_PREVIOUS: 'attachment_point', 'sequence_order' | Empty otherwise";
+sem ConversationContext.needs_graph_rebuild = "TRUE for CORRECT_PREVIOUS or CLARIFY_PREVIOUS with existing tasks, FALSE for COMMIT_ACTION on empty/simple graphs";
+sem ConversationContext.is_insertion = "TRUE if user wants to insert task BETWEEN existing tasks (keywords: 'before X', 'after Y but before Z', 'between', 'insert')";
+sem ConversationContext.tasks_to_move = "List of existing task names being repositioned. Example: user says 'have coffee first' when HaveCoffee exists → ['HaveCoffee']";
+
 """Intent and commitment analysis result"""
 obj IntentAnalysis {
     has should_create_tasks: bool;
     has conversation_context: ConversationContext;
     has confidence: float;
 }
+
+sem IntentAnalysis.should_create_tasks = "TRUE if user committed to action OR is correcting/reordering existing tasks. FALSE only for questions/thinking/uncertain. CRITICAL: Corrections and reorderings NEED graph updates";
+sem IntentAnalysis.conversation_context = "Context about what user is doing: correcting, clarifying, committing new";
+sem IntentAnalysis.confidence = "Confidence 0.0-1.0 in the intent classification";
 
 """Analyze conversation intent and determine if user is committing, correcting, or clarifying"""
 def analyze_conversation_intent(
@@ -73,27 +89,28 @@ def analyze_conversation_intent(
 ) -> IntentAnalysis by llm();
 
 sem analyze_conversation_intent = """
-Classify user intent from message and conversation history.
+Analyze user's message and conversation history to classify their intent.
 
-should_create_tasks = "TRUE if user mentions ANY action/task (even casual ones like 'check messages', 'grab lunch', 'take a walk'). 
-Only FALSE for explicit questions ('what should I do?', 'can you help?') or pure uncertainty ('maybe', 'not sure', 'wondering')";
+CRITICAL: should_create_tasks MUST BE TRUE FOR:
+1. New task commitments: "I'll make coffee then check news"
+2. Corrections: "actually, have coffee before checking news"
+3. Reorderings: "take coffee first", "go to gym after washing face"
+4. Insertions: "wash face before heading to gym"
 
-ConversationContext.intent = "COMMIT_ACTION: ANY action mentioned (default unless clearly asking/uncertain) | CORRECT_PREVIOUS: 'actually', 'before', 'first' | CLARIFY_PREVIOUS: 'no i meant', 'after X' | ASK_QUESTION: explicit questions | THINK_ALOUD: 'maybe', 'wondering', 'not sure'";
+should_create_tasks SHOULD BE FALSE ONLY FOR:
+- Pure questions: "what should I do next?"
+- Thinking aloud: "maybe I should..."
+- Uncertain statements: "I might go to the gym"
 
-ConversationContext.referring_to_task = "EXACT task name from existing_nodes user is referencing. Examples: 'rename X to Y'→'X', 'before Y'→'Y', 'watch movie' matching 'WatchSomeNetflix'→'WatchSomeNetflix'. Empty if none";
+REORDERING DETECTION:
+If user mentions existing task with reordering keywords ('first', 'before that', 'earlier', 'after', 'then'):
+- Set should_create_tasks = True
+- Set correction_type = 'reorder'
+- Set needs_graph_rebuild = True
+- Populate tasks_to_move with the task names being repositioned
 
-ConversationContext.correction_type = "CORRECT_PREVIOUS types:
-- rename: Change task NAME only (same activity, different label) - 'actually call it X'
-- insert_before/insert_after/insert_first: NEW task between/before existing
-- reorder: Move EXISTING task to different position
-- replace: Swap with COMPLETELY DIFFERENT task
-CLARIFY_PREVIOUS: 'attachment_point' | 'sequence_order' | Empty otherwise";
-
-ConversationContext.needs_graph_rebuild = "TRUE for corrections/clarifications with existing tasks, FALSE for simple additions";
-ConversationContext.is_insertion = "TRUE if inserting task BETWEEN existing tasks";
-ConversationContext.tasks_to_move = "List of existing task names being repositioned (e.g., ['HaveCoffee'])";
-
-confidence = "Score 0.0-1.0";
+Default to COMMIT_ACTION when user mentions tasks/actions.
+Check last 2-3 conversation turns for context.
 """;
 
 """Maps raw task name to unique task name with count"""
@@ -102,6 +119,10 @@ obj TaskNameMapping {
     has unique: str;
     has count: int;
 }
+
+sem TaskNameMapping.raw = "Base task name extracted from message";
+sem TaskNameMapping.unique = "Unique task name with number appended if duplicate";
+sem TaskNameMapping.count = "How many times this raw name appeared in existing_nodes";
 
 """Extracted task names from user message"""
 obj ExtractedTasks {
@@ -112,6 +133,12 @@ obj ExtractedTasks {
     has renamed_to: str;  # For rename operations: the new task name ONLY
 }
 
+sem ExtractedTasks.raw_names = "Base task names in CamelCase extracted from message (e.g., CheckEmail, MakeCoffee)";
+sem ExtractedTasks.unique_names = "NEW unique task names. If correction_type='insert_before' OR is_insertion=True, use existing task names WITHOUT numbers. Otherwise, append numbers for duplicates: if count>0 then raw_name+str(count+1) else raw_name";
+sem ExtractedTasks.name_mappings = "List of {raw: str, unique: str, count: int} showing transformation for each task";
+sem ExtractedTasks.duplicate_counts = "For each raw_name, how many times it appears in existing_nodes";
+sem ExtractedTasks.renamed_to = "For rename operations: the new task name ONLY. Populated when correction_type='rename'. Empty string otherwise";
+
 """Extract raw task names from user message in CamelCase format"""
 def extract_raw_task_names(
     user_message: str,
@@ -120,49 +147,23 @@ def extract_raw_task_names(
 ) -> ExtractedTasks by llm();
 
 sem extract_raw_task_names = """
-Extract CORE action task names. Strip conditional/temporal prefixes - they go in edge labels ONLY.
+Extract task names and generate unique names.
 
-STRIP THESE PREFIXES from task names:
-- "if X, I'll Y" → extract Y, put "if X" in edge label
-- "otherwise I'll Y" → extract Y, put "otherwise" in edge label
-- "when X, I'll Y" → extract Y, put "when X" in edge label
-- "after X, I'll Y" → extract Y, put "after X" in edge label
-- "then I'll Y" → extract Y, put "then" in edge label
-
-Examples:
-- "if it is raining I'll listen to the radio" → ListenToRadio
-- "otherwise I'll do some gardening" → DoGardening
-- "when I get home I'll check emails" → CheckEmails
-- "after lunch I'll take a nap" → TakeANap
-- "then I'll go to the gym" → GoToGym
-
-Convert to CamelCase. Extract ALL actions mentioned.
+CRITICAL: ALWAYS EXTRACT TASK NAMES even when they already exist in the graph!
 
 RENAME MODE (correction_type='rename'):
-- Populate the 'renamed_to' field with the NEW task name (the one being renamed TO)
-- DO NOT populate raw_names or unique_names with the old task name
-- Set renamed_to to the task name that comes AFTER "to" or "instead"
-- Examples:
-  * "rename IfItIsRainingIWillReadMyBook to ReadBook" → renamed_to = "ReadBook", raw_names = [], unique_names = []
-  * "rename that task, have chat with colleagues, to chat with colleagues instead" → renamed_to = "ChatWithColleagues"
-  * "rename the task Continue working on project to Project Work" → renamed_to = "ProjectWork"
-  * "rename ContinueWorkingOnProject to ProjectWork" → renamed_to = "ProjectWork"
+- Populate renamed_to with the new task name (after "to" or "instead")
+- Leave raw_names and unique_names empty
 
-REORDERING MODE (correction_type='reorder' OR tasks_to_move is populated):
-- Extract the task names being reordered from user_message
+REORDERING MODE (correction_type='reorder' OR tasks_to_move populated):
+- Extract task names being reordered from user_message
 - Use EXISTING names without adding numbers
-- Example: User says "have coffee before checking news" when TakeCoffee and CheckNews exist
-  → raw_names = ["TakeCoffee", "CheckNews"]
-  → unique_names = ["TakeCoffee", "CheckNews"] (no numbers added)
 
-CORRECTION/INSERTION MODE (conversation_context.is_insertion=True OR correction_type='insert_before' OR keywords like 'before', 'after', 'between', 'instead'):
-- If task exists in existing_nodes, use the EXISTING name without adding numbers
-- User is correcting/modifying existing flow, not creating new duplicate tasks
-- Example: User says "wash face before heading to gym", and both WashFace and HeadToGym exist → use WashFace and HeadToGym (not WashFace2, HeadToGym2)
+CORRECTION/INSERTION MODE (is_insertion=True OR correction_type='insert_before' OR keywords 'before', 'after', 'between', 'instead'):
+- If task exists in existing_nodes, use EXISTING name without adding numbers
 
 NORMAL MODE:
-- Append numbers for duplicate task names when creating truly new occurrences
-- Formula: if count>0 then raw_name+str(count+1) else raw_name (Example: "MakeCoffee" exists → new unique name "MakeCoffee2")
+- Append numbers for duplicates: if count>0 then raw_name+str(count+1) else raw_name
 
 Populate all fields including duplicate_counts.
 """;
@@ -175,6 +176,11 @@ obj AttachmentPointAnalysis {
     has user_specified: bool;
 }
 
+sem AttachmentPointAnalysis.attachment_nodes = "List of node(s) to attach from. Usually [last_task] or multiple for convergence";
+sem AttachmentPointAnalysis.is_convergent = "TRUE if attaching from multiple nodes (convergent edge)";
+sem AttachmentPointAnalysis.reasoning = "Explanation of why these attachment points were chosen";
+sem AttachmentPointAnalysis.user_specified = "TRUE if user explicitly named a task (e.g., 'after X'), FALSE if using default last_task";
+
 """Determine where new tasks should attach in the graph"""
 def determine_attachment_points(
     user_message: str,
@@ -184,16 +190,15 @@ def determine_attachment_points(
 ) -> AttachmentPointAnalysis by llm();
 
 sem determine_attachment_points = """
-Determine where new tasks connect.
+Determine where new tasks should connect in the graph.
 
-attachment_nodes = "Node(s) to attach from: [last_task] default, multiple for convergence, or task BEFORE referenced for 'before X' patterns";
-is_convergent = "TRUE if multiple attachment nodes";
-reasoning = "Brief explanation";
-user_specified = "TRUE if user named specific task ('after X')";
+INSERTION PATTERN (user says "BEFORE X"):
+- Find the task BEFORE the referenced task in existing graph
+- attachment_nodes = [task that currently connects TO the referenced task]
 
-If needs_graph_rebuild=True: return empty attachment_nodes.
-For 'before X': find predecessor of X in current edges.
-Default: [last_task] unless user specifies 'after X', 'before Y', 'from Z'.
+If needs_graph_rebuild = True: return empty attachment_nodes.
+Default: attachment_nodes = [last_task]
+User-specified: Parse user_message for "after X", "before Y", "from Z"
 """;
 
 """Detection of convergence patterns in user intent"""
@@ -204,6 +209,11 @@ obj ConvergenceIntent {
     has trigger_phrase: str;
 }
 
+sem ConvergenceIntent.should_converge = "TRUE if user intends parallel branches to merge";
+sem ConvergenceIntent.source_nodes = "List of nodes to converge from (leaf nodes)";
+sem ConvergenceIntent.convergence_type = "explicit (keywords like 'either way') | implicit (last_task has '|' and no specific task named) | none (no convergence)";
+sem ConvergenceIntent.trigger_phrase = "The phrase that triggered convergence detection";
+
 """Detect if user intends to converge parallel branches"""
 def detect_convergence_intent(
     user_message: str,
@@ -212,12 +222,14 @@ def detect_convergence_intent(
 ) -> ConvergenceIntent by llm();
 
 sem detect_convergence_intent = """
-Detect if parallel branches should merge.
+Detect convergence patterns from user message.
 
-should_converge = "TRUE if merging branches";
-source_nodes = "Leaf nodes to converge from (split last_task by '|')";
-convergence_type = "explicit ('either way') | implicit (last_task has '|') | none";
-trigger_phrase = "Detection trigger phrase";
+Types:
+1. EXPLICIT: Keywords "either way", "regardless", "in both cases", "afterwards"
+2. IMPLICIT: last_task contains "|" (e.g., "GoToGym|GoForRun") and user adds task without naming specific source
+3. NO convergence: User names specific task or linear flow
+
+Extract source_nodes by splitting last_task by "|" if convergence detected.
 """;
 
 """Represents a task connection type in the graph"""
@@ -237,6 +249,12 @@ obj TaskRelationship {
     has sequence_order: int;
 }
 
+sem TaskRelationship.connection_type = "SEQUENTIAL: then/after | PARALLEL: and/also/while/same time | CONDITIONAL: if/otherwise | CONVERGENT: merge point";
+sem TaskRelationship.from_task = "Task name in CamelCase (previous task in sequence)";
+sem TaskRelationship.to_task = "Next task name in CamelCase (e.g., MakeCoffee, BrushTeeth)";
+sem TaskRelationship.edge_label = "Edge label: 'then', 'if raining', 'otherwise', etc.";
+sem TaskRelationship.sequence_order = "Sequence number (1, 2, 3...) to preserve order when multiple relationships";
+
 """Build task relationships using pre-analyzed context"""
 def build_task_relationships(
     user_message: str,
@@ -250,84 +268,37 @@ def build_task_relationships(
 sem build_task_relationships = """
 Build TaskRelationship list using pre-analyzed inputs.
 
-CRITICAL: DEFAULT BEHAVIOR - INCREMENTAL ADDITION
-For normal COMMIT_ACTION with conversation_context.needs_graph_rebuild=False:
-- Return ONLY the NEW relationships being added
-- Do NOT include existing relationships from current_edges
-
-FULL REBUILD MODE (conversation_context.needs_graph_rebuild=True):
-When user is correcting/reordering existing tasks:
-- Return ALL relationships to reconstruct the complete graph INCLUDING ALL EXISTING EDGES from current_edges
-- CRITICAL: Start by INCLUDING all relationships from current_edges, then modify only the affected area
-- For INSERTION corrections (insert_before, insert_after, insert_first):
-  * Include ALL existing edges from current_edges
-  * Remove only the edge being split (e.g., if inserting between A->C, remove A->C)
-  * Add the new insertion edges (A->NewTask, NewTask->C)
-  * CRITICAL: Reconnect downstream tasks - if inserting B between A and C, return: A->B, B->C
-  * Example: Graph is Start->CheckMessages->MakeBreakfast->GoToGym, user says "wash face after breakfast"
-    Return ALL edges: Start->CheckMessages, CheckMessages->MakeBreakfast, MakeBreakfast->WashFace, WashFace->GoToGym
-- For REORDER corrections: rebuild with tasks in new positions
-
 CRITICAL: RETURN PROPER JSON STRUCTURE
-Each TaskRelationship object MUST have separate fields:
-{
-  "connection_type": "SEQUENTIAL",
-  "from_task": "CheckMessages",
-  "to_task": "WashFace",
-  "edge_label": "then",
-  "sequence_order": 1
-}
+Each TaskRelationship object MUST have separate fields. NEVER concatenate.
 
-connection_type = "SEQUENTIAL: then/after | PARALLEL: and/also/while/same time | CONDITIONAL: if/otherwise |
-CONVERGENT: merge point";
-from_task = "Task name in CamelCase (previous task in sequence)";
-to_task = "Next task name in CamelCase (e.g., MakeCoffee, BrushTeeth)";
-edge_label = "Edge label: 'then', 'if raining', 'otherwise', 'while', 'at the same time', etc.";
-sequence_order = "Sequence number (1, 2, 3...) to preserve order when multiple relationships";
+DEFAULT BEHAVIOR (needs_graph_rebuild=False):
+Return ONLY the NEW relationships being added.
 
-NEVER concatenate fields like: from_task='WashFace to_task=HeadToGym label=then'
+FULL REBUILD MODE (needs_graph_rebuild=True):
+Return ALL relationships including existing from current_edges. For insertions, remove the edge being split and add new edges.
+
+CRITICAL: USE ACTUAL TASK NAMES
+from_task MUST be an actual task name from attachment_nodes.
+to_task MUST be from extracted_tasks.unique_names.
+NEVER use placeholders like "last_task".
 
 CONNECTION RULES:
-- Start point: Use attachment_nodes[0] as the from_task for the FIRST relationship
-- For extracted_tasks.unique_names: ["BrushTeeth", "MakeCoffee", "GoToGym"]
-- For attachment_nodes: ["Start"]
-- Create: Start -> BrushTeeth, BrushTeeth -> MakeCoffee, MakeCoffee -> GoToGym
+- Start: attachment_nodes[0] → first extracted task
+- SEQUENTIAL: chain tasks (A→B→C)
+- PARALLEL: all from same source with connection_type=PARALLEL
+- sequence_order: 1, 2, 3... for ordering
 
-CRITICAL EDGE LABEL RULES:
-- "then" or "afterwards": Default for sequential tasks (A happens, then B happens)
-- "while" or "at same time": For PARALLEL tasks (A and B happen simultaneously)
-- "if X" or "otherwise": For CONDITIONAL branches (if X happens do A, otherwise do B)
-- "either way": ONLY for CONDITIONAL convergence where if/otherwise branches merge (NOT for parallel tasks)
-- After PARALLEL tasks converge, use "then" or "afterwards" for the next sequential task
-- Example: "have drink while chatting with buddies, then head home, then call a cab"
-  → HaveDrink[label="while"], ChatWithBuddies[label="while"] from HeadToThePub
-  → HaveDrink->HeadHome[label="then"], ChatWithBuddies->HeadHome[label="then"]
-  → HeadHome->CallACab[label="then"]
-- Example conditional: "if raining, read book; otherwise, walk; either way go home"
-  → IfRaining->ReadBook[label="if raining"], Otherwise->Walk[label="otherwise"]
-  → ReadBook->GoHome[label="either way"], Walk->GoHome[label="either way"]
+EDGE LABELS:
+- "then"/"afterwards": sequential
+- "while"/"at same time": parallel
+- "if X"/"otherwise": conditional
+- "either way": ONLY for conditional convergence
 
-CRITICAL CONNECTION TYPE DETECTION:
-Analyze user_message for parallel keywords:
-- PARALLEL: "while", "as", "during", "at the same time", "simultaneously", "and" (when tasks happen together)
-    - Create N relationships, ALL with SAME from_task (attachment_nodes[0])
-    - ALL relationships use connection_type = PARALLEL
-    - Each relationship goes to a different unique task
-    - sequence_order: 1, 2, 3... for each parallel branch
+PARALLEL CONVERGENCE:
+Multiple attachment_nodes → first extracted task with "then" label.
 
-CRITICAL: CONVERGENCE HANDLING
-PARALLEL CONVERGENCE (multiple nodes converging after doing things simultaneously):
-- attachment_nodes contains multiple nodes from parallel activities
-- Create edges from EACH attachment node to the FIRST extracted task
-- Use "then" or "afterwards" for these converging edges (parallel tasks finished, now do next thing)
-- Example: attachment_nodes=["HaveADrink", "ChatWithBuddies"], extracted_tasks=["HeadHome", "CallACab"]
-  Result: HaveADrink->HeadHome[label="then"], ChatWithBuddies->HeadHome[label="then"], HeadHome->CallACab[label="then"]
-
-CONDITIONAL CONVERGENCE (if/otherwise branches merging):
-- Only use "either way" label when converging CONDITIONAL branches (if X / otherwise)
-- The user must say "either way", "both paths", "regardless", or similar for conditional convergence
-- Example: "if raining read book otherwise walk either way go home"
-  → IfRaining->ReadBook, Otherwise->Walk, ReadBook->GoHome[label="either way"], Walk->GoHome[label="either way"]
+CONDITIONAL CONVERGENCE:
+Use "either way" only when user says it explicitly.
 """;
 
 """Generate 2 contextual suggestions for what the user might do next"""
@@ -365,6 +336,11 @@ obj ThinkingSummary {
     has pattern_insight: str;
 }
 
+sem ThinkingSummary.emotional_insight = "Short bullet about user's emotional state. Empty string if confidence < 0.7. Format: 'You seem [state] right now'";
+sem ThinkingSummary.intent_insight = "Short bullet about what user is doing. Empty string for simple COMMIT_ACTION. Format: 'You're [correcting/clarifying/asking about] [context]'";
+sem ThinkingSummary.task_insight = "Short bullet about tasks extracted. Use friendly names not CamelCase. Format: 'I'm extracting: [list of tasks]' or 'I'm adding: [task description]'";
+sem ThinkingSummary.pattern_insight = "Short bullet about special patterns. Empty if none. Format: 'These will happen [at the same time/one after another/either way]' or 'This is task number [X]' for duplicates";
+
 """Generate user-friendly thinking insights for transparency"""
 def generate_thinking_summary(
     user_message: str,
@@ -378,19 +354,15 @@ def generate_thinking_summary(
 sem generate_thinking_summary = """
 Generate short, friendly bullet points showing Algo's understanding.
 
-emotional_insight = "Short bullet about user's emotional state. Empty string if confidence < 0.7. 
-Format: 'You seem [state] right now'";
-intent_insight = "Short bullet about what user is doing. Empty string for simple COMMIT_ACTION. 
-Format: 'You're [correcting/clarifying/asking about] [context]'";
-task_insight = "Short bullet about tasks extracted. Show the ACTUAL extracted task names from extracted_tasks.unique_names. 
-Format: 'Extracted: [TaskName1], [TaskName2]' for parallel tasks OR 'Adding: [TaskName]' for single task
-Example: 'Extracted: TalkToFriend, WalkDog' OR 'Adding: MakeCoffee'
-If multiple tasks with parallel pattern: 'Extracted: [Task1], [Task2] (parallel)'";
-pattern_insight = "Short bullet about special patterns. Empty if none. 
-Format: 'These will happen [at the same time/one after another/either way]' or 'This is task number [X]' for duplicates
-For parallel tasks detected: 'These happen at the same time' or 'These happen while doing each other'";
+RULES:
+1. emotional_insight: Be empathetic and natural
+2. intent_insight: Format - "You're correcting [task]" or "You're clarifying where [task] goes"
+3. task_insight: For duplicates, mention the count naturally
+4. pattern_insight: Only for special patterns
+   - PARALLEL: "These will happen at the same time"
+   - Duplicates: "This is your [X]th time doing this"
 
-Keep all bullets under 10 words. Be conversational and natural.
+Keep all bullets under 10 words. Be conversational.
 """;
 
 """Task validation result"""
@@ -402,6 +374,12 @@ obj TaskValidationResult {
     has correct_task_name: str;    # What the task should be renamed to
 }
 
+sem TaskValidationResult.is_valid = "TRUE if ALL tasks mentioned in user message were correctly extracted";
+sem TaskValidationResult.reason = "Brief explanation of what's wrong. Empty if valid";
+sem TaskValidationResult.missing_tasks = "List of task names that were missed. Empty if valid or if rename needed";
+sem TaskValidationResult.incorrect_task = "Existing task with wrong/incomplete name that should be renamed. Empty if valid or if missing tasks";
+sem TaskValidationResult.correct_task_name = "The correct task name for rename. Empty if valid or if missing tasks";
+
 """Validate that extracted tasks match the user's message"""
 def validate_task_extraction(
     user_message: str,
@@ -410,45 +388,21 @@ def validate_task_extraction(
 ) -> TaskValidationResult by llm();
 
 sem validate_task_extraction = """
-Validate if the extracted tasks correctly capture ALL actions/activities mentioned in the user's message.
+Validate if extracted tasks correctly capture ALL actions/activities mentioned.
 
-CRITICAL: Look for:
-1. Conditional statements: "if X, then Y; otherwise Z" → BOTH tasks should be extracted
-2. Multiple activities in one message: "I'll do X and then Y" → BOTH tasks should be extracted
-3. Parallel tasks: "while X, I'll also Y" → BOTH tasks should be extracted
-4. Alternative scenarios: "if I have time I'll X, otherwise I'll Y" → BOTH tasks should be extracted
-5. TASK NAME CORRECTION: If extracted task is similar to an existing task but missing a verb or has wrong wording, signal a RENAME
+CRITICAL CHECKS:
+1. Conditional statements: "if X, then Y; otherwise Z" → BOTH tasks extracted
+2. Multiple activities: "I'll do X and then Y" → BOTH tasks extracted
+3. Parallel tasks: "while X, I'll also Y" → BOTH tasks extracted
+4. TASK NAME CORRECTION: If extracted task is similar to existing but missing verb, signal RENAME
 
-TASK NAME CORRECTION (rename needed):
+RENAME NEEDED:
 - Compare extracted_tasks with existing_nodes
-- If an extracted task is SEMANTICALLY THE SAME as an existing task but has a better/complete name:
-  * Set is_valid = false
-  * Set incorrect_task = the existing task with wrong/incomplete name
-  * Set correct_task_name = the better extracted task name
-  * Set reason = explanation of why rename is needed
-  * Set missing_tasks = [] (empty - no new task needed, just rename)
-- Examples of rename needed:
-  * existing_nodes: ["TheGoodPlace"], extracted: ["WatchTheGoodPlace"]
-    → incorrect_task="TheGoodPlace", correct_task_name="WatchTheGoodPlace", reason="TheGoodPlace should be renamed to WatchTheGoodPlace to include the verb 'Watch'"
-  * existing_nodes: ["Gym"], extracted: ["HeadToGym"]
-    → incorrect_task="Gym", correct_task_name="HeadToGym", reason="Gym should be renamed to HeadToGym to include the action verb"
-  * existing_nodes: ["Messages"], extracted: ["CheckMessages"]
-    → incorrect_task="Messages", correct_task_name="CheckMessages", reason="Messages should be renamed to CheckMessages to clarify the action"
+- If SEMANTICALLY SAME but better name: is_valid=false, incorrect_task=existing name, correct_task_name=better name, missing_tasks=[]
 
-Examples of INCORRECT extraction (missing tasks):
-- User: "If I have assignments due I will work on them, if not I will netflix and chill"
-  Extracted: ["NetflixAndChill"] → INVALID (missing "WorkOnAssignments")
-- User: "I'll make coffee and then check my emails"
-  Extracted: ["MakeCoffee"] → INVALID (missing "CheckEmails")
-- User: "While brushing my teeth, I'll also check the news"
-  Extracted: ["BrushTeeth"] → INVALID (missing "CheckNews")
-
-Return:
-- is_valid: true if ALL tasks mentioned are captured correctly, false otherwise
-- reason: Brief explanation of what's wrong
-- missing_tasks: List of task names that were missed (empty if rename needed or if valid)
-- incorrect_task: Empty string if valid or if missing tasks; set to existing task name if rename needed
-- correct_task_name: Empty string if valid or if missing tasks; set to the correct name if rename needed
+INVALID (missing tasks examples):
+- "If assignments due I'll work, if not netflix" → Only "NetflixAndChill" is INVALID (missing "WorkOnAssignments")
+- "make coffee and check emails" → Only "MakeCoffee" is INVALID (missing "CheckEmails")
 """;
 
 """Graph structure validation result"""
@@ -458,6 +412,10 @@ obj GraphValidationResult {
     has expected_structure: str;
 }
 
+sem GraphValidationResult.is_valid = "TRUE if the graph structure correctly represents user's intent for new tasks";
+sem GraphValidationResult.reason = "Brief explanation of what's wrong. Empty if valid";
+sem GraphValidationResult.expected_structure = "Description of what SHOULD exist. Empty if valid";
+
 """Validate that graph structure matches user's intent"""
 def validate_graph_structure(
     user_message: str,
@@ -466,40 +424,22 @@ def validate_graph_structure(
 ) -> GraphValidationResult by llm();
 
 sem validate_graph_structure = """
-Validate if the graph structure correctly represents the user's intent for NEWLY ADDED tasks.
+Validate if graph structure correctly represents user's intent for NEWLY ADDED tasks.
 
 IMPORTANT CONTEXT:
-- graph_nodes: ONLY the newly added task names (not the entire graph)
-- graph_edges: ONLY edges involving the new tasks (as "to" destination)
-- The "from" task in edges is typically a pre-existing task - this is EXPECTED and VALID
+- graph_nodes: ONLY newly added task names
+- graph_edges: ONLY edges involving new tasks (as "to" destination)
+- "from" task is typically pre-existing (EXPECTED and VALID)
 
-Check for:
-1. Conditional branches: "if X then Y, otherwise Z" → New tasks should have proper conditional structure
-2. Sequential tasks: "do X then Y" → If user said "do X then Y", both should be added with X→Y edge
-3. Parallel tasks: "while X, also Y" → Both tasks should branch from same source
-4. Convergence: "either way" → Tasks should merge into a common task
+CHECK FOR:
+1. Conditional: "if X then Y, otherwise Z" → proper conditional structure
+2. Sequential: "do X then Y" → both added with X→Y edge
+3. Parallel: "while X, also Y" → both branch from same source
+4. Convergence: "either way" → tasks merge
 
-Examples of CORRECT structure (pre-existing task "ReadABook" + new task "MakeBreakfast"):
-- User: "make breakfast"
-  graph_nodes: ["MakeBreakfast"]
-  graph_edges: [{"from": "ReadABook", "to": "MakeBreakfast", "label": "then"}]
-  → VALID: Single task added, connected from previous task
-
-Examples of INCORRECT structure:
-- User: "I'll make coffee and then check emails"
-  graph_nodes: ["MakeCoffee"]
-  graph_edges: [{"from": "Start", "to": "MakeCoffee", "label": "then"}]
-  → INVALID: Missing "CheckEmails" task mentioned in user message
-
-- User: "if I have assignments I'll work on them, otherwise netflix"
-  graph_nodes: ["NetflixAndChill"]
-  graph_edges: [{"from": "Start", "to": "NetflixAndChill", "label": "then"}]
-  → INVALID: Missing conditional branch "WorkOnAssignments"
-
-Return:
-- is_valid: true if the new tasks are correctly connected
-- reason: Brief explanation of what's wrong (empty if valid)
-- expected_structure: Description of what SHOULD exist (empty if valid)
+INVALID EXAMPLES:
+- "make coffee and check emails" → Only ["MakeCoffee"] added → INVALID (missing "CheckEmails")
+- "if assignments work, otherwise netflix" → Only ["NetflixAndChill"] → INVALID (missing "WorkOnAssignments")
 """;
 
 #===========================================================
@@ -515,6 +455,12 @@ obj RenameValidationResult {
     has edges_updated: bool;
 }
 
+sem RenameValidationResult.is_valid = "TRUE if rename operation was executed correctly";
+sem RenameValidationResult.reason = "Brief explanation of what's wrong. Empty if valid";
+sem RenameValidationResult.old_task_found = "TRUE if old task existed in before_nodes";
+sem RenameValidationResult.new_task_unique = "TRUE if new task doesn't conflict with existing tasks";
+sem RenameValidationResult.edges_updated = "TRUE if all edges were correctly updated";
+
 """Validate that a rename operation was executed correctly"""
 def validate_rename_operation(
     user_message: str,
@@ -527,35 +473,21 @@ def validate_rename_operation(
 ) -> RenameValidationResult by llm();
 
 sem validate_rename_operation = """
-Validate that a rename operation was executed correctly.
+Validate rename operation executed correctly.
 
 CRITICAL CHECKS:
-1. Old task existed in before_nodes (cannot rename non-existent task)
-2. New task is in after_nodes (the renamed task exists)
-3. New task is NOT the same as old task (actual rename occurred)
-4. Old task is NOT in after_nodes (original name removed)
-5. All edges that referenced old_task now reference new_task
-6. No duplicate tasks created
+1. Old task existed in before_nodes
+2. New task is in after_nodes
+3. New task ≠ old task (actual rename)
+4. Old task NOT in after_nodes
+5. All edges now reference new_task
+6. No duplicate tasks
 
-ANALYSIS APPROACH:
-- Compare before_nodes and after_nodes to find what changed
-- Check if old_task was removed and new_task was added
-- Verify edge labels are preserved (only task names changed)
-
-Examples:
-- Valid: old="IfItIsRainingIWillReadMyBook" in before, new="ReadBook" in after, edges updated
-- Valid: old="MakeCoffee", new="GrabCoffee", all edges now reference "GrabCoffee"
-- Invalid: old task not found in before_nodes
-- Invalid: new task same as old task (no actual rename)
-- Invalid: old task still exists in after_nodes (rename incomplete)
-- Invalid: edges still reference old task (edges not updated)
-
-Return:
-- is_valid: true if rename was correctly executed
-- reason: Brief explanation of what's wrong (empty if valid)
-- old_task_found: true if old task existed in before_nodes
-- new_task_unique: true if new task doesn't conflict with existing tasks
-- edges_updated: true if all edges were correctly updated
+INVALID EXAMPLES:
+- Old task not found in before_nodes
+- New task same as old (no rename)
+- Old task still exists (incomplete)
+- Edges still reference old task
 """;
 
 """Insert validation result"""
@@ -566,6 +498,12 @@ obj InsertValidationResult {
     has referring_task_exists: bool;
     has no_orphans: bool;
 }
+
+sem InsertValidationResult.is_valid = "TRUE if insert operation positioned tasks correctly";
+sem InsertValidationResult.reason = "Brief explanation of what's wrong. Empty if valid";
+sem InsertValidationResult.insert_position_correct = "TRUE if position matches operation type (insert_before/insert_after/insert_first)";
+sem InsertValidationResult.referring_task_exists = "TRUE if referring task was found in graph";
+sem InsertValidationResult.no_orphans = "TRUE if no disconnected tasks exist";
 
 """Validate that an insert operation positioned tasks correctly"""
 def validate_insert_operation(
@@ -578,42 +516,22 @@ def validate_insert_operation(
 ) -> InsertValidationResult by llm();
 
 sem validate_insert_operation = """
-Validate that an insert operation positioned tasks correctly.
+Validate insert operation positioned tasks correctly.
 
 OPERATION TYPES:
-- insert_before: New tasks should be BEFORE referring_to_task
-- insert_after: New tasks should be AFTER referring_to_task
-- insert_first: New tasks should be at beginning (after Start)
+- insert_before: New tasks BEFORE referring_to_task
+- insert_after: New tasks AFTER referring_to_task
+- insert_first: New tasks at beginning (after Start)
 
 CRITICAL CHECKS:
-1. Referring task exists in the graph (or is "Start" for insert_first)
-2. New tasks were actually added to the graph
-3. Insert position matches the operation type:
-   - insert_before: New task → referring_to_task edge exists
-   - insert_after: referring_to_task → new task edge exists
-   - insert_first: Start → new task edge exists
-4. No orphaned tasks (disconnected from main flow)
+1. Referring task exists (or "Start" for insert_first)
+2. New tasks were added
+3. Position matches operation type (edge direction correct)
+4. No orphaned tasks
 
-ANALYSIS APPROACH:
-- Compare before_edges and after_edges to find new edges
-- Check if new edges connect tasks in the correct order
-- Verify the position relative to referring_to_task
-
-Examples:
-- Valid: operation="insert_before", referring="CheckMessages", new="WashFace"
-  → Edge: WashFace → CheckMessages exists
-- Valid: operation="insert_after", referring="MakeCoffee", new="HaveBreakfast"
-  → Edge: MakeCoffee → HaveBreakfast exists
-- Invalid: referring_to_task not found in graph
-- Invalid: Insert position doesn't match operation type
-- Invalid: New task not connected to graph
-
-Return:
-- is_valid: true if insert was correctly executed
-- reason: Brief explanation of what's wrong (empty if valid)
-- insert_position_correct: true if position matches operation type
-- referring_task_exists: true if referring task was found
-- no_orphans: true if no disconnected tasks
+VALID EXAMPLES:
+- insert_before, referring="CheckMessages", new="WashFace" → Edge: WashFace→CheckMessages exists
+- insert_after, referring="MakeCoffee", new="HaveBreakfast" → Edge: MakeCoffee→HaveBreakfast exists
 """;
 
 """Reorder validation result"""
@@ -625,6 +543,12 @@ obj ReorderValidationResult {
     has no_circular_refs: bool;
 }
 
+sem ReorderValidationResult.is_valid = "TRUE if reorder operation moved tasks correctly";
+sem ReorderValidationResult.reason = "Brief explanation of what's wrong. Empty if valid";
+sem ReorderValidationResult.tasks_moved_exist = "TRUE if all tasks to move were found in graph";
+sem ReorderValidationResult.new_order_logical = "TRUE if new order matches user intent";
+sem ReorderValidationResult.no_circular_refs = "TRUE if no circular references detected";
+
 """Validate that a reorder operation moved tasks correctly"""
 def validate_reorder_operation(
     user_message: str,
@@ -634,35 +558,23 @@ def validate_reorder_operation(
 ) -> ReorderValidationResult by llm();
 
 sem validate_reorder_operation = """
-Validate that a reorder operation moved tasks correctly.
+Validate reorder operation moved tasks correctly.
 
 CRITICAL CHECKS:
-1. All tasks in tasks_to_move exist in the graph
-2. New position matches user's description from user_message
-3. No circular references created (A→B→...→A)
-4. All affected tasks remain connected to the main flow
-5. The reorder actually changed something (edges are different)
+1. All tasks in tasks_to_move exist
+2. New position matches user's description
+3. No circular references (A→B→...→A)
+4. All affected tasks remain connected
+5. Edges actually changed
 
-ANALYSIS APPROACH:
-- Identify edges that involve tasks_to_move in before_edges vs after_edges
-- Check if the connections changed as expected
-- Verify the new order matches user's intent
+VALID EXAMPLES:
+- tasks=["HaveCoffee"], user: "have coffee before checking news" → HaveCoffee→CheckNews exists
+- tasks=["WorkOut", "Study"], user: "work out then study" → correct sequential order
 
-Examples:
-- Valid: tasks=["HaveCoffee"], user: "have coffee before checking news"
-  → Edge: HaveCoffee → CheckNews exists in after_edges
-- Valid: tasks=["WorkOut", "Study"], user: "work out then study"
-  → Edges show correct sequential order
-- Invalid: Task in tasks_to_move not found in graph
-- Invalid: No change in edges (reorder didn't happen)
-- Invalid: Circular reference created
-
-Return:
-- is_valid: true if reorder was correctly executed
-- reason: Brief explanation of what's wrong (empty if valid)
-- tasks_moved_exist: true if all tasks to move were found
-- new_order_logical: true if new order matches user intent
-- no_circular_refs: true if no circular references detected
+INVALID EXAMPLES:
+- Task not found in graph
+- No change in edges (reorder didn't happen)
+- Circular reference created
 """;
 
 """Edge label validation result"""
@@ -673,6 +585,11 @@ obj EdgeLabelValidationResult {
     has incorrect_labels: list[str];
 }
 
+sem EdgeLabelValidationResult.is_valid = "TRUE if edge labels match user's intent from their message";
+sem EdgeLabelValidationResult.reason = "Brief explanation of what's wrong. Empty if valid";
+sem EdgeLabelValidationResult.missing_labels = "List of descriptions for missing labels (e.g., ['condition on raining edge'])";
+sem EdgeLabelValidationResult.incorrect_labels = "List of descriptions for incorrect labels";
+
 """Validate that edge labels match user's intent"""
 def validate_edge_labels(
     user_message: str,
@@ -680,44 +597,22 @@ def validate_edge_labels(
 ) -> EdgeLabelValidationResult by llm();
 
 sem validate_edge_labels = """
-Validate that edge labels match the user's intent from their message.
+Validate edge labels match user's intent.
 
-CRITICAL EDGE LABEL RULES:
-- "then" or "afterwards": Sequential tasks (A happens, then B happens)
-- "while" or "at same time": PARALLEL tasks (A and B happen simultaneously)
-- "if X" or "otherwise": CONDITIONAL branches (if X happens do A, otherwise do B)
-- "either way": ONLY for CONDITIONAL convergence where if/otherwise branches merge
-- After PARALLEL tasks converge, use "then" or "afterwards" (NOT "either way")
+EDGE LABEL RULES:
+- "then"/"afterwards": Sequential
+- "while"/"at same time": PARALLEL
+- "if X"/"otherwise": CONDITIONAL
+- "either way": ONLY for conditional convergence (NOT parallel)
 
-CHECK FOR COMMON MISTAKES:
-1. "either way" used incorrectly (should only be for conditional convergence)
-   - Parallel tasks converging: should use "then", not "either way"
-   - Sequential tasks: should use "then", not "either way"
-   - Only valid: "if X do A; otherwise do B; either way do C" (A->C, B->C both labeled "either way")
-2. Sequential edge missing "then" label (has "either way" incorrectly)
-3. Conditional branches missing condition labels ("if X") or "otherwise" labels
-4. Parallel tasks not marked with "while" or "at same time"
+COMMON MISTAKES:
+1. "either way" on parallel convergence → should be "then"
+2. "either way" on sequential → should be "then"
+3. Missing "if X" or "otherwise" labels
+4. Parallel tasks missing "while" label
 
-ANALYSIS APPROACH:
-- Parse user_message for conditional/parallel keywords
-- Check if new_edges have labels reflecting those keywords
-- Identify which edges are missing labels or have incorrect labels
-
-Examples:
-- Valid: User: "if raining, read book; otherwise, walk"
-  → Edges: [{from: Check, to: ReadBook, label: "if raining"}, {to: Walk, label: "otherwise"}]
-- Valid: User: "have drink while chatting, then head home, then call cab"
-  → Edges: [{to: HaveDrink, label: "while"}, {to: ChatWithBuddies, label: "while"},
-           {from: HaveDrink, to: HeadHome, label: "then"}, {from: ChatWithBuddies, to: HeadHome, label: "then"},
-           {from: HeadHome, to: CallACab, label: "then"}]
-- Invalid: Edge from HeadHome to CallACab uses "either way" label (should be "then")
-- Invalid: "either way" used for parallel task convergence (should be "then")
-
-Return:
-- is_valid: true if edge labels match user intent
-- reason: Brief explanation of what's wrong (empty if valid)
-- missing_labels: List of descriptions for missing labels (e.g., ["condition on 'raining' edge"])
-- incorrect_labels: List of descriptions for incorrect labels
+VALID: "if X do A; otherwise do B; either way do C" → A->C, B->C both "either way"
+INVALID: Parallel tasks converge with "either way" → should use "then"
 """;
 
 #===========================================================
@@ -731,6 +626,11 @@ obj PersonalizedInsight {
     has category: str;
     has actionable: bool;
 }
+
+sem PersonalizedInsight.title = "Short, catchy headline (2-4 words)";
+sem PersonalizedInsight.description = "1-2 sentences explaining the insight";
+sem PersonalizedInsight.category = "productivity | consistency | behavioral | recommendations";
+sem PersonalizedInsight.actionable = "TRUE if user can take action, FALSE if just observation";
 
 """Generate personalized insights based on user's activity patterns"""
 def generate_personalized_insights(
@@ -746,77 +646,23 @@ def generate_personalized_insights(
 ) -> list[PersonalizedInsight] by llm();
 
 sem generate_personalized_insights = """
-Generate 3-4 personalized, actionable insights based on the user's actual activity data.
+Generate 3-4 personalized, actionable insights based on actual activity data.
 
-INPUT ANALYSIS:
-- total_tasks: How many tasks user has created (higher = more active)
-- consistency_score: 0-100 (higher = more consistent daily activity)
-- efficiency_score: 0-100 (higher = better task connections/routine complexity)
-- current_streak: Consecutive days of activity
-- peak_hour: Hour (0-23) when user is most active
-- peak_day: Day of week when user is most active
-- total_events: Total tracked events
-- emotion_distribution: Distribution of emotional states (stressed, excited, focused, etc.)
-- connection_patterns: How user connects tasks (sequential, parallel, conditional, convergent)
+CATEGORIES: productivity | consistency | behavioral | recommendations
 
-INSIGHT CATEGORIES:
-1. PRODUCTIVITY: Patterns in task creation, peak productivity times, streaks
-2. CONSISTENCY: Daily activity patterns, engagement trends
-3. BEHAVIORAL: Emotional patterns, connection style preferences
-4. RECOMMENDATIONS: Actionable suggestions based on data
-
-GENERATION RULES:
-- Each insight MUST be based on the actual numeric data provided
-- Be specific: mention actual numbers (e.g., "12 tasks", "85% score", "5-day streak")
-- Be encouraging but honest about areas for improvement
-- Make recommendations actionable (specific things to try)
-- Vary categories - don't give all productivity or all behavioral insights
-- For new users (total_tasks < 5): Focus on getting started insights
-- For active users (total_tasks >= 5): Focus on optimization insights
+RULES:
+- Base insights on actual numeric data (mention specific numbers)
+- Be specific: "12 tasks", "85% score", "5-day streak"
+- Vary categories (not all same type)
+- New users (<5 tasks): focus on getting started
+- Active users (>=5 tasks): focus on optimization
 
 EXAMPLE INSIGHTS:
-PRODUCTIVITY (when streak > 3):
-- title: "On Fire!"
-- description: "You're on a 5-day streak! Your consistency is impressive. Keep the momentum going."
-- category: "productivity"
-- actionable: false
-
-PRODUCTIVITY (when peak_hour shows clear pattern):
-- title: "Peak Productivity"
-- description: "You're most active around 9 AM. Schedule your most important tasks then for maximum productivity."
-- category: "productivity"
-- actionable: true
-
-CONSISTENCY (when consistency_score is high):
-- title: "Rock Steady"
-- description: "Your 85% consistency score shows real dedication. You're building great habits!"
-- category: "consistency"
-- actionable: false
-
-BEHAVIORAL (when emotion_distribution shows stressed):
-- title: "Take It Easy"
-- description: "You seem stressed during your sessions. Consider breaking larger tasks into smaller, manageable steps."
-- category: "behavioral"
-- actionable: true
-
-RECOMMENDATIONS (when connection_patterns are mostly sequential):
-- title: "Try Parallel Tasks"
-- description: "You mostly use sequential connections. Try using 'while' to create parallel workflows and save time."
-- category: "recommendations"
-- actionable: true
-
-RECOMMENDATIONS (when total_events is low):
-- title: "Build Your Routine"
-- description: "Start by adding 3-5 tasks you do every day. Track them to see your patterns emerge."
-- category: "recommendations"
-- actionable: true
-
-OUTPUT FORMAT:
-Return a list of PersonalizedInsight objects with exactly these fields:
-- title: Short, catchy headline (2-4 words)
-- description: 1-2 sentences explaining the insight
-- category: "productivity" | "consistency" | "behavioral" | "recommendations"
-- actionable: true if user can take action, false if just observation
+- streak > 3: title="On Fire!", description="5-day streak!", category=productivity
+- peak_hour pattern: title="Peak Productivity", description="Most active at 9 AM", actionable=true
+- high consistency: title="Rock Steady", description="85% consistency shows dedication"
+- stressed: title="Take It Easy", description="Break tasks into smaller steps"
+- sequential only: title="Try Parallel Tasks", description="Use 'while' for parallel workflows"
 """;
 
 # ========== Enhanced Analytics Semantic Functions ==========
@@ -831,6 +677,13 @@ obj RoutinePattern {
     has description: str;
 }
 
+sem RoutinePattern.pattern_name = "Descriptive name (e.g., 'Morning Routine', 'Work Start')";
+sem RoutinePattern.task_sequence = "Ordered list of task names in the pattern";
+sem RoutinePattern.frequency = "How many times this pattern was detected";
+sem RoutinePattern.confidence = "0.0-1.0 score of pattern reliability";
+sem RoutinePattern.time_context = "morning | afternoon | evening | night | weekend | any";
+sem RoutinePattern.description = "Brief description of the pattern";
+
 """Discover repeated task sequences that form routines"""
 def discover_routine_patterns(
     activity_events: list[dict],
@@ -840,28 +693,21 @@ def discover_routine_patterns(
 ) -> list[RoutinePattern] by llm();
 
 sem discover_routine_patterns = """
-Analyze activity events and task graph to discover repeated task sequences that form routines.
-
-INPUT:
-- activity_events: List of events with timestamps and task names
-- task_graph_nodes: All task names in the graph
-- task_graph_edges: Connections between tasks with labels
-- time_window_days: Lookback period for analysis
+Analyze events and graph to discover repeated task sequences forming routines.
 
 ANALYSIS:
-1. Identify task sequences that repeat across multiple sessions/days
-2. Look for common patterns like morning routines, work workflows, evening wind-downs
-3. Consider time context (morning, afternoon, evening, night, weekend)
-4. Calculate confidence based on frequency and consistency
+1. Identify sequences repeating across sessions/days
+2. Look for patterns: morning routines, work workflows, evening wind-downs
+3. Consider time context: morning/afternoon/evening/night/weekend
+4. Calculate confidence from frequency and consistency
 
-OUTPUT:
-Return list of RoutinePattern objects:
-- pattern_name: Descriptive name (e.g., "Morning Routine", "Work Start")
-- task_sequence: Ordered list of task names in the pattern
-- frequency: How many times this pattern was detected
-- confidence: 0.0-1.0 score of pattern reliability
-- time_context: "morning", "afternoon", "evening", "night", "weekend", "any"
-- description: Brief description of the pattern
+OUTPUT: RoutinePattern objects
+- pattern_name: Descriptive (e.g., "Morning Routine")
+- task_sequence: Ordered task names
+- frequency: Times detected
+- confidence: 0.0-1.0
+- time_context: morning|afternoon|evening|night|weekend|any
+- description: Brief description
 
 Only return patterns with frequency >= 2 and confidence >= 0.5.
 """;
@@ -876,6 +722,13 @@ obj TemporalInsight {
     has actionable_recommendation: str;
 }
 
+sem TemporalInsight.insight_type = "peak_hours | peak_days | productivity_windows | temporal_pattern";
+sem TemporalInsight.description = "Human-readable description of the pattern";
+sem TemporalInsight.peak_hours = "List of hours (0-23) with highest activity";
+sem TemporalInsight.peak_days = "List of day names with highest activity";
+sem TemporalInsight.confidence = "0.0-1.0 score";
+sem TemporalInsight.actionable_recommendation = "Suggestion based on pattern";
+
 """Analyze temporal patterns in user activity"""
 def analyze_temporal_patterns(
     activity_events: list[dict],
@@ -883,28 +736,23 @@ def analyze_temporal_patterns(
 ) -> list[TemporalInsight] by llm();
 
 sem analyze_temporal_patterns = """
-Analyze activity timestamps to discover when user is most active and productive.
-
-INPUT:
-- activity_events: List of events with timestamps (format: YYYY-MM-DDTHH:MM:SS)
-- lookback_days: How many days to analyze
+Analyze timestamps to discover when user is most active.
 
 ANALYSIS:
-1. Extract hour (0-23) and day of week from timestamps
-2. Identify peak hours (most activity) and peak days
-3. Look for patterns like "weekend warrior", "morning person", "night owl"
-4. Calculate confidence based on data consistency
+1. Extract hour (0-23) and day of week
+2. Identify peak hours and peak days
+3. Look for patterns: "weekend warrior", "morning person", "night owl"
+4. Calculate confidence from consistency
 
-OUTPUT:
-Return list of TemporalInsight objects:
-- insight_type: "peak_hours", "peak_days", "productivity_windows", "temporal_pattern"
-- description: Human-readable description of the pattern
+OUTPUT: TemporalInsight objects
+- insight_type: peak_hours|peak_days|productivity_windows|temporal_pattern
+- description: Human-readable pattern description
 - peak_hours: List of hours (0-23) with highest activity
 - peak_days: List of day names with highest activity
-- confidence: 0.0-1.0 score
+- confidence: 0.0-1.0
 - actionable_recommendation: Suggestion based on pattern
 
-Be specific with times. Instead of "morning", say "9-11 AM".
+Be specific: "9-11 AM" not "morning".
 """;
 
 """Represents comparison insights between time periods"""
@@ -917,6 +765,13 @@ obj ComparisonInsight {
     has narrative: str;
 }
 
+sem ComparisonInsight.comparison_type = "week_over_week | month_over_month";
+sem ComparisonInsight.current_period = "Dict with current stats (total_events, active_days, etc.)";
+sem ComparisonInsight.previous_period = "Dict with previous stats";
+sem ComparisonInsight.change_percentage = "Percentage change (positive = increase)";
+sem ComparisonInsight.trend = "improving | declining | stable";
+sem ComparisonInsight.narrative = "Human-readable explanation of the change";
+
 """Generate comparative insights between time periods"""
 def generate_comparative_insights(
     current_period_events: list[dict],
@@ -925,29 +780,23 @@ def generate_comparative_insights(
 ) -> list[ComparisonInsight] by llm();
 
 sem generate_comparative_insights = """
-Compare activity between two time periods to identify trends.
-
-INPUT:
-- current_period_events: Events from current period (this week/month)
-- previous_period_events: Events from previous period (last week/month)
-- period_type: "week" or "month"
+Compare activity between time periods to identify trends.
 
 ANALYSIS:
 1. Count events in each period
 2. Calculate percentage change
-3. Determine trend: "improving", "declining", "stable"
-4. Generate narrative explaining the change
+3. Determine trend: improving|declining|stable
+4. Generate narrative
 
-OUTPUT:
-Return list of ComparisonInsight objects:
-- comparison_type: "week_over_week" or "month_over_month"
-- current_period: Dict with current stats (total_events, active_days, etc.)
+OUTPUT: ComparisonInsight objects
+- comparison_type: week_over_week|month_over_month
+- current_period: Dict with current stats
 - previous_period: Dict with previous stats
-- change_percentage: Percentage change (positive = increase)
-- trend: "improving", "declining", or "stable"
-- narrative: Human-readable explanation of the change
+- change_percentage: Positive = increase
+- trend: improving|declining|stable
+- narrative: Human-readable explanation
 
-Focus on meaningful changes. Small fluctuations (<10%) should be marked "stable".
+Small fluctuations (<10%) = stable.
 """;
 
 """Check if proactive insight should be triggered"""
@@ -960,29 +809,21 @@ def should_trigger_proactive_insight(
 ) -> dict by llm();
 
 sem should_trigger_proactive_insight = """
-Determine if a proactive insight should be triggered based on user state.
-
-INPUT:
-- recent_events: Recent activity events
-- user_goals: Current user goals with progress
-- current_streak: Current activity streak
-- last_insight_time: When last insight was delivered
-- user_context: Additional context (time since last activity, session count, etc.)
+Determine if proactive insight should be triggered.
 
 TRIGGERS:
-1. STREAK_AT_RISK: User hasn't been active today but has active streak
-2. ACHIEVEMENT_UNLOCKED: User earned a new achievement
-3. GOAL_MILESTONE: User reached 50%, 75%, or 100% of goal
-4. PATTERN_DETECTED: New routine pattern discovered
-5. ENCOURAGEMENT_NEEDED: User activity declined significantly
-6. RETURNING_USER: User back after absence
+1. STREAK_AT_RISK: Not active today but has streak
+2. ACHIEVEMENT_UNLOCKED: New achievement
+3. GOAL_MILESTONE: Reached 50%, 75%, or 100% of goal
+4. PATTERN_DETECTED: New routine pattern
+5. ENCOURAGEMENT_NEEDED: Activity declined
+6. RETURNING_USER: Back after absence
 
-OUTPUT:
-Return dict with:
-- should_trigger: true or false
-- insight_type: Type of insight to trigger
-- urgency: "low", "medium", or "high"
-- message: Specific message for the insight
+OUTPUT: dict with
+- should_trigger: true/false
+- insight_type: Type to trigger
+- urgency: low|medium|high
+- message: Specific message
 
-Only trigger if truly valuable. Avoid spam.
+Only trigger if valuable. Avoid spam.
 """;
