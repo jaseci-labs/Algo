@@ -5,8 +5,10 @@ import from json { loads, dumps }
 import from dotenv { load_dotenv }
 import from semantics.semantics {
     EmotionalState,
+    Emotion,
     ConversationIntent,
     ConversationContext,
+    CorrectionType,
     ConnectionType,
     TaskRelationship,
     IntentAnalysis,

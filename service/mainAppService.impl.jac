@@ -428,8 +428,8 @@ impl call_graph_agent.call{
             last_task=last_task
         );
 
-        if intent_analysis.conversation_context.correction_type == "rename" {
-            referring_to = intent_analysis.conversation_context.referring_to_task;
+        if intent_analysis.context.correction_type == CorrectionType.RENAME {
+            referring_to = intent_analysis.context.referring_to_task;
 
             old_name = None;
             if referring_to and referring_to in current_nodes {
@@ -448,7 +448,7 @@ impl call_graph_agent.call{
 
             extracted_tasks = extract_raw_task_names(
                 user_message=self.context_from_user,
-                conversation_context=intent_analysis.conversation_context,
+                context=intent_analysis.context,
                 existing_nodes=current_nodes
             );
 
@@ -469,12 +469,10 @@ impl call_graph_agent.call{
 
                 intent_dict = {
                     "conversation_context": {
-                        "intent": str(intent_analysis.conversation_context.intent),
-                        "referring_to_task": intent_analysis.conversation_context.referring_to_task,
-                        "correction_type": intent_analysis.conversation_context.correction_type,
-                        "needs_graph_rebuild": intent_analysis.conversation_context.needs_graph_rebuild,
-                        "is_insertion": intent_analysis.conversation_context.is_insertion,
-                        "tasks_to_move": intent_analysis.conversation_context.tasks_to_move
+                        "intent": str(intent_analysis.context.intent),
+                        "referring_to_task": intent_analysis.context.referring_to_task,
+                        "correction_type": str(intent_analysis.context.correction_type),
+                        "tasks_to_move": intent_analysis.context.tasks_to_move
                     },
                     "should_create_tasks": intent_analysis.should_create_tasks,
                     "confidence": intent_analysis.confidence
@@ -501,17 +499,17 @@ impl call_graph_agent.call{
                 manager_data.last_response = response;
                 manager_data.last_suggestions = [];
                 manager_data.last_thinking = {
-                    "emotional": f"You seem {emotional_state.state} right now",
+                    "emotional": f"You seem {emotional_state.emotion} right now",
                     "intent": "You're renaming a task",
                     "tasks": f"Renamed: {old_name} → {new_name}",
                     "pattern": ""
                 };
                 manager_data.last_task_names = [new_name];
-                manager_data.last_emotional_state = emotional_state.state;
+                manager_data.last_emotional_state = str(emotional_state.emotion);
 
                 report {
                     "response": response,
-                    "emotional_state": emotional_state.state,
+                    "emotional_state": str(emotional_state.emotion),
                     "suggestions": [],
                     "thinking": manager_data.last_thinking,
                     "task_names": [new_name],
@@ -530,15 +528,15 @@ impl call_graph_agent.call{
         if intent_analysis.should_create_tasks {
             extracted_tasks = extract_raw_task_names(
                 user_message=self.context_from_user,
-                conversation_context=intent_analysis.conversation_context,
+                context=intent_analysis.context,
                 existing_nodes=current_nodes
             );
 
-            correction_type = intent_analysis.conversation_context.correction_type;
-            referring_to = intent_analysis.conversation_context.referring_to_task;
+            correction_type = intent_analysis.context.correction_type;
+            referring_to = intent_analysis.context.referring_to_task;
 
-            if correction_type in ["insert_before", "insert_after", "insert_first"] {
-                if correction_type == "insert_before" and referring_to {
+            if correction_type in [CorrectionType.INSERT_BEFORE, CorrectionType.INSERT_AFTER, CorrectionType.INSERT_FIRST] {
+                if correction_type == CorrectionType.INSERT_BEFORE and referring_to {
                     for edge in current_edges {
                         if edge.get("to") == referring_to {
                             last_task = edge.get("from");
@@ -546,10 +544,10 @@ impl call_graph_agent.call{
                             break;
                         }
                     }
-                } elif correction_type == "insert_after" and referring_to {
+                } elif correction_type == CorrectionType.INSERT_AFTER and referring_to {
                     last_task = referring_to;
                     edge_to_split = next((e for e in current_edges if e.get("from") == referring_to), None);
-                } elif correction_type == "insert_first" {
+                } elif correction_type == CorrectionType.INSERT_FIRST {
                     last_task = "Start";
                 }
             }
@@ -558,7 +556,7 @@ impl call_graph_agent.call{
                 user_message=self.context_from_user,
                 last_task=last_task,
                 existing_nodes=current_nodes,
-                conversation_context=intent_analysis.conversation_context
+                context=intent_analysis.context
             );
 
             convergence_intent = detect_convergence_intent(
@@ -570,14 +568,14 @@ impl call_graph_agent.call{
             relationships = build_task_relationships(
                 user_message=self.context_from_user,
                 extracted_tasks=extracted_tasks,
-                attachment_analysis=attachment_analysis,
-                convergence_intent=convergence_intent,
-                conversation_context=intent_analysis.conversation_context,
+                attachment=attachment_analysis,
+                convergence=convergence_intent,
+                context=intent_analysis.context,
                 current_edges=current_edges
             );
 
-            if intent_analysis.conversation_context.needs_graph_rebuild
-            and len(current_nodes) > 1 {
+            if intent_analysis.context.intent == ConversationIntent.CORRECT_PREVIOUS
+            or intent_analysis.context.intent == ConversationIntent.CLARIFY_PREVIOUS {
                 all_nodes = ["Start"];
                 added_nodes = {"Start": True};
 
@@ -600,7 +598,7 @@ impl call_graph_agent.call{
                 }
 
                 edge_map = {};
-                tasks_to_move = intent_analysis.conversation_context.tasks_to_move if hasattr(intent_analysis.conversation_context, 'tasks_to_move') else [];
+                tasks_to_move = intent_analysis.context.tasks_to_move if hasattr(intent_analysis.context, 'tasks_to_move') else [];
 
                 if len(tasks_to_move) > 0 {
                     for edge in current_edges {
@@ -675,7 +673,7 @@ impl call_graph_agent.call{
                 for rel in relationships {
                     inserted = False;
                     for i in range(len(sorted_rels)) {
-                        if rel.sequence_order < sorted_rels[i].sequence_order {
+                        if rel.sequence_order < sorted_rels[i].order {
                             sorted_rels.insert(i, rel);
                             inserted = True;
                             break;
@@ -686,7 +684,7 @@ impl call_graph_agent.call{
                     }
                 }
                 for rel in sorted_rels {
-                    here spawn update_task_graph(
+                    root spawn update_task_graph(
                         task_name=rel.to_task,
                         previous_task=rel.from_task,
                         edge_label=rel.edge_label,
@@ -699,10 +697,10 @@ impl call_graph_agent.call{
         thinking_summary = generate_thinking_summary(
             user_message=self.context_from_user,
             emotional_state=emotional_state,
-            intent_analysis=intent_analysis,
-            extracted_tasks=extracted_tasks,
-            attachment_analysis=attachment_analysis,
-            convergence_intent=convergence_intent
+            intent=intent_analysis,
+            extracted=extracted_tasks,
+            attachment=attachment_analysis,
+            convergence=convergence_intent
         );
 
         task_names = [];
@@ -733,8 +731,8 @@ impl call_graph_agent.call{
             suggestions = generate_next_suggestions(
                 last_task=last_task,
                 recent_tasks=recent_tasks,
-                conversation_context=self.context_from_user,
-                emotional_state=emotional_state.state
+                context=intent_analysis.context,
+                emotional_state=emotional_state
             );
         } except Exception as e {
             suggestions = [];
@@ -765,16 +763,14 @@ impl call_graph_agent.call{
         manager_data.last_suggestions = suggestions;
         manager_data.last_thinking = thinking;
         manager_data.last_task_names = task_names;
-        manager_data.last_emotional_state = emotional_state.state;
+        manager_data.last_emotional_state = str(emotional_state.emotion);
 
         intent_dict = {
             "conversation_context": {
-                "intent": str(intent_analysis.conversation_context.intent),
-                "referring_to_task": intent_analysis.conversation_context.referring_to_task,
-                "correction_type": intent_analysis.conversation_context.correction_type,
-                "needs_graph_rebuild": intent_analysis.conversation_context.needs_graph_rebuild,
-                "is_insertion": intent_analysis.conversation_context.is_insertion,
-                "tasks_to_move": intent_analysis.conversation_context.tasks_to_move
+                "intent": str(intent_analysis.context.intent),
+                "referring_to_task": intent_analysis.context.referring_to_task,
+                "correction_type": str(intent_analysis.context.correction_type),
+                "tasks_to_move": intent_analysis.context.tasks_to_move
             },
             "should_create_tasks": intent_analysis.should_create_tasks,
             "confidence": intent_analysis.confidence
@@ -827,7 +823,7 @@ impl call_graph_agent.call{
 
                     report {
                         "response": response,
-                        "emotional_state": emotional_state.state,
+                        "emotional_state": str(emotional_state.emotion),
                         "suggestions": suggestions,
                         "thinking": thinking,
                         "task_names": task_names,
@@ -864,7 +860,7 @@ impl call_graph_agent.call{
 
                 report {
                     "response": response,
-                    "emotional_state": emotional_state.state,
+                    "emotional_state": str(emotional_state.emotion),
                     "suggestions": suggestions,
                     "thinking": thinking,
                     "task_names": task_names,
@@ -878,7 +874,7 @@ impl call_graph_agent.call{
             elif validation_type in ["edge_labels", "rename_operation", "insert_operation", "reorder_operation", "graph_structure"] {
                 report {
                     "response": response,
-                    "emotional_state": emotional_state.state,
+                    "emotional_state": str(emotional_state.emotion),
                     "suggestions": suggestions,
                     "thinking": thinking,
                     "task_names": task_names,
@@ -891,7 +887,7 @@ impl call_graph_agent.call{
 
         report {
             "response": response,
-            "emotional_state": emotional_state.state,
+            "emotional_state": str(emotional_state.emotion),
             "suggestions": suggestions,
             "thinking": thinking,
             "task_names": task_names,
@@ -984,7 +980,7 @@ impl validate_graph_output.validate {
     manager_data.correct_task_name = "";
 
     # Route to appropriate validation based on operation type
-    if correction_type == "rename" {
+    if correction_type == CorrectionType.RENAME or correction_type == "rename" {
         old_task = None;
         new_task = None;
 
@@ -1022,10 +1018,10 @@ impl validate_graph_output.validate {
             manager_data.validation_type = "rename_operation";
         }
     }
-    elif correction_type in ["insert_before", "insert_after", "insert_first"] {
+    elif correction_type in [CorrectionType.INSERT_BEFORE, CorrectionType.INSERT_AFTER, CorrectionType.INSERT_FIRST, "insert_before", "insert_after", "insert_first"] {
         insert_validation = validate_insert_operation(
             user_message=user_message,
-            operation_type=correction_type,
+            operation_type=str(correction_type) if isinstance(correction_type, CorrectionType) else correction_type,
             referring_to_task=referring_to_task,
             new_tasks=extracted_tasks,
             before_edges=before_edges,
@@ -1038,7 +1034,7 @@ impl validate_graph_output.validate {
             manager_data.validation_type = "insert_operation";
         }
     }
-    elif correction_type == "reorder" or len(tasks_to_move) > 0 {
+    elif correction_type == CorrectionType.REORDER or correction_type == "reorder" or len(tasks_to_move) > 0 {
         reorder_tasks = tasks_to_move if len(tasks_to_move) > 0 else extracted_tasks;
 
         reorder_validation = validate_reorder_operation(
@@ -1055,7 +1051,7 @@ impl validate_graph_output.validate {
         }
     }
     else {
-        conversation_context = intent_analysis.get("conversation_context", {});
+        conversation_context = intent_analysis.get("conversation_context", intent_analysis.get("context", {}));
         intent_str = str(conversation_context.get("intent", "")) if conversation_context.get("intent") else "";
 
         if "ASK_QUESTION" in intent_str or "THINK_ALOUD" in intent_str {
