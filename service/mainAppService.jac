@@ -392,4 +392,3 @@ walker :pub dismiss_insight {
 
     can dismiss with Root entry;
 }
-

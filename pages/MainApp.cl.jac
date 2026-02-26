@@ -143,7 +143,7 @@ def:pub MainApp() -> any {
     transcriptItems = transcript.map(lambda item: any, idx: int -> any {
         return <TranscriptItem key={idx} item={item} showThinking={showThinking} />;
     });
-    
+
     # ========== Render ==========
     return <Layout meta={{"title": "Dashboard | Algo", "description": "Your AI assistant dashboard with voice interface"}}>
         <div className="flex flex-col h-screen bg-background">
@@ -214,4 +214,3 @@ def:pub MainApp() -> any {
         </div>
     </Layout>;
 }
-

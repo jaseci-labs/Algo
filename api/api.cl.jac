@@ -46,12 +46,12 @@ async def:pub clearTaskGraph(username: str) -> any {
     try {
         clearResponse = root spawn clear_graph(username=username);
         clearResult = clearResponse.reports[0] if clearResponse.reports else {};
-        
+
         if clearResult and clearResult.success {
             # Fetch the updated (empty) graph state
             graphResponse = root spawn get_task_graph(username=username);
             graphData = graphResponse.reports[0] if graphResponse.reports else {};
-            
+
             return {
                 "success": True,
                 "data": {
@@ -61,7 +61,7 @@ async def:pub clearTaskGraph(username: str) -> any {
                 }
             };
         }
-        
+
         return {
             "success": False,
             "error": clearResult.error if clearResult and clearResult.error else "Failed to clear graph"
@@ -86,7 +86,7 @@ async def:pub getSessionToken() -> any {
     try {
         response = root spawn get_session_token();
         data = response.reports[0] if response.reports else None;
-        
+
         if data and "error" in data {
             console.error("Error fetching session:", data);
             return {
@@ -94,14 +94,14 @@ async def:pub getSessionToken() -> any {
                 "error": data.error or "Session token error"
             };
         }
-        
+
         if data and "key" in data {
             return {
                 "success": True,
                 "key": data.key
             };
         }
-        
+
         return {
             "success": False,
             "error": "No key returned from get_session_token"
@@ -213,14 +213,14 @@ async def:pub saveRoutine(routine_name: str, username: str) -> any {
     try {
         saveResponse = root spawn save_routine(routine_name=routine_name, username=username);
         saveResult = saveResponse.reports[0] if saveResponse.reports else {};
-        
+
         if saveResult and saveResult.success {
             return {
                 "success": True,
                 "data": saveResult
             };
         }
-        
+
         return {
             "success": False,
             "error": saveResult.error if saveResult and saveResult.error else "Failed to save routine"

@@ -75,7 +75,7 @@ impl update_task_graph.update_graph {
     all_task_nodes = [-->](?:TaskState);
     nodes_to_check = all_task_nodes.copy();
     all_nodes = [];
-    
+
     # Collect all nodes via traversal
     visited_ids = {};
 
@@ -1724,7 +1724,7 @@ def extract_edge_label_via_printgraph(from_node: node, to_node: node) -> str {
         if not to_task_name {
             return "";
         }
-        
+
         # FIRST PASS: Build node ID -> task_name map
         node_map = {};
         for line in lines {
@@ -1756,7 +1756,7 @@ def extract_edge_label_via_printgraph(from_node: node, to_node: node) -> str {
         if not target_node_id {
             return "";
         }
-        
+
         # SECOND PASS: Find edge to target and extract TaskFlow label
         for line in lines {
             line = line.strip();
@@ -2400,4 +2400,3 @@ impl dismiss_insight.dismiss {
     }
     report {"success": False, "error": "Insight not found"};
 }
-

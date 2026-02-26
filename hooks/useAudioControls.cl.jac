@@ -82,7 +82,7 @@ def:pub useAudioControls(sessionRef: any, sessionStatus: str) -> any {
             audioElementRef.current.muted = not isAudioPlaybackEnabled;
         }
     }
-    
+
     return {
         # State
         "isPTTActive": isPTTActive,

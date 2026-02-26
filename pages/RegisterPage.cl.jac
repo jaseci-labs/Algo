@@ -9,7 +9,7 @@ import from ..components.Layout { Layout }
 def:pub RegisterPage() -> any {
     # Call Hook (Get All Logic)
     hook = useAuth();
-    
+
     # Destructure for easier access
     username = hook.username;
     password = hook.password;
@@ -20,7 +20,7 @@ def:pub RegisterPage() -> any {
     handleUsernameChange = hook.handleUsernameChange;
     handlePasswordChange = hook.handlePasswordChange;
     handleConfirmPasswordChange = hook.handleConfirmPasswordChange;
-    
+
     # Error display element
     errorDisplay = None;
     if error {
@@ -36,7 +36,7 @@ def:pub RegisterPage() -> any {
         "text-text-primary placeholder:text-text-secondary",
         "focus:border-primary focus:ring-2 focus:ring-primary/20"
     );
-    
+
     # Button classes with conditional styling
     buttonClass = cn(
         "auth-button w-full py-4  border-none rounded-xl text-base font-semibold transition-all flex items-center justify-center gap-2 tracking-wide",
@@ -44,7 +44,7 @@ def:pub RegisterPage() -> any {
     );
     buttonText = "Creating account..." if loading else "Sign up";
 
-    # Render (UI Only) 
+    # Render (UI Only)
     return <Layout meta={{"title": "Register | Algo", "description": "Create your Algo AI assistant account"}}>
         <div className="flex items-center justify-center min-h-screen p-5  overflow-hidden">
 
