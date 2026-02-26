@@ -10,28 +10,34 @@
 # @param username - The username to fetch the graph for
 # @returns Graph data containing dotCode, edges, and lastTask
 async def:pub getTaskGraph(username: str) -> any {
-        try {
-            response = root spawn get_task_graph(username=username);
-            
-            if response and response.reports and response.reports.length > 0 {
+    try {
+        response = root spawn get_task_graph(username=username);
+
+        if response and response.reports and response.reports.length > 0 {
+            report_data = response.reports[0];
+            if report_data and ("dotCode" in report_data or "nodes" in report_data or "edges" in report_data) {
                 return {
                     "success": True,
-                    "data": response.reports[0]
+                    "data": report_data
                 };
             }
-            
             return {
                 "success": False,
-                "error": "No data returned from get_task_graph"
-            };
-        } except Exception as e {
-            console.error("getTaskGraph error:", e);
-            return {
-                "success": False,
-                "error": String(e)
+                "error": "Invalid graph data structure returned"
             };
         }
+
+        return {
+            "success": False,
+            "error": "No data returned from get_task_graph"
+        };
+    } except Exception as e {
+        return {
+            "success": False,
+            "error": String(e)
+        };
     }
+}
 
 # Clear the task graph for a specific user
 # @param username - The username whose graph should be cleared
@@ -130,7 +136,6 @@ async def:pub callManager(context_from_user: str, conversation_history: list, us
         response_data = result.reports[result.reports.length - 1] if result.reports and result.reports.length > 0 else {};
 
         if response_data and "error" in response_data {
-            console.error("Manager error:", response_data);
             return {
                 "success": False,
                 "error": response_data.error or "Manager error"
@@ -157,15 +162,21 @@ async def:pub callManager(context_from_user: str, conversation_history: list, us
             thinking = response_data["thinking"];
         }
 
+        # Extract graphState if available
+        graph_state = None;
+        if "graphState" in response_data {
+            graph_state = response_data["graphState"];
+        }
+
         return {
             "success": True,
             "response": next_resp,
             "suggestions": suggestions,
             "thinking": thinking,
-            "data": response_data
+            "data": response_data,
+            "graphState": graph_state
         };
     } except Exception as e {
-        console.error("callManager error:", e);
         return {
             "success": False,
             "error": String(e)
