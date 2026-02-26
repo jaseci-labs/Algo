@@ -7,12 +7,12 @@ def:pub SuggestionChips(
     suggestions: list,
     onSelectSuggestion: any
 ) -> any {
-    
+
     # Don't render if no suggestions
     if not suggestions or suggestions.length == 0 {
         return None;
     }
-    
+
     return <div className="px-4 pb-2 flex gap-2 items-center flex-wrap">
         <span className="text-xs text-text-secondary font-medium">
             {"Quick replies:"}

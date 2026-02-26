@@ -10,28 +10,34 @@
 # @param username - The username to fetch the graph for
 # @returns Graph data containing dotCode, edges, and lastTask
 async def:pub getTaskGraph(username: str) -> any {
-        try {
-            response = root spawn get_task_graph(username=username);
-            
-            if response and response.reports and response.reports.length > 0 {
+    try {
+        response = root spawn get_task_graph(username=username);
+
+        if response and response.reports and response.reports.length > 0 {
+            report_data = response.reports[0];
+            if report_data and ("dotCode" in report_data or "nodes" in report_data or "edges" in report_data) {
                 return {
                     "success": True,
-                    "data": response.reports[0]
+                    "data": report_data
                 };
             }
-            
             return {
                 "success": False,
-                "error": "No data returned from get_task_graph"
-            };
-        } except Exception as e {
-            console.error("getTaskGraph error:", e);
-            return {
-                "success": False,
-                "error": String(e)
+                "error": "Invalid graph data structure returned"
             };
         }
+
+        return {
+            "success": False,
+            "error": "No data returned from get_task_graph"
+        };
+    } except Exception as e {
+        return {
+            "success": False,
+            "error": String(e)
+        };
     }
+}
 
 # Clear the task graph for a specific user
 # @param username - The username whose graph should be cleared
@@ -40,12 +46,12 @@ async def:pub clearTaskGraph(username: str) -> any {
     try {
         clearResponse = root spawn clear_graph(username=username);
         clearResult = clearResponse.reports[0] if clearResponse.reports else {};
-        
+
         if clearResult and clearResult.success {
             # Fetch the updated (empty) graph state
             graphResponse = root spawn get_task_graph(username=username);
             graphData = graphResponse.reports[0] if graphResponse.reports else {};
-            
+
             return {
                 "success": True,
                 "data": {
@@ -55,7 +61,7 @@ async def:pub clearTaskGraph(username: str) -> any {
                 }
             };
         }
-        
+
         return {
             "success": False,
             "error": clearResult.error if clearResult and clearResult.error else "Failed to clear graph"
@@ -80,7 +86,7 @@ async def:pub getSessionToken() -> any {
     try {
         response = root spawn get_session_token();
         data = response.reports[0] if response.reports else None;
-        
+
         if data and "error" in data {
             console.error("Error fetching session:", data);
             return {
@@ -88,14 +94,14 @@ async def:pub getSessionToken() -> any {
                 "error": data.error or "Session token error"
             };
         }
-        
+
         if data and "key" in data {
             return {
                 "success": True,
                 "key": data.key
             };
         }
-        
+
         return {
             "success": False,
             "error": "No key returned from get_session_token"
@@ -130,7 +136,6 @@ async def:pub callManager(context_from_user: str, conversation_history: list, us
         response_data = result.reports[result.reports.length - 1] if result.reports and result.reports.length > 0 else {};
 
         if response_data and "error" in response_data {
-            console.error("Manager error:", response_data);
             return {
                 "success": False,
                 "error": response_data.error or "Manager error"
@@ -157,15 +162,21 @@ async def:pub callManager(context_from_user: str, conversation_history: list, us
             thinking = response_data["thinking"];
         }
 
+        # Extract graphState if available
+        graph_state = None;
+        if "graphState" in response_data {
+            graph_state = response_data["graphState"];
+        }
+
         return {
             "success": True,
             "response": next_resp,
             "suggestions": suggestions,
             "thinking": thinking,
-            "data": response_data
+            "data": response_data,
+            "graphState": graph_state
         };
     } except Exception as e {
-        console.error("callManager error:", e);
         return {
             "success": False,
             "error": String(e)
@@ -202,14 +213,14 @@ async def:pub saveRoutine(routine_name: str, username: str) -> any {
     try {
         saveResponse = root spawn save_routine(routine_name=routine_name, username=username);
         saveResult = saveResponse.reports[0] if saveResponse.reports else {};
-        
+
         if saveResult and saveResult.success {
             return {
                 "success": True,
                 "data": saveResult
             };
         }
-        
+
         return {
             "success": False,
             "error": saveResult.error if saveResult and saveResult.error else "Failed to save routine"

@@ -12,7 +12,7 @@ glob START_NODE_SIZE = 70;
 # Helper function to add spaces before capital letters in camelCase strings
 
 def addSpacesToCamelCase(word:str) -> str{
-    
+
    result = '';
 
   for i = 0 to i < word.length by i+=1{

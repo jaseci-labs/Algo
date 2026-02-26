@@ -1,4 +1,4 @@
-import from "lucide-react" { BarChart3, Trash2 } 
+import from "lucide-react" { BarChart3, Trash2 }
 import from .GraphViewer { GraphViewer }
 
 # Graph Panel - right side showing task visualization

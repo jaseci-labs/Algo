@@ -8,7 +8,7 @@ import from ..components.Layout { Layout }
 
 def:pub LoginPage() -> any {
     hook = useAuth();
-    
+
     username = hook.username;
     password = hook.password;
     error = hook.error;
@@ -16,7 +16,7 @@ def:pub LoginPage() -> any {
     handleLogin = hook.handleLogin;
     handleUsernameChange = hook.handleUsernameChange;
     handlePasswordChange = hook.handlePasswordChange;
-    
+
     # Error display element
     errorDisplay = None;
     if error {
@@ -32,7 +32,7 @@ def:pub LoginPage() -> any {
         "text-text-primary placeholder:text-text-secondary",
         "focus:border-primary focus:ring-2 focus:ring-primary/20"
     );
-    
+
     # Button classes with conditional styling
     buttonClass = cn(
         "auth-button w-full py-4  border-none rounded-xl text-base font-semibold transition-all flex items-center justify-center gap-2 tracking-wide",
@@ -40,7 +40,7 @@ def:pub LoginPage() -> any {
     );
 
     buttonText = "Logging in..." if loading else "Login";
-    
+
     return <Layout meta={{"title": "Login | Algo", "description": "Login to your Algo AI assistant account"}}>
         <div className="flex items-center justify-center min-h-screen p-5  overflow-hidden">
 

@@ -18,9 +18,8 @@ Environment Variables:
 import os
 import sys
 import time
-import json
 import requests
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from datetime import datetime
 
 # Configuration
@@ -29,6 +28,7 @@ TEST_MODE = os.getenv("TEST_MODE", "local")
 
 # Test username - use a unique name per test run to avoid conflicts
 TEST_USERNAME = f"test_user_{int(datetime.now().timestamp())}"
+
 
 # Color codes for output
 class Colors:
@@ -164,7 +164,6 @@ def test_get_task_graph_empty(results: IntegrationTestResult):
     if isinstance(response, list) and len(response) > 0:
         data = response[0]
         nodes = data.get("nodes", [])
-        last_task = data.get("lastTask", "")
         # Accept either empty nodes (fresh user) or Start node (initialized)
         if len(nodes) == 0 or "Start" in nodes:
             results.add_pass("Get Empty Task Graph")
@@ -172,7 +171,6 @@ def test_get_task_graph_empty(results: IntegrationTestResult):
             results.add_fail("Get Empty Task Graph", f"Unexpected nodes: {nodes}")
     elif isinstance(response, dict):
         nodes = response.get("nodes", [])
-        last_task = response.get("lastTask", "")
         if len(nodes) == 0 or "Start" in nodes:
             results.add_pass("Get Empty Task Graph")
         else:
@@ -183,12 +181,15 @@ def test_get_task_graph_empty(results: IntegrationTestResult):
 
 def test_update_task_graph(results: IntegrationTestResult):
     """Test adding a task to the graph."""
-    response = call_walker("update_task_graph", {
-        "task_name": "MakeCoffee",
-        "previous_task": "Start",
-        "edge_label": "then",
-        "username": TEST_USERNAME
-    })
+    response = call_walker(
+        "update_task_graph",
+        {
+            "task_name": "MakeCoffee",
+            "previous_task": "Start",
+            "edge_label": "then",
+            "username": TEST_USERNAME,
+        },
+    )
 
     if "error" in response:
         results.add_fail("Update Task Graph", response.get("error"))
@@ -223,24 +224,29 @@ def test_get_task_graph_with_tasks(results: IntegrationTestResult):
         if "MakeCoffee" in nodes:
             results.add_pass("Get Task Graph With Tasks")
         else:
-            results.add_fail("Get Task Graph With Tasks", f"MakeCoffee not in nodes: {nodes}")
+            results.add_fail(
+                "Get Task Graph With Tasks", f"MakeCoffee not in nodes: {nodes}"
+            )
     elif isinstance(response, dict):
         nodes = response.get("nodes", [])
         if "MakeCoffee" in nodes:
             results.add_pass("Get Task Graph With Tasks")
         else:
-            results.add_fail("Get Task Graph With Tasks", f"MakeCoffee not in nodes: {nodes}")
+            results.add_fail(
+                "Get Task Graph With Tasks", f"MakeCoffee not in nodes: {nodes}"
+            )
     else:
-        results.add_fail("Get Task Graph With Tasks", f"Unexpected response: {response}")
+        results.add_fail(
+            "Get Task Graph With Tasks", f"Unexpected response: {response}"
+        )
 
 
 def test_rename_task(results: IntegrationTestResult):
     """Test renaming a task."""
-    response = call_walker("rename_task", {
-        "old_name": "MakeCoffee",
-        "new_name": "BrewCoffee",
-        "username": TEST_USERNAME
-    })
+    response = call_walker(
+        "rename_task",
+        {"old_name": "MakeCoffee", "new_name": "BrewCoffee", "username": TEST_USERNAME},
+    )
 
     if "error" in response:
         results.add_fail("Rename Task", response.get("error"))
@@ -275,7 +281,9 @@ def test_verify_rename(results: IntegrationTestResult):
         if "BrewCoffee" in nodes and "MakeCoffee" not in nodes:
             results.add_pass("Verify Rename")
         else:
-            results.add_fail("Verify Rename", f"Expected BrewCoffee, not MakeCoffee. Nodes: {nodes}")
+            results.add_fail(
+                "Verify Rename", f"Expected BrewCoffee, not MakeCoffee. Nodes: {nodes}"
+            )
     else:
         results.add_fail("Verify Rename", f"Unexpected response: {response}")
 
@@ -289,12 +297,15 @@ def test_add_multiple_tasks(results: IntegrationTestResult):
     ]
 
     for task_name, previous, label in tasks:
-        response = call_walker("update_task_graph", {
-            "task_name": task_name,
-            "previous_task": previous,
-            "edge_label": label,
-            "username": TEST_USERNAME
-        })
+        response = call_walker(
+            "update_task_graph",
+            {
+                "task_name": task_name,
+                "previous_task": previous,
+                "edge_label": label,
+                "username": TEST_USERNAME,
+            },
+        )
 
         if "error" in response:
             results.add_fail(f"Add Multiple Tasks ({task_name})", response.get("error"))
@@ -340,7 +351,9 @@ def test_verify_cleared(results: IntegrationTestResult):
         if len(nodes) == 1 and nodes[0] == "Start":
             results.add_pass("Verify Cleared Graph")
         else:
-            results.add_fail("Verify Cleared Graph", f"Expected only Start node, got: {nodes}")
+            results.add_fail(
+                "Verify Cleared Graph", f"Expected only Start node, got: {nodes}"
+            )
     else:
         results.add_fail("Verify Cleared Graph", f"Unexpected response: {response}")
 
@@ -348,17 +361,19 @@ def test_verify_cleared(results: IntegrationTestResult):
 def test_save_routine(results: IntegrationTestResult):
     """Test saving a routine."""
     # First add some tasks
-    call_walker("update_task_graph", {
-        "task_name": "MorningExercise",
-        "previous_task": "Start",
-        "edge_label": "then",
-        "username": TEST_USERNAME
-    })
+    call_walker(
+        "update_task_graph",
+        {
+            "task_name": "MorningExercise",
+            "previous_task": "Start",
+            "edge_label": "then",
+            "username": TEST_USERNAME,
+        },
+    )
 
-    response = call_walker("save_routine", {
-        "routine_name": "MorningRoutine",
-        "username": TEST_USERNAME
-    })
+    response = call_walker(
+        "save_routine", {"routine_name": "MorningRoutine", "username": TEST_USERNAME}
+    )
 
     if "error" in response:
         results.add_fail("Save Routine", response.get("error"))
@@ -392,12 +407,16 @@ def test_load_past_routines(results: IntegrationTestResult):
         if "routines" in data or "count" in data:
             results.add_pass("Load Past Routines")
         else:
-            results.add_fail("Load Past Routines", f"Expected routines data, got: {data}")
+            results.add_fail(
+                "Load Past Routines", f"Expected routines data, got: {data}"
+            )
     elif isinstance(response, dict):
         if "routines" in response or "count" in response:
             results.add_pass("Load Past Routines")
         else:
-            results.add_fail("Load Past Routines", f"Expected routines data, got: {response}")
+            results.add_fail(
+                "Load Past Routines", f"Expected routines data, got: {response}"
+            )
     else:
         results.add_fail("Load Past Routines", f"Unexpected response: {response}")
 
@@ -408,14 +427,13 @@ def test_rebuild_graph(results: IntegrationTestResult):
     new_edges = [
         {"from": "Start", "to": "TaskA", "label": "then"},
         {"from": "TaskA", "to": "TaskB", "label": "after"},
-        {"from": "TaskB", "to": "TaskC", "label": "then"}
+        {"from": "TaskB", "to": "TaskC", "label": "then"},
     ]
 
-    response = call_walker("rebuild_graph", {
-        "new_nodes": new_nodes,
-        "new_edges": new_edges,
-        "username": TEST_USERNAME
-    })
+    response = call_walker(
+        "rebuild_graph",
+        {"new_nodes": new_nodes, "new_edges": new_edges, "username": TEST_USERNAME},
+    )
 
     if "error" in response:
         results.add_fail("Rebuild Graph", response.get("error"))
@@ -477,16 +495,17 @@ def test_analytics_endpoints(results: IntegrationTestResult):
         if isinstance(response, list) or isinstance(response, dict):
             results.add_pass(f"Analytics: {walker_name}")
         else:
-            results.add_fail(f"Analytics: {walker_name}", f"Unexpected response: {response}")
+            results.add_fail(
+                f"Analytics: {walker_name}", f"Unexpected response: {response}"
+            )
 
 
 def test_create_goal(results: IntegrationTestResult):
     """Test creating a goal."""
-    response = call_walker("create_goal", {
-        "goal_type": "daily_tasks",
-        "target_value": 5,
-        "username": TEST_USERNAME
-    })
+    response = call_walker(
+        "create_goal",
+        {"goal_type": "daily_tasks", "target_value": 5, "username": TEST_USERNAME},
+    )
 
     if "error" in response:
         results.add_fail("Create Goal", response.get("error"))
@@ -502,22 +521,27 @@ def test_create_goal(results: IntegrationTestResult):
         if response.get("success") or response.get("goal_id"):
             results.add_pass("Create Goal")
         else:
-            results.add_fail("Create Goal", f"Expected success or goal_id, got: {response}")
+            results.add_fail(
+                "Create Goal", f"Expected success or goal_id, got: {response}"
+            )
     else:
         results.add_fail("Create Goal", f"Unexpected response: {response}")
 
 
 def test_log_activity_event(results: IntegrationTestResult):
     """Test logging an activity event."""
-    response = call_walker("log_activity_event", {
-        "username": TEST_USERNAME,
-        "event_type": "task_created",
-        "event_data": {"task_name": "TestTask"},
-        "session_id": "test-session-123",
-        "task_context": "TestTask",
-        "emotional_context": "neutral",
-        "duration_ms": 1000
-    })
+    response = call_walker(
+        "log_activity_event",
+        {
+            "username": TEST_USERNAME,
+            "event_type": "task_created",
+            "event_data": {"task_name": "TestTask"},
+            "session_id": "test-session-123",
+            "task_context": "TestTask",
+            "emotional_context": "neutral",
+            "duration_ms": 1000,
+        },
+    )
 
     if "error" in response:
         results.add_fail("Log Activity Event", response.get("error"))
@@ -528,12 +552,16 @@ def test_log_activity_event(results: IntegrationTestResult):
         if data.get("success") or data.get("event_id"):
             results.add_pass("Log Activity Event")
         else:
-            results.add_fail("Log Activity Event", f"Expected success or event_id, got: {data}")
+            results.add_fail(
+                "Log Activity Event", f"Expected success or event_id, got: {data}"
+            )
     elif isinstance(response, dict):
         if response.get("success") or response.get("event_id"):
             results.add_pass("Log Activity Event")
         else:
-            results.add_fail("Log Activity Event", f"Expected success or event_id, got: {response}")
+            results.add_fail(
+                "Log Activity Event", f"Expected success or event_id, got: {response}"
+            )
     else:
         results.add_fail("Log Activity Event", f"Unexpected response: {response}")
 
@@ -541,7 +569,7 @@ def test_log_activity_event(results: IntegrationTestResult):
 def run_all_tests() -> bool:
     """Run all integration tests."""
     print(f"\n{Colors.BLUE}{'=' * 60}")
-    print(f"Algo Integration Tests")
+    print("Algo Integration Tests")
     print(f"Server: {BASE_URL}")
     print(f"Test User: {TEST_USERNAME}")
     print(f"{'=' * 60}{Colors.ENDC}\n")
@@ -600,6 +628,7 @@ def main():
     except Exception as e:
         print(f"\n{Colors.RED}Unexpected error: {e}{Colors.ENDC}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

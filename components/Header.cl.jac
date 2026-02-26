@@ -9,7 +9,7 @@ import from "@jac/runtime" { jacLogout, useNavigate }
 
 def HeaderComponent(isDarkMode: bool, onToggleTheme: any, onToggleAnalytics: any = None) -> any {
     navigate = useNavigate();
-    
+
     def handleLogout(e: any) -> None {
         e.preventDefault();
         jacLogout();

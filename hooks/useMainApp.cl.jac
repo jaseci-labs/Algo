@@ -15,6 +15,8 @@ import from .useAudioControls { useAudioControls }
 import from ..api.api {
     callManager,
     saveRoutine,
+    getTaskGraph,
+    clearTaskGraph,
     getUsernameFromToken
 }
 
@@ -25,12 +27,15 @@ def:pub useMainApp() -> any {
     # Reactive state using has variables
     has userText: str = "";
     has suggestions: list = [];
+    has graphEdges: list = [];
+    has graphDotCode: str = "";
+    has lastTask: str = "Start";
 
     # Ref for auto-scroll
     transcriptEndRef = useRef(None);
-    
+
     # ========== Compose Sub-Hooks ==========
-    
+
     # Transcript management
     transcriptHook = useTranscript();
     transcript = transcriptHook.transcript;
@@ -39,7 +44,7 @@ def:pub useMainApp() -> any {
     updateTranscriptItem = transcriptHook.updateTranscriptItem;
     appendTranscriptItem = transcriptHook.appendTranscriptItem;
     clearTranscript = transcriptHook.clearTranscript;
-    
+
     # Create transcript helpers object for other hooks
     transcriptHelpers = {
         "addMessage": addMessage,
@@ -47,28 +52,58 @@ def:pub useMainApp() -> any {
         "updateTranscriptItem": updateTranscriptItem,
         "appendTranscriptItem": appendTranscriptItem
     };
-    
+
     # Graph state management
     graphHook = useGraph(addMessage);
-    graphDotCode = graphHook.graphDotCode;
-    graphEdges = graphHook.graphEdges;
-    lastTask = graphHook.lastTask;
-    refreshGraphState = graphHook.refreshGraphState;
-    handleClearGraph = graphHook.handleClearGraph;
-    
+
+    # Clear the task graph and update local state
+    async def handleClearGraph() -> None {
+        try {
+            username = getUsernameFromToken();
+            result = await clearTaskGraph(username);
+
+            if result.success {
+                updateGraphFromState(result.data);
+                addMessage("system", "Graph cleared! Starting fresh.");
+            } else {
+                addMessage("error", "Failed to clear graph");
+            }
+        } except Exception as e {
+            console.error("Clear graph error:", e);
+            addMessage("error", "Error clearing graph");
+        }
+    }
+
+    # Update graph from a graphState object (from callManager response or API call)
+    def updateGraphFromState(graphState: any) -> None {
+        if graphState {
+            graphEdges = Array.from(graphState.edges or []);
+            graphDotCode = graphState.dotCode or "";
+            lastTask = graphState.lastTask or "Start";
+        }
+    }
+
+    # Simple wrapper for explicit graph refreshes (e.g., after clear, or on mount)
+    async def refreshGraphState(username: str) -> None {
+        result = await getTaskGraph(username);
+        if result.success and result.data {
+            updateGraphFromState(result.data);
+        }
+    }
+
     # Create a setter function wrapper for suggestions to pass to child hooks
     def updateSuggestions(newSuggestions: list) -> None {
         suggestions = newSuggestions;
     }
 
-    # Realtime session management (pass updateSuggestions)
-    sessionHook = useRealtimeSession(transcriptHelpers, refreshGraphState, updateSuggestions);
+    # Realtime session management (pass updateGraphFromState for voice mode)
+    sessionHook = useRealtimeSession(transcriptHelpers, refreshGraphState, updateGraphFromState, updateSuggestions);
     sessionStatus = sessionHook.sessionStatus;
     sessionRef = sessionHook.sessionRef;
     isConnected = sessionHook.isConnected;
     isConnecting = sessionHook.isConnecting;
     sendRealtimeMessage = sessionHook.sendRealtimeMessage;
-    
+
     # Audio controls
     audioHook = useAudioControls(sessionRef, sessionStatus);
     isPTTActive = audioHook.isPTTActive;
@@ -81,7 +116,7 @@ def:pub useMainApp() -> any {
     handleTalkButtonDown = audioHook.handleTalkButtonDown;
     handleTalkButtonUp = audioHook.handleTalkButtonUp;
     resetPTTState = audioHook.resetPTTState;
-    
+
     # ========== Enhanced State Setters ==========
 
     # Wrap userText change to clear suggestions when user starts typing
@@ -92,15 +127,15 @@ def:pub useMainApp() -> any {
             suggestions = [];
         }
     }
-    
+
     # ========== Connection Handlers ==========
-    
+
     def onToggleConnection() -> None {
         sessionHook.onToggleConnection(resetPTTState);
     }
-    
+
     # ========== Message Handling ==========
-    
+
     # Send text message (text-only chat or via voice session)
     async def handleSendTextMessage() -> None {
         message = userText.trim();
@@ -109,7 +144,7 @@ def:pub useMainApp() -> any {
         }
 
         userText = "";
-        suggestions = [];  # Clear suggestions when sending
+        suggestions = [];
         addMessage("user", message);
 
         username = getUsernameFromToken();
@@ -132,7 +167,11 @@ def:pub useMainApp() -> any {
                     thinkingData = result.thinking;
                 }
                 updateTranscriptItem(assistantItemId, result.response, thinkingData);
-                await refreshGraphState(username);
+
+                # Update graph directly from response (no separate API call)
+                if result.graphState {
+                    updateGraphFromState(result.graphState);
+                }
 
                 # Update suggestions if available
                 if result.suggestions and Array.isArray(result.suggestions) {
@@ -150,11 +189,11 @@ def:pub useMainApp() -> any {
             suggestions = [];
         }
     }
-    
+
     # Handle suggestion click - auto-send the suggestion
     async def handleSuggestionClick(suggestionText: str) -> None {
         userText = suggestionText;
-        suggestions = [];  # Clear suggestions immediately
+        suggestions = [];
         addMessage("user", suggestionText);
 
         username = getUsernameFromToken();
@@ -177,7 +216,11 @@ def:pub useMainApp() -> any {
                     thinkingData = result.thinking;
                 }
                 updateTranscriptItem(assistantItemId, result.response, thinkingData);
-                await refreshGraphState(username);
+
+                # Update graph directly from response
+                if result.graphState {
+                    updateGraphFromState(result.graphState);
+                }
 
                 # Update suggestions if available
                 if result.suggestions and Array.isArray(result.suggestions) {
@@ -195,47 +238,37 @@ def:pub useMainApp() -> any {
             suggestions = [];
         }
     }
-    
+
     # ========== Routine Management ==========
-    
+
     # Save current routine and restart session
     async def handleSaveAndRestart() -> None {
         if sessionStatus != "CONNECTED" {
             return;
         }
-        
-        try {
-            username = getUsernameFromToken();
 
-            result = await saveRoutine("daily_routine", username);
+        username = getUsernameFromToken();
+        result = await saveRoutine("daily_routine", username);
 
-            if result.success {
-                addMessage("system", "Routine saved! Restarting session...");
-                
-                clearTranscript();
-                
-                setTimeout(lambda -> None {
-                    addMessage("assistant", "Welcome back! I remember your routine. How can I help you today?");
-                }, 500);
-            } else {
-                addMessage("error", "Failed to save routine: " + (result.error or "Unknown error"));
-            }
-        } except Exception as e {
-            console.error("Save and restart error:", e);
-            addMessage("error", "Error during save and restart");
+        if result.success {
+            addMessage("system", "Routine saved! Starting fresh session...");
+            handleClearGraph();
+        } else {
+            addMessage("error", "Failed to save routine: " + (result.error or "Unknown error"));
         }
     }
-    
+
     # ========== Effects ==========
 
-    # Auto-scroll to bottom when transcript changes - using new can with [dep] entry syntax
+    # Auto-scroll to bottom when transcript changes
     can with [transcript] entry {
         if transcriptEndRef.current {
             transcriptEndRef.current.scrollIntoView({"behavior": "smooth"});
         }
     }
-    
+
     # ========== Return Hook Interface ==========
+
     return {
         # State
         "sessionStatus": sessionStatus,
@@ -246,7 +279,7 @@ def:pub useMainApp() -> any {
         "setIsAudioPlaybackEnabled": setIsAudioPlaybackEnabled,
         "isMicMuted": isMicMuted,
         "userText": userText,
-        "setUserText": handleUserTextChange,  # Use wrapped version
+        "setUserText": handleUserTextChange,
         "transcript": transcript,
         "graphDotCode": graphDotCode,
         "graphEdges": graphEdges,

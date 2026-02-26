@@ -30,9 +30,10 @@ def extractMessageText(content: any) -> str {
 
 # Hook for managing OpenAI Realtime session
 # @param transcriptHelpers - Object containing transcript manipulation functions
-# @param refreshGraphState - Function to refresh graph state after supervisor calls
+# @param refreshGraphState - Function to refresh graph state (for initial load)
+# @param updateGraphFromState - Function to update graph from callManager response
 # @param setSuggestions - Function to update suggestions state in parent
-def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSuggestions: any) -> any {
+def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, updateGraphFromState: any, setSuggestions: any) -> any {
     # Reactive state using has variables
     has sessionStatus: str = "DISCONNECTED";
 
@@ -44,15 +45,15 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
     # Computed values
     isConnected = sessionStatus == "CONNECTED";
     isConnecting = sessionStatus == "CONNECTING";
-        
+
         # Destructure transcript helpers
         addMessage = transcriptHelpers.addMessage;
         addTranscriptItem = transcriptHelpers.addTranscriptItem;
         updateTranscriptItem = transcriptHelpers.updateTranscriptItem;
         appendTranscriptItem = transcriptHelpers.appendTranscriptItem;
-        
+
         # ========== API Calls ==========
-        
+
         # Fetch ephemeral key from backend for OpenAI Realtime API
         async def fetchEphemeralKey() -> any {
             try {
@@ -67,9 +68,9 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                 return None;
             }
         }
-        
+
         # ========== Supervisor Tool ==========
-        
+
         # Execute supervisor tool - called by the Chat Agent
         async def executeSupervisorTool(input: any, details: any) -> any {
             context = input.relevantContextFromLastUserMessage or "";
@@ -85,8 +86,10 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                 return {"error": "Something went wrong."};
             }
 
-            # Fetch updated graph state after supervisor completes
-            await refreshGraphState(username);
+            # Update graph directly from response
+            if result.graphState {
+                updateGraphFromState(result.graphState);
+            }
 
             # Update suggestions if available
             if result.suggestions and Array.isArray(result.suggestions) {
@@ -99,7 +102,7 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
             next_resp = result.response or "I apologize, I couldn't get a response.";
             return {"nextResponse": next_resp};
         }
-        
+
         # Create the supervisor tool for the Chat Agent
         def createSupervisorTool() -> any {
             return tool({
@@ -119,9 +122,9 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                 "execute": executeSupervisorTool
             });
         }
-        
+
         # ========== Session Event Listeners ==========
-        
+
         def setupSessionEventListeners(session: any) -> None {
             # Listen for history_added events (new messages)
             session.on("history_added", lambda item: any -> None {
@@ -154,7 +157,7 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                     addTranscriptItem(itemId, "tool", "🔧 Calling: " + toolName + "...");
                 }
             });
-            
+
             # Listen for history_updated events (message updates)
             session.on("history_updated", lambda items: any -> None {
                 if not items or not items.length {
@@ -226,7 +229,7 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                     }
                 }
             });
-            
+
             # Listen for tool calls
             session.on("agent_tool_start", lambda details: any, agent: any, functionCall: any -> None {
                 toolName = functionCall.name or "unknown";
@@ -236,32 +239,32 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
             session.on("agent_tool_end", lambda details: any, agent: any, functionCall: any, result: any -> None {
             });
         }
-        
+
         # ========== Connection Management ==========
-        
+
         # Connect to OpenAI Realtime API with multi-agent setup
         async def connectToRealtime() -> None {
             if sessionStatus != "DISCONNECTED" {
                 return;
             }
-            
+
             sessionStatus = "CONNECTING";
-            
+
             try {
                 if not window.isSecureContext {
                     addMessage("error", "Microphone requires secure context. Access via http://localhost:8000");
                     sessionStatus = "DISCONNECTED";
                     return;
                 }
-                
+
                 if not navigator.mediaDevices {
                     addMessage("error", "MediaDevices API not available.");
                     sessionStatus = "DISCONNECTED";
                     return;
                 }
-                
+
                 api_key = await fetchEphemeralKey();
-                
+
                 if not api_key {
                     console.error("No ephemeral key received");
                     sessionStatus = "DISCONNECTED";
@@ -293,7 +296,7 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                 await refreshGraphState(username);
 
                 addMessage("system", "Connected! Algo is ready. Say 'hi' to start!");
-                
+
             } except Exception as e {
                 console.error("Connection error:", e);
                 if e and e.message {
@@ -302,7 +305,7 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                 sessionStatus = "DISCONNECTED";
             }
         }
-        
+
         # Disconnect from OpenAI Realtime API
         def disconnectFromRealtime(resetPTTState: any) -> None {
             if sessionRef.current {
@@ -314,7 +317,7 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                 resetPTTState();
             }
         }
-        
+
         # Toggle connection state
         def onToggleConnection(resetPTTState: any) -> None {
             if sessionStatus == "CONNECTED" or sessionStatus == "CONNECTING" {
@@ -323,7 +326,7 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
                 connectToRealtime();
             }
         }
-        
+
         # Send message via realtime session
         def sendRealtimeMessage(message: str) -> bool {
             if sessionRef.current and sessionStatus == "CONNECTED" {
@@ -337,16 +340,16 @@ def:pub useRealtimeSession(transcriptHelpers: any, refreshGraphState: any, setSu
             }
             return False;
         }
-        
+
         return {
             # State
             "sessionStatus": sessionStatus,
             "sessionRef": sessionRef,
-            
+
             # Computed
             "isConnected": isConnected,
             "isConnecting": isConnecting,
-            
+
             # Handlers
             "connectToRealtime": connectToRealtime,
             "disconnectFromRealtime": disconnectFromRealtime,

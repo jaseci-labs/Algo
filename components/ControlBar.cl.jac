@@ -18,14 +18,14 @@ def:pub ControlBar(
 ) -> any {
     # Computed values
     isConnected = sessionStatus == "CONNECTED";
-    
+
     micBtnClass = cn(
         "text-white px-4 py-2 rounded-md border-none transition-all flex items-center justify-center min-w-12",
         ("cursor-not-allowed bg-text-secondary" if not isConnected else (
             "cursor-pointer" + (" bg-error" if isMicMuted else " bg-black hover:opacity-90")
         ))
     );
-    
+
     micBtnTitle = "Mute microphone" if not isMicMuted else "Unmute microphone";
 
     # Mic icon SVG - unmuted
@@ -66,7 +66,7 @@ def:pub ControlBar(
 
     # Choose the correct icon based on mute state
     micIcon = micIconMuted if isMicMuted else micIconUnmuted;
-    
+
     # Talk button class
     talkBtnClass = cn(
         "px-4 py-1 border-none rounded-md transition-all",
@@ -74,11 +74,11 @@ def:pub ControlBar(
             "cursor-pointer text-black" + (" bg-gray-300" if isPTTUserSpeaking else " bg-gray-200 hover:bg-gray-300")
         ))
     );
-    
+
     # Save button class
     saveBtnClass = cn(
         "text-white text-sm px-4 py-2 rounded-md border-none font-semibold transition-all",
-        ("cursor-not-allowed bg-text-secondary" if not isConnected else 
+        ("cursor-not-allowed bg-text-secondary" if not isConnected else
          "cursor-pointer bg-success hover:opacity-90")
     );
 
@@ -115,7 +115,7 @@ def:pub ControlBar(
                 {"Talk"}
             </button>
         </div>
-        
+
         <div className="flex flex-row items-center gap-1">
             <input
                 id="audio-playback"
@@ -129,7 +129,7 @@ def:pub ControlBar(
                 {"Audio playback"}
             </label>
         </div>
-        
+
         <button
             onClick={onSaveAndRestart}
             disabled={not isConnected}

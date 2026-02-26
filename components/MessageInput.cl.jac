@@ -35,7 +35,7 @@ def:pub MessageInput(
     buttonLabel = ("Disconnect voice" if isConnected else ("Connecting..." if isConnecting else "Connect voice"));
 
     return <div className="p-4 border-t border-border/30">
-     <SuggestionChips 
+     <SuggestionChips
             suggestions={suggestions}
             onSelectSuggestion={onSelectSuggestion}
         />

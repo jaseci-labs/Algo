@@ -75,7 +75,7 @@ impl update_task_graph.update_graph {
     all_task_nodes = [-->](?:TaskState);
     nodes_to_check = all_task_nodes.copy();
     all_nodes = [];
-    
+
     # Collect all nodes via traversal
     visited_ids = {};
 
@@ -673,7 +673,7 @@ impl call_graph_agent.call{
                 for rel in relationships {
                     inserted = False;
                     for i in range(len(sorted_rels)) {
-                        if rel.sequence_order < sorted_rels[i].order {
+                        if rel.sequence_order < sorted_rels[i].sequence_order {
                             sorted_rels.insert(i, rel);
                             inserted = True;
                             break;
@@ -927,12 +927,35 @@ impl call_manager.orchestrate{
         # Read the result from manager_comm_data (stored by call_graph_agent)
         manager_data = find_manager_comm_data(here, self.username);
         if manager_data and manager_data.last_response {
+            # Fetch updated graph state to include in response
+            graph_state = None;
+            user_graph = find_user_graph(here, self.username);
+            if user_graph {
+                result = get_user_graph_structure(user_graph);
+                node_list = result[0];
+                edge_list = result[1];
+                dot_code = generate_dot_code_from_lists(node_list, edge_list);
+
+                leaf_nodes = find_leaf_nodes(edge_list, node_list);
+                last_task = (leaf_nodes[0] if len(leaf_nodes) == 1
+                            else "|".join(leaf_nodes) if leaf_nodes
+                            else "Start");
+
+                graph_state = {
+                    "nodes": node_list,
+                    "edges": edge_list,
+                    "dotCode": dot_code,
+                    "lastTask": last_task
+                };
+            }
+
             graph_agent_result = {
                 "response": manager_data.last_response,
                 "emotional_state": manager_data.last_emotional_state or "neutral",
                 "suggestions": manager_data.last_suggestions or [],
                 "thinking": manager_data.last_thinking or {},
-                "task_names": manager_data.last_task_names or []
+                "task_names": manager_data.last_task_names or [],
+                "graphState": graph_state
             };
             report graph_agent_result;
         } else {
@@ -1701,7 +1724,7 @@ def extract_edge_label_via_printgraph(from_node: node, to_node: node) -> str {
         if not to_task_name {
             return "";
         }
-        
+
         # FIRST PASS: Build node ID -> task_name map
         node_map = {};
         for line in lines {
@@ -1733,7 +1756,7 @@ def extract_edge_label_via_printgraph(from_node: node, to_node: node) -> str {
         if not target_node_id {
             return "";
         }
-        
+
         # SECOND PASS: Find edge to target and extract TaskFlow label
         for line in lines {
             line = line.strip();
@@ -2377,4 +2400,3 @@ impl dismiss_insight.dismiss {
     }
     report {"success": False, "error": "Insight not found"};
 }
-

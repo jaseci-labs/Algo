@@ -34,9 +34,9 @@ def UserAvatarComponent() -> any {
         </div>
         <div className="text-left md:block hidden">
             <p className="text-sm font-medium text-foreground">{username}</p>
-            
+
         </div>
-        
+
     </button>;
 }
 

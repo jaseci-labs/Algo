@@ -153,7 +153,7 @@ Algo/
 pip install jaclang jac-client jac-scale byllm
 
 # Run locally
-jac start 
+jac start
 
 # Deploy to Kubernetes
 jac start main.jac --scale
