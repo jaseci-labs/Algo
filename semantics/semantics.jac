@@ -63,11 +63,15 @@ obj ConversationContext {
     has intent: ConversationIntent;
     has referring_to_task: str;
     has correction_type: CorrectionType;
+    has needs_graph_rebuild: bool;
+    has is_insertion: bool;
     has tasks_to_move: list[str];
 }
 
 sem ConversationContext.referring_to_task = "Exact task name from existing_nodes, empty if none";
 sem ConversationContext.correction_type = "RENAME (change task name), INSERT_BEFORE/INSERT_AFTER/INSERT_FIRST (add tasks), REORDER (change order), REPLACE (swap), ATTACHMENT_POINT (specify connection), SEQUENCE_ORDER (specify order). Use RENAME as default for simple corrections.";
+sem ConversationContext.needs_graph_rebuild = "TRUE for corrections/clarifications with existing tasks, FALSE for simple additions";
+sem ConversationContext.is_insertion = "TRUE if inserting task BETWEEN existing tasks";
 sem ConversationContext.tasks_to_move = "Existing task names being repositioned";
 
 """Intent analysis result"""
@@ -94,12 +98,15 @@ sem ExtractedTasks.renamed_to = "New task name for rename operations";
 obj AttachmentPointAnalysis {
     has attachment_nodes: list[str];
     has reasoning: str;
+    has is_convergent: bool;
+    has user_specified: bool;
 }
 
 """Convergence pattern detection"""
 obj ConvergenceIntent {
     has should_converge: bool;
     has source_nodes: list[str];
+    has convergence_type: str;
     has trigger_phrase: str;
 }
 
@@ -115,6 +122,7 @@ obj TaskRelationship {
 sem TaskRelationship.from_task = "Source task name in CamelCase";
 sem TaskRelationship.to_task = "Target task name in CamelCase";
 sem TaskRelationship.edge_label = "Edge label: 'then', 'if raining', etc.";
+sem TaskRelationship.sequence_order = "Sequence number (1, 2, 3...) for ordering multiple relationships";
 
 """Thinking insights for transparency"""
 obj ThinkingSummary {
@@ -173,12 +181,17 @@ ASK_QUESTION: "what should I do", "can you help"
 THINK_ALOUD: "maybe", "not sure", "wondering"
 
 IMPORTANT for correction_type field:
-- COMMIT_ACTION (adding new tasks): Set correction_type=NONE (default)
+- COMMIT_ACTION (adding new tasks): Set correction_type=NONE, needs_graph_rebuild=False
 - RENAME: Only when user explicitly says "change X to Y", "rename X", or "actually" + similar task name
-- INSERT_BEFORE/INSERT_AFTER/INSERT_FIRST: When user says "before/after X" or "first"
-- REORDER: When repositioning existing tasks
-- ATTACHMENT_POINT: When specifying where new tasks connect
-- SEQUENCE_ORDER: When clarifying execution order
+- INSERT_BEFORE/INSERT_AFTER/INSERT_FIRST: When user says "before/after X" or "first" → needs_graph_rebuild=True, is_insertion=True
+- REORDER: When repositioning existing tasks → needs_graph_rebuild=True
+- ATTACHMENT_POINT: When specifying where new tasks connect → needs_graph_rebuild=True
+- SEQUENCE_ORDER: When clarifying execution order → needs_graph_rebuild=True
+
+CRITICAL: needs_graph_rebuild should be TRUE for:
+- Any CORRECT_PREVIOUS intent with existing tasks
+- Any CLARIFY_PREVIOUS intent
+- REORDER, INSERT_*, REPLACE operations
 
 Return should_create_tasks=true for all intents except pure uncertainty.
 """;
@@ -191,18 +204,52 @@ def extract_raw_task_names(
 ) -> ExtractedTasks by llm();
 
 sem extract_raw_task_names = """
-Extract task names, convert to CamelCase.
+Extract CORE action task names. Strip conditional/temporal prefixes - they go in edge labels ONLY.
 
-Rename mode (correction_type=RENAME):
-- Set renamed_to, names=[]
+STRIP THESE PREFIXES from task names:
+- "if X, I'll Y" → extract Y, put "if X" in edge label
+- "otherwise I'll Y" → extract Y, put "otherwise" in edge label
+- "when X, I'll Y" → extract Y, put "when X" in edge label
+- "after X, I'll Y" → extract Y, put "after X" in edge label
+- "then I'll Y" → extract Y, put "then" in edge label
 
-Reorder/insert mode (correction_type=REORDER/INSERT_* or tasks_to_move populated):
-- Use existing task names without numbers
+CRITICAL: STRIP PRONOUNS AND ARTICLES FROM TASK NAMES:
+Remove: "I'll", "my", "their", "they will", "the", "a", "an"
+Examples:
+- "I'll check my emails" → CheckEmails
+- "take their dog for a walk" → TakeDogForWalk
+- "brush my teeth" → BrushTeeth
+- "grab a coffee" → GrabCoffee
+- "check the news" → CheckNews
+
+Convert to CamelCase. Extract ALL actions mentioned.
+
+RENAME MODE (correction_type=RENAME):
+- Populate the 'renamed_to' field with the NEW task name (the one being renamed TO)
+- DO NOT populate names with the old task name
+- Set renamed_to to the task name that comes AFTER "to" or "instead"
+- Examples:
+  * "rename IfItIsRainingIWillReadMyBook to ReadBook" → renamed_to = "ReadBook", names = []
+  * "rename that task, have chat with colleagues, to chat with colleagues instead" → renamed_to = "ChatWithColleagues"
+  * "rename the task Continue working on project to Project Work" → renamed_to = "ProjectWork"
+  * "rename ContinueWorkingOnProject to ProjectWork" → renamed_to = "ProjectWork"
+
+REORDERING MODE (correction_type=REORDER OR context.tasks_to_move is populated):
+- Extract the task names being reordered from user_message
+- Use EXISTING names without adding numbers
+- Example: User says "have coffee before checking news" when TakeCoffee and CheckNews exist
+  → names = ["TakeCoffee", "CheckNews"] (no numbers added)
+
+INSERTION MODE (context.is_insertion=True OR correction_type=INSERT_BEFORE/INSERT_AFTER/INSERT_FIRST):
+CRITICAL: Distinguish between NEW tasks and EXISTING tasks:
+- If a task name appears in existing_nodes: use the EXACT existing name (no numbers added)
+- If a task name does NOT appear in existing_nodes: it's a NEW task, strip pronouns/articles, use CamelCase
+- Example: Graph has ["GrabCoffee", "CheckEmails"], user says "brush my teeth before checking emails"
+  → "brush my teeth" is NEW → BrushTeeth, "checking emails" exists → CheckEmails
+  → names = ["BrushTeeth", "CheckEmails"]
 
 Normal mode:
 - Append numbers for duplicates (TaskName, TaskName2, TaskName3)
-
-Strip conditional prefixes ("if X, I'll Y" → Y).
 """;
 
 """Determine where new tasks attach in the graph"""
@@ -214,13 +261,16 @@ def determine_attachment_points(
 ) -> AttachmentPointAnalysis by llm();
 
 sem determine_attachment_points = """
-Find attachment points for new tasks.
+Determine where new tasks connect.
 
-User says "after X" → attachment_nodes=[X]
-User says "before Y" → attachment_nodes=[predecessor of Y in current graph]
-Default → attachment_nodes=[last_task]
+attachment_nodes = "Node(s) to attach from: [last_task] default, multiple for convergence, or task BEFORE referenced for 'before X' patterns";
+is_convergent = "TRUE if multiple attachment nodes";
+reasoning = "Brief explanation";
+user_specified = "TRUE if user named specific task ('after X')";
 
-If context is a correction/clarification → return empty attachment_nodes.
+If context.needs_graph_rebuild=True: return empty attachment_nodes.
+For 'before X': find predecessor of X in current edges.
+Default: [last_task] unless user specifies 'after X', 'before Y', 'from Z'.
 """;
 
 """Detect if user intends to converge parallel branches"""
@@ -251,23 +301,94 @@ def build_task_relationships(
 ) -> list[TaskRelationship] by llm();
 
 sem build_task_relationships = """
-Create task relationships mapping user intent to graph structure.
+Build TaskRelationship list using pre-analyzed inputs.
 
-If needs_graph_rebuild=true: return ALL relationships including existing
-If needs_graph_rebuild=false: return only NEW relationships
+CRITICAL: DEFAULT BEHAVIOR - INCREMENTAL ADDITION
+For normal COMMIT_ACTION with context.needs_graph_rebuild=False:
+- Return ONLY the NEW relationships being added
+- Do NOT include existing relationships from current_edges
 
-Map connection types:
-- SEQUENTIAL: "then", "after"
-- PARALLEL: "while", "at same time"
-- CONDITIONAL: "if X", "otherwise"
-- CONVERGENT: "either way"
+FULL REBUILD MODE (context.needs_graph_rebuild=True):
+When user is correcting/reordering existing tasks:
+- Return ALL relationships to reconstruct the complete graph INCLUDING ALL EXISTING EDGES from current_edges
+- CRITICAL: Start by INCLUDING all relationships from current_edges, then modify only the affected area
+- For INSERTION corrections (insert_before, insert_after, insert_first):
+  * Include ALL existing edges from current_edges
+  * Remove only the edge being split (e.g., if inserting between A->C, remove A->C)
+  * Add the new insertion edges (A->NewTask, NewTask->C)
+  * CRITICAL: Reconnect downstream tasks - if inserting B between A and C, return: A->B, B->C
 
-Sequential: chain tasks (A→B→C)
-Parallel: branch from same source with type=PARALLEL
-Conditional: create conditional branches
-Convergent: merge branches with "either way"
+  * INSERT_BEFORE Example: Graph has Start->GrabCoffee->CheckEmails
+    User says "brush my teeth before checking emails"
+    Context: inserting NEW task "BrushTeeth" BEFORE existing "CheckEmails"
+    Current edges: [{"from":"Start","to":"GrabCoffee","label":"then"},{"from":"GrabCoffee","to":"CheckEmails","label":"then"}]
+    Return ALL edges: Start->GrabCoffee, GrabCoffee->BrushTeeth, BrushTeeth->CheckEmails
+    (The edge GrabCoffee->CheckEmails is REMOVED and replaced with GrabCoffee->BrushTeeth->CheckEmails)
 
-Use actual task names from attachment.attachment_nodes and extracted_tasks.names.
+  * INSERT_AFTER Example: Graph is Start->CheckMessages->MakeBreakfast->GoToGym, user says "wash face after breakfast"
+    Return ALL edges: Start->CheckMessages, CheckMessages->MakeBreakfast, MakeBreakfast->WashFace, WashFace->GoToGym
+- For REORDER corrections: rebuild with tasks in new positions
+
+CRITICAL: RETURN PROPER JSON STRUCTURE
+Each TaskRelationship object MUST have separate fields:
+{
+  "connection_type": "SEQUENTIAL",
+  "from_task": "CheckMessages",
+  "to_task": "WashFace",
+  "edge_label": "then",
+  "sequence_order": 1
+}
+
+connection_type = "SEQUENTIAL: then/after | PARALLEL: and/also/while/same time | CONDITIONAL: if/otherwise |
+CONVERGENT: merge point";
+from_task = "Task name in CamelCase (previous task in sequence)";
+to_task = "Next task name in CamelCase (e.g., MakeCoffee, BrushTeeth)";
+edge_label = "Edge label: 'then', 'if raining', 'otherwise', 'while', 'at the same time', etc.";
+sequence_order = "Sequence number (1, 2, 3...) to preserve order when multiple relationships";
+
+NEVER concatenate fields like: from_task='WashFace to_task=HeadToGym label=then'
+
+CONNECTION RULES:
+- Start point: Use attachment.attachment_nodes[0] as the from_task for the FIRST relationship
+- For extracted_tasks.names: ["BrushTeeth", "MakeCoffee", "GoToGym"]
+- For attachment.attachment_nodes: ["Start"]
+- Create: Start -> BrushTeeth, BrushTeeth -> MakeCoffee, MakeCoffee -> GoToGym
+
+CRITICAL EDGE LABEL RULES:
+- "then" or "afterwards": Default for sequential tasks (A happens, then B happens)
+- "while" or "at same time": For PARALLEL tasks (A and B happen simultaneously)
+- "if X" or "otherwise": For CONDITIONAL branches (if X happens do A, otherwise do B)
+- "either way": ONLY for CONDITIONAL convergence where if/otherwise branches merge (NOT for parallel tasks)
+- After PARALLEL tasks converge, use "then" or "afterwards" for the next sequential task
+- Example: "have drink while chatting with buddies, then head home, then call a cab"
+  → HaveDrink[label="while"], ChatWithBuddies[label="while"] from HeadToThePub
+  → HaveDrink->HeadHome[label="then"], ChatWithBuddies->HeadHome[label="then"]
+  → HeadHome->CallACab[label="then"]
+- Example conditional: "if raining, read book; otherwise, walk; either way go home"
+  → IfRaining->ReadBook[label="if raining"], Otherwise->Walk[label="otherwise"]
+  → ReadBook->GoHome[label="either way"], Walk->GoHome[label="either way"]
+
+CRITICAL CONNECTION TYPE DETECTION:
+Analyze user_message for parallel keywords:
+- PARALLEL: "while", "as", "during", "at the same time", "simultaneously", "and" (when tasks happen together)
+    - Create N relationships, ALL with SAME from_task (attachment.attachment_nodes[0])
+    - ALL relationships use connection_type = PARALLEL
+    - Each relationship goes to a different unique task
+    - sequence_order: 1, 2, 3... for each parallel branch
+
+CRITICAL: CONVERGENCE HANDLING
+PARALLEL CONVERGENCE (multiple nodes converging after doing things simultaneously):
+- attachment.attachment_nodes contains multiple nodes from parallel activities
+- Create edges from EACH attachment node to the FIRST extracted task
+- Use "then" or "afterwards" for these converging edges (parallel tasks finished, now do next thing)
+- Example: attachment.attachment_nodes=["HaveADrink", "ChatWithBuddies"], extracted_tasks.names=["HeadHome", "CallACab"]
+  Result: HaveADrink->HeadHome[label="then"], ChatWithBuddies->HeadHome[label="then"], HeadHome->CallACab[label="then"]
+
+CONDITIONAL CONVERGENCE (if/otherwise branches merging):
+- Only use "either way" label when converging CONDITIONAL branches (if X / otherwise)
+- The user must say "either way", "both paths", "regardless", or similar for conditional convergence
+- Example: "if raining read book otherwise walk either way go home"
+  → IfRaining->ReadBook, Otherwise->Walk, ReadBook->GoHome[label="either way"], Walk->GoHome[label="either way"]
 """;
 
 """Generate contextual suggestions for next actions"""
