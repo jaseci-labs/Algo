@@ -1,6 +1,27 @@
 import from datetime { datetime, timedelta }
 import from time { time }
 
+# ========== Constants ==========
+# Centralized configuration values to eliminate magic strings
+
+glob OPENAI_REALTIME_URL: str = "https://api.openai.com/v1/realtime/client_secrets";
+glob REALTIME_MODEL: str = "gpt-realtime";
+glob GRAPH_COLOR_START: str = "#22c55e";  # Green for start node
+glob GRAPH_COLOR_TASK: str = "#3b82f6";   # Blue for task nodes
+glob DEFAULT_TASK_NAME: str = "Start";
+glob PRODUCTIVITY_MIN_DAYS: int = 1;
+glob PRODUCTIVITY_TASK_MULTIPLIER: float = 20.0;
+glob PRODUCTIVITY_BASE_SCORE: float = 30.0;
+glob PRODUCTIVITY_MAX_SCORE: float = 100.0;
+glob MSG_GRAPH_CLEARED: str = "Graph cleared! Starting fresh.";
+glob MSG_NO_GRAPH_TO_CLEAR: str = "No graph to clear";
+glob MSG_ERROR_CLEAR_GRAPH: str = "Failed to clear graph";
+glob MSG_ERROR_FETCH_GRAPH: str = "Failed to fetch graph";
+glob EVENT_TASK_CREATED: str = "task_created";
+glob EVENT_VOICE_INTERACTION: str = "voice_interaction";
+glob EVENT_INSIGHTS_REQUESTED: str = "insights_requested";
+glob EVENT_TASK_CONNECTED: str = "task_connected";
+
 # ========== Session Token ==========
 
 impl get_session_token.fetch {
@@ -12,9 +33,9 @@ impl get_session_token.fetch {
             return;
         }
 
-        url = "https://api.openai.com/v1/realtime/client_secrets";
+        url = OPENAI_REALTIME_URL;
         request_data = dumps(
-            {"session": {"type": "realtime", "model": "gpt-realtime"}}
+            {"session": {"type": "realtime", "model": REALTIME_MODEL}}
         );
 
         req = Request(
@@ -48,7 +69,7 @@ impl get_session_token.fetch {
 # WALKER: init_user_graph
 impl init_user_graph.initialize{
     visit [-->](?:user_graph_data) else {
-        (here ++> user_graph_data()) ++> TaskState(task_name="Start");
+        (here ++> user_graph_data()) ++> TaskState(task_name=DEFAULT_TASK_NAME);
     }
     visit [-->](?:manager_comm_data) else {
         here ++> manager_comm_data();
@@ -63,11 +84,10 @@ impl init_user_graph.initialize{
 
 # WALKER: update_task_graph
 impl update_task_graph.navigate_to_graph{
-    user_graph = find_user_graph(here, self.username);
-    if not user_graph {
-        user_graph = here ++> user_graph_data(username=self.username);
+    user_graph = get_or_create_user_graph(here, self.username);
+    if user_graph {
+        visit user_graph;
     }
-    visit user_graph;
 }
 
 impl update_task_graph.update_graph {
@@ -156,7 +176,7 @@ impl update_task_graph.update_graph {
 impl get_task_graph.navigate_to_graph{
     user_graph = find_user_graph(here, self.username);
     if not user_graph {
-        report {"nodes": [], "edges": [], "dotCode": "", "lastTask": "Start"} ;
+        report {"nodes": [], "edges": [], "dotCode": "", "lastTask": DEFAULT_TASK_NAME} ;
         disengage;
     }
     visit user_graph;
@@ -185,7 +205,7 @@ impl get_task_graph.get_graph{
 impl clear_graph.navigate_to_graph{
     user_graph = find_user_graph(here, self.username);
     if not user_graph {
-        report {"success": True, "message": "No graph to clear"} ;
+        report {"success": True, "message": MSG_NO_GRAPH_TO_CLEAR} ;
         disengage;
     }
     visit user_graph;
@@ -193,8 +213,8 @@ impl clear_graph.navigate_to_graph{
 
 impl clear_graph.clear_data{
     for node in [-->](?:TaskState) { del node; }
-    here ++> TaskState(task_name="Start");
-    here.last_task = "Start";
+    here ++> TaskState(task_name=DEFAULT_TASK_NAME);
+    here.last_task = DEFAULT_TASK_NAME;
     report {"success": True, "message": "Graph cleared successfully"} ;
 }
 
@@ -276,18 +296,17 @@ impl reset_session.navigate_to_graph{
 
 impl reset_session.reset_graph{
     for node in [-->](?:TaskState) { del node; }
-    here ++> TaskState(task_name="Start");
-    here.last_task = "Start";
+    here ++> TaskState(task_name=DEFAULT_TASK_NAME);
+    here.last_task = DEFAULT_TASK_NAME;
     report {"success": True, "message": "Session reset. Ready for a new conversation."} ;
 }
 
 # WALKER: rebuild_graph
 impl rebuild_graph.navigate_to_graph{
-    user_graph = find_user_graph(here, self.username);
-    if not user_graph {
-        user_graph = here ++> user_graph_data(username=self.username);
+    user_graph = get_or_create_user_graph(here, self.username);
+    if user_graph {
+        visit user_graph;
     }
-    visit user_graph;
 }
 
 impl rebuild_graph.rebuild{
@@ -381,36 +400,31 @@ impl call_graph_agent.call{
         # Load current graph state
         current_nodes = [];
         current_edges = [];
-        last_task = "Start";
+        last_task = DEFAULT_TASK_NAME;
 
-        user_graph = find_user_graph(here, self.username);
-        if not user_graph {
-            user_graph = here ++> user_graph_data(username=self.username);
-            user_graph ++> TaskState(task_name="Start");
+        user_graph = get_or_create_user_graph(here, self.username);
+        if user_graph and not find_start_node(user_graph) {
+            user_graph ++> TaskState(task_name=DEFAULT_TASK_NAME);
         }
 
         if user_graph {
-            last_task = user_graph?.last_task or "Start";
+            last_task = user_graph?.last_task or DEFAULT_TASK_NAME;
             start_node = find_start_node(user_graph);
 
             if start_node {
-                graph_data = get_user_graph_structure(user_graph);
-                current_nodes = graph_data[0];
-                current_edges = graph_data[1];
+                graph_summary = get_graph_summary(user_graph, DEFAULT_TASK_NAME);
+                current_nodes = graph_summary["nodes"];
+                current_edges = graph_summary["edges"];
+                last_task = graph_summary["last_task"];
 
-                leaf_nodes = find_leaf_nodes(current_edges, current_nodes);
-                if len(leaf_nodes) > 1 {
-                    last_task = "|".join(leaf_nodes);
-                } elif len(leaf_nodes) == 1 {
-                    last_task = leaf_nodes[0];
-                } else {
-                    current_nodes = ["Start"];
+                if not current_nodes {
+                    current_nodes = [DEFAULT_TASK_NAME];
                 }
             } else {
-                current_nodes = ["Start"];
+                current_nodes = [DEFAULT_TASK_NAME];
             }
         } else {
-            current_nodes = ["Start"];
+            current_nodes = [DEFAULT_TASK_NAME];
         }
 
         before_nodes = current_nodes.copy();
@@ -491,21 +505,9 @@ impl call_graph_agent.call{
 
                 response = generate_friendly_response(self.context_from_user, emotional_state, "task_renamed", [new_name]);
 
-                manager_data = find_manager_comm_data(here, self.username);
-                if not manager_data {
-                    manager_data = manager_comm_data(username=self.username);
-                    here ++> manager_data;
-                }
-                manager_data.last_response = response;
-                manager_data.last_suggestions = [];
-                manager_data.last_thinking = {
-                    "emotional": f"You seem {emotional_state.emotion} right now",
-                    "intent": "You're renaming a task",
-                    "tasks": f"Renamed: {old_name} → {new_name}",
-                    "pattern": ""
-                };
-                manager_data.last_task_names = [new_name];
-                manager_data.last_emotional_state = str(emotional_state.emotion);
+                manager_data = get_or_create_manager_data(here, self.username);
+                thinking = create_default_thinking(str(emotional_state.emotion), "You're renaming a task", f"Renamed: {old_name} → {new_name}");
+                update_manager_response(manager_data, response, str(emotional_state.emotion), [], thinking, [new_name]);
 
                 report {
                     "response": response,
@@ -749,21 +751,13 @@ impl call_graph_agent.call{
         after_nodes = [];
         after_edges = [];
         if user_graph_after {
-            graph_data = get_user_graph_structure(user_graph_after);
-            after_nodes = graph_data[0];
-            after_edges = graph_data[1];
+            after_summary = get_graph_summary(user_graph_after, DEFAULT_TASK_NAME);
+            after_nodes = after_summary["nodes"];
+            after_edges = after_summary["edges"];
         }
 
-        manager_data = find_manager_comm_data(here, self.username);
-        if not manager_data {
-            manager_data = manager_comm_data(username=self.username);
-            here ++> manager_data;
-        }
-        manager_data.last_response = response;
-        manager_data.last_suggestions = suggestions;
-        manager_data.last_thinking = thinking;
-        manager_data.last_task_names = task_names;
-        manager_data.last_emotional_state = str(emotional_state.emotion);
+        manager_data = get_or_create_manager_data(here, self.username);
+        update_manager_response(manager_data, response, str(emotional_state.emotion), suggestions, thinking, task_names);
 
         intent_dict = {
             "conversation_context": {
@@ -931,21 +925,12 @@ impl call_manager.orchestrate{
             graph_state = None;
             user_graph = find_user_graph(here, self.username);
             if user_graph {
-                result = get_user_graph_structure(user_graph);
-                node_list = result[0];
-                edge_list = result[1];
-                dot_code = generate_dot_code_from_lists(node_list, edge_list);
-
-                leaf_nodes = find_leaf_nodes(edge_list, node_list);
-                last_task = (leaf_nodes[0] if len(leaf_nodes) == 1
-                            else "|".join(leaf_nodes) if leaf_nodes
-                            else "Start");
-
+                graph_with_dot = get_graph_with_dot_code(user_graph, DEFAULT_TASK_NAME);
                 graph_state = {
-                    "nodes": node_list,
-                    "edges": edge_list,
-                    "dotCode": dot_code,
-                    "lastTask": last_task
+                    "nodes": graph_with_dot["nodes"],
+                    "edges": graph_with_dot["edges"],
+                    "dotCode": graph_with_dot["dotCode"],
+                    "lastTask": graph_with_dot["lastTask"]
                 };
             }
 
@@ -975,11 +960,7 @@ impl call_manager.orchestrate{
 
 
 impl validate_graph_output.validate {
-    manager_data = find_manager_comm_data(here, self.username);
-    if not manager_data {
-        manager_data = manager_comm_data(username=self.username);
-        here ++> manager_data;
-    }
+    manager_data = get_or_create_manager_data(here, self.username);
 
     intent_analysis = self.intent_analysis or {};
     extracted_tasks = self.extracted_tasks or [];
@@ -1341,7 +1322,7 @@ impl calculate_productivity_metrics.compute_metrics {
         active_days = 0;
     }
 
-    days_tracked = max(1, active_days);
+    days_tracked = max(PRODUCTIVITY_MIN_DAYS, active_days);
     scores = calculate_productivity_scores(total_tasks, total_edges, active_days);
 
     if total_sessions > 0 {
@@ -1653,7 +1634,7 @@ def find_manager_comm_data(root_node: node, username: str) {
 def find_start_node(graph_node: node) {
     direct_task_nodes = [graph_node-->](?:TaskState);
     for node in direct_task_nodes {
-        if node?.task_name and node.task_name == "Start" {
+        if node?.task_name and node.task_name == DEFAULT_TASK_NAME {
             return node;
         }
     }
@@ -1830,16 +1811,16 @@ def calculate_productivity_scores(total_tasks: int, total_edges: int, active_day
     consistency_score = 50.0;
     if total_tasks > 0 and active_days > 0 {
         tasks_per_day = float(total_tasks) / float(active_days);
-        consistency_score = min(100.0, tasks_per_day * 20.0 + 30.0);
+        consistency_score = min(PRODUCTIVITY_MAX_SCORE, tasks_per_day * PRODUCTIVITY_TASK_MULTIPLIER + PRODUCTIVITY_BASE_SCORE);
     }
 
     efficiency_score = 50.0;
     if total_tasks > 0 {
         edge_ratio = float(total_edges) / float(total_tasks);
-        efficiency_score = min(100.0, edge_ratio * 40.0 + 40.0);
+        efficiency_score = min(PRODUCTIVITY_MAX_SCORE, edge_ratio * 40.0 + 40.0);
     }
 
-    current_streak = max(1, active_days);
+    current_streak = max(PRODUCTIVITY_MIN_DAYS, active_days);
 
     return {
         "consistency_score": consistency_score,
@@ -2095,11 +2076,7 @@ impl get_comparative_insights.compare_periods {
 # ========== Goal Management Implementations ==========
 
 impl create_goal.initialize_goal {
-    user_graph = find_user_graph(here, self.username);
-
-    if not user_graph {
-        user_graph = here ++> user_graph_data(username=self.username);
-    }
+    user_graph = get_or_create_user_graph(here, self.username);
 
     goal_list = here ++> UserGoal(
         goal_type=self.goal_type,
@@ -2399,4 +2376,97 @@ impl dismiss_insight.dismiss {
         }
     }
     report {"success": False, "error": "Insight not found"};
+}
+
+# ========== Utility Functions ==========
+# Centralized helper functions to reduce code duplication
+
+"""Get or create user graph for a given username"""
+def get_or_create_user_graph(root_node: node, username: str) -> user_graph_data | None {
+    user_graph = find_user_graph(root_node, username);
+    if not user_graph {
+        user_graph = root_node ++> user_graph_data(username=username);
+    }
+    return user_graph;
+}
+
+"""Get complete graph summary including nodes, edges, and metadata"""
+def get_graph_summary(user_graph: node, default_task_name: str) -> dict {
+    if not user_graph {
+        return None;
+    }
+
+    graph_data = get_user_graph_structure(user_graph);
+    node_list = graph_data[0];
+    edge_list = graph_data[1];
+
+    leaf_nodes = find_leaf_nodes(edge_list, node_list);
+
+    # Determine last_task from leaf nodes
+    last_task = default_task_name;
+    if len(leaf_nodes) == 1 {
+        last_task = leaf_nodes[0];
+    } elif len(leaf_nodes) > 1 {
+        last_task = "|".join(leaf_nodes);
+    }
+
+    return {
+        "nodes": node_list,
+        "edges": edge_list,
+        "leaf_nodes": leaf_nodes,
+        "last_task": last_task
+    };
+}
+
+"""Get graph structure with DOT code for a user"""
+def get_graph_with_dot_code(user_graph: node, default_task_name: str) -> dict {
+    if not user_graph {
+        return {
+            "nodes": [],
+            "edges": [],
+            "dotCode": "",
+            "lastTask": default_task_name
+        };
+    }
+
+    summary = get_graph_summary(user_graph, default_task_name);
+    dot_code = generate_dot_code_from_lists(summary["nodes"], summary["edges"]);
+
+    return {
+        "nodes": summary["nodes"],
+        "edges": summary["edges"],
+        "dotCode": dot_code,
+        "lastTask": summary["last_task"]
+    };
+}
+
+"""Get or create manager communication data for a given username"""
+def get_or_create_manager_data(root_node: node, username: str) -> manager_comm_data {
+    manager_data = find_manager_comm_data(root_node, username);
+    if not manager_data {
+        manager_data = manager_comm_data(username=username);
+        root_node ++> manager_data;
+    }
+    return manager_data;
+}
+
+"""Update manager data with response information"""
+def update_manager_response(manager_data: manager_comm_data, response: str, emotional_state: str, suggestions: list, thinking: dict, task_names: list) -> None {
+    if manager_data {
+        manager_data.last_response = response;
+        manager_data.last_suggestions = suggestions;
+        manager_data.last_thinking = thinking;
+        manager_data.last_task_names = task_names;
+        manager_data.last_emotional_state = emotional_state;
+    }
+}
+
+"""Create default thinking structure for manager data"""
+def create_default_thinking(emotional_state: str, intent_description: str, tasks_info: str) -> dict {
+    return {
+        "emotional": f"You seem {emotional_state} right now",
+        "intent": intent_description,
+        "tasks": tasks_info,
+        "pattern": ""
+    };
 }

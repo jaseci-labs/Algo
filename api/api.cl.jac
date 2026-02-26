@@ -3,6 +3,53 @@
 # This service layer abstracts backend communication from UI components
 
 # ============================================
+# Utility Functions
+# ============================================
+
+# Standard API response handler - eliminates duplicate try-catch patterns
+# @param spawn_call - The root spawn call to execute
+# @param error_context - Context string for error logging
+# @param data_validator - Optional function to validate response data
+# @returns Standardized response object with success, data/error
+async def handle_api_response(spawn_call: any, error_context: str, data_validator: any = None) -> any {
+    try {
+        response = await spawn_call;
+        result = response.reports[0] if response.reports else {};
+
+        # Check if result has an error field
+        if result and "error" in result {
+            console.error(f"{error_context}:", result.error);
+            return {
+                "success": False,
+                "error": result.error or f"{error_context} failed"
+            };
+        }
+
+        # Validate data if validator provided
+        if data_validator {
+            is_valid = data_validator(result);
+            if not is_valid {
+                return {
+                    "success": False,
+                    "error": "Invalid data structure returned"
+                };
+            }
+        }
+
+        return {
+            "success": True,
+            "data": result
+        };
+    } except Exception as e {
+        console.error(f"{error_context} error:", e);
+        return {
+            "success": False,
+            "error": String(e)
+        };
+    }
+}
+
+# ============================================
 # Graph Service
 # ============================================
 
@@ -184,22 +231,6 @@ async def:pub callManager(context_from_user: str, conversation_history: list, us
     }
 }
 
-# Legacy function - redirects to callManager for backward compatibility
-async def:pub callSupervisor(context_from_user: str, conversation_history: list, username: str) -> any {
-    return await callManager(context_from_user, conversation_history, username);
-}
-# Send a text message to the supervisor (simplified version for text-only mode)
-# @param message - The user's message
-# @param username - The current user's username
-# @returns Supervisor response
-async def:pub sendTextMessage(message: str, username: str) -> any {
-    return await callSupervisor(
-        context_from_user=message,
-        conversation_history=[],
-        username=username
-    );
-}
-
 
 # ============================================
 # Routine Service
@@ -263,11 +294,4 @@ def:pub getUsernameFromToken() -> str {
         }
     }
     return username;
-}
-
-# Check if user is authenticated
-# @returns True if user has a valid token
-def:pub isAuthenticated() -> bool {
-    token = localStorage.getItem("jac_token");
-    return token != None and token != "";
 }

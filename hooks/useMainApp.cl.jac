@@ -7,7 +7,6 @@ import from "@jac/runtime" { useNavigate }
 
 # Import sub-hooks
 import from .useTranscript { useTranscript }
-import from .useGraph { useGraph }
 import from .useRealtimeSession { useRealtimeSession }
 import from .useAudioControls { useAudioControls }
 
@@ -52,9 +51,6 @@ def:pub useMainApp() -> any {
         "updateTranscriptItem": updateTranscriptItem,
         "appendTranscriptItem": appendTranscriptItem
     };
-
-    # Graph state management
-    graphHook = useGraph(addMessage);
 
     # Clear the task graph and update local state
     async def handleClearGraph() -> None {
