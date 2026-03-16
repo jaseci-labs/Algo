@@ -34,7 +34,7 @@ cl import from .index { app as ClientApp }
 
 
 cl {
-    def:pub app() -> any {
+    def:pub app() -> JsxElement {
         return <ClientApp />;
     }
 }
