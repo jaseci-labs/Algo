@@ -6,7 +6,7 @@ import from ..utils.mergeCls { cn }
 def:pub SuggestionChips(
     suggestions: list,
     onSelectSuggestion: any
-) -> any {
+) -> JsxElement | None {
 
     # Don't render if no suggestions
     if not suggestions or suggestions.length == 0 {

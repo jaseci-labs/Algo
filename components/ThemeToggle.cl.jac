@@ -4,7 +4,7 @@
 import from react { memo }
 import from "lucide-react" { Sun, Moon }
 
-def ThemeToggleComponent(isDarkMode: bool, onToggle: any) -> any {
+def ThemeToggleComponent(isDarkMode: bool, onToggle: any) -> JsxElement {
     return <button
         onClick={onToggle}
         className="p-2 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors duration-200 flex items-center gap-2"

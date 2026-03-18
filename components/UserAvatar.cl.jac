@@ -1,11 +1,11 @@
 # UserAvatar Component
 # Displays user avatar with name and role (no dropdown interaction)
 
-import from react { memo, useState, useEffect }
+import from react { memo, useEffect }
 import from "lucide-react" { ChevronDown, User }
 
-def UserAvatarComponent() -> any {
-    [username, setUsername] = useState("User");
+def UserAvatarComponent() -> JsxElement {
+    has username: str = "User";
 
     # Extract username from JWT token on mount
     useEffect(
@@ -17,7 +17,7 @@ def UserAvatarComponent() -> any {
                     if parts.length > 1 {
                         payload = JSON.parse(atob(parts[1]));
                         if payload.username {
-                            setUsername(payload.username);
+                            username = payload.username;
                         }
                     }
                 } except Exception as decode_error {

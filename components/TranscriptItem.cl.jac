@@ -3,7 +3,7 @@
 
 import from ..utils.mergeCls { cn }
 
-def:pub TranscriptItem(item: any, showThinking: bool = True) -> any {
+def:pub TranscriptItem(item: any, showThinking: bool = True) -> JsxElement {
     role = item.role;
     content = item.content;
     thinking = item.thinking;

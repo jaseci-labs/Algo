@@ -2,12 +2,12 @@
 # GitHub-contribution-style calendar showing activity streak
 
 import from "lucide-react" { Flame }
-import from react { useMemo, useState, Fragment }
+import from react { useMemo, Fragment }
 
 import from ..utils.mergeCls { cn }
 
-def StreakCalendarComponent(activityData: dict = {}, weeks: int = 12) -> any {
-    [selectedDay, setSelectedDay] = useState(None);
+def StreakCalendarComponent(activityData: dict = {}, weeks: int = 12) -> JsxElement | str | int | list {
+    has selectedDay: str | None = None;
 
     # Generate calendar data
     calendarData = useMemo(
@@ -203,7 +203,7 @@ def StreakCalendarComponent(activityData: dict = {}, weeks: int = 12) -> any {
                                             if selectedDay == day.date {
                                                 newSelection = None;
                                             }
-                                            setSelectedDay(newSelection);
+                                            selectedDay = newSelection;
                                         }}
                                         title={day.date + ": " + String(day.activity) + " activities"}
                                     />;
