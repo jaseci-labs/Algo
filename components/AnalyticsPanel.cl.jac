@@ -434,7 +434,7 @@ def AnalyticsPanelComponent(onClose: any = None) -> JsxElement {
     } else {
         patternBlocks.push(
             <div className="glass-panel rounded-xl p-4">
-                <h3className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+                <h3 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-primary"/>
                     Discovered Routines
                 </h3>
