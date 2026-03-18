@@ -4,7 +4,7 @@
 import from react { memo }
 import from "@xyflow/react" { Handle, Position }
 
-def TaskNodeComponent(props: any) -> any {
+def TaskNodeComponent(props: any) -> JsxElement {
     data = props.data;
 
     return <div className="task-node">
