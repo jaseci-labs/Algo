@@ -28,7 +28,7 @@ glob DEFAULT_EDGE_OPTIONS = {
     "labelBgBorderRadius": 4
 };
 
-def:pub GraphViewer(graphEdges: list) -> any {
+def:pub GraphViewer(graphEdges: list) -> JsxElement {
     [nodes, setNodes, onNodesChange] = useNodesState([]);
     [edges, setEdges, onEdgesChange] = useEdgesState([]);
     [isLoading, setIsLoading] = useState(True);
@@ -105,8 +105,8 @@ def:pub GraphViewer(graphEdges: list) -> any {
     }
 
     # Helper function for minimap node colors
-    def getNodeColor(node: any) -> str {
-        if node.type == "startNode" {
+    def getNodeColor(`node: any) -> str {
+        if `node.type == "startNode" {
             return "hsl(var(--primary))";
         }
         return "hsl(var(--foreground))";
