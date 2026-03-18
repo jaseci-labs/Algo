@@ -1,5 +1,5 @@
 # GraphViewer Component - Modern React Flow Visualization
-import from react { useState, useEffect, useMemo }
+import from react { useEffect, useMemo }
 import from "@xyflow/react" {
     ReactFlow,
     Background,
@@ -31,7 +31,7 @@ glob DEFAULT_EDGE_OPTIONS = {
 def:pub GraphViewer(graphEdges: list) -> JsxElement {
     [nodes, setNodes, onNodesChange] = useNodesState([]);
     [edges, setEdges, onEdgesChange] = useEdgesState([]);
-    [isLoading, setIsLoading] = useState(True);
+    has isLoading: bool = True;
 
     # Transform and layout graph when edges change
     useEffect(
@@ -46,11 +46,11 @@ def:pub GraphViewer(graphEdges: list) -> JsxElement {
                 };
                 setNodes([startNode]);
                 setEdges([]);
-                setIsLoading(False);
+                isLoading = False;
                 return;
             }
 
-            setIsLoading(True);
+            isLoading = True;
 
             # Async layout function
             async def layoutGraph() -> None {
@@ -70,7 +70,7 @@ def:pub GraphViewer(graphEdges: list) -> JsxElement {
                 } except Exception as e {
                     console.error("Error laying out graph:", e);
                 }
-                setIsLoading(False);
+                isLoading = False;
             }
 
             layoutGraph();
