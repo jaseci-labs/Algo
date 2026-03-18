@@ -18,7 +18,7 @@ def FloatingControlBarComponent(
     onSaveAndRestart: any,
     onMouseEnter: any,
     onMouseLeave: any
-) -> any {
+) -> JsxElement {
     isConnected = sessionStatus == "CONNECTED";
 
     # Container classes with visibility animation

@@ -2,12 +2,12 @@
 # Displays a single insight with actions to view, act upon, or dismiss
 
 import from "lucide-react" { Lightbulb, CheckCircle, X, ThumbsUp, Eye }
-import from react { useState, Fragment }
+import from react { Fragment }
 
 import from ..utils.mergeCls { cn }
 
-def InsightCardComponent(insight: dict = {}, onView: any = None, onAct: any = None, onDismiss: any = None) -> any {
-    [isExpanded, setIsExpanded] = useState(False);
+def InsightCardComponent(insight: dict = {}, onView: any = None, onAct: any = None, onDismiss: any = None) -> JsxElement | str {
+    has isExpanded: bool = False;
 
     # Determine category color
     getCategoryColor = lambda -> str {
@@ -107,7 +107,7 @@ def InsightCardComponent(insight: dict = {}, onView: any = None, onAct: any = No
             onClick={lambda -> any {
                 if onView { onView(); }
                 newExpanded = not isExpanded;
-                setIsExpanded(newExpanded);
+                isExpanded = newExpanded;
             }}
             className="text-xs px-2 py-1 rounded bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
         >

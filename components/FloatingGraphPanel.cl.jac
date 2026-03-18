@@ -7,7 +7,7 @@ def:pub FloatingGraphPanel(
     onClearGraph: any,
     onToggleGraphPanel: any,
     isGraphPanelVisible: bool,
-) -> any {
+) -> JsxElement {
     return <div>
         <div className="floating-panel fixed inset-0 z-10" ></div>
          <div className=" absolute inset-0 flex md:hidden items-center justify-center z-20">
@@ -22,7 +22,7 @@ def:pub FloatingGraphPanel(
     </div>;
 }
 
-def GraphPanelButton(onClick: any, isVisible: bool) -> any {
+def GraphPanelButton(onClick: any, isVisible: bool) -> JsxElement {
 
     return <div  className="absolute md:hidden flex justify-center items-center bottom-2 left-2 p-2 rounded-full border-2 border-white h cursor-pointer z-20">
     {

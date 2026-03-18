@@ -2,7 +2,7 @@ import from "lucide-react" { BarChart3, Trash2 }
 import from .GraphViewer { GraphViewer }
 
 # Graph Panel - right side showing task visualization
-def:pub GraphPanel(graphEdges: str, onClearGraph: any) -> any {
+def:pub GraphPanel(graphEdges: str, onClearGraph: any) -> JsxElement {
     return <div className="glass-panel flex flex-col h-full">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/30">
             <div className="flex items-center gap-2">
@@ -23,7 +23,7 @@ def:pub GraphPanel(graphEdges: str, onClearGraph: any) -> any {
 }
 
 # Clear Graph Button
-def ClearGraphButton(onClick: any) -> any {
+def ClearGraphButton(onClick: any) -> JsxElement {
     return <button
         onClick={onClick}
         className="absolute bottom-4 right-4 flex items-center gap-2 px-3 py-2 bg-destructive/10 text-destructive rounded-lg text-xs font-medium hover:bg-destructive/20 transition-colors"

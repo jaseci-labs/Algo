@@ -2,19 +2,19 @@
 # Circular progress indicator for goals
 
 import from "lucide-react" { Target }
-import from react { useEffect, useRef, useState, Fragment }
+import from react { useEffect, useRef, Fragment }
 
 import from ..utils.mergeCls { cn }
 
-def GoalProgressRingComponent(progress: int = 0, size: int = 60, strokeWidth: int = 4, goalType: str = "", showLabel: bool = True) -> any {
+def GoalProgressRingComponent(progress: int = 0, size: int = 60, strokeWidth: int = 4, goalType: str = "", showLabel: bool = True) -> JsxElement | str {
     svgRef = useRef(None);
-    [animatedProgress, setAnimatedProgress] = useState(0);
+    has animatedProgress: int = 0;
 
     # Animate progress on mount
     useEffect(
         lambda -> any {
             timer = setTimeout(
-                lambda -> any { setAnimatedProgress(progress); },
+                lambda -> any { animatedProgress = progress; },
                 100
             );
             return lambda -> any { clearTimeout(timer); };

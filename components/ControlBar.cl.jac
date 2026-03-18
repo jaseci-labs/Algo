@@ -15,7 +15,7 @@ def:pub ControlBar(
     isMicMuted: bool,
     onToggleMicMute: any,
     onSaveAndRestart: any
-) -> any {
+) -> JsxElement {
     # Computed values
     isConnected = sessionStatus == "CONNECTED";
 

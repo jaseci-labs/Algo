@@ -6,7 +6,7 @@ import from ..hooks.useHead { useHead, DEFAULT_META }
 def:pub Layout(
     children: any,
     meta: any = None
-) -> any {
+) -> JsxElement {
     activeMeta = meta or DEFAULT_META;
 
     # Merge with defaults

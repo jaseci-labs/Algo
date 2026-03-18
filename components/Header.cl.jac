@@ -7,7 +7,7 @@ import from .ThemeToggle { ThemeToggle }
 import from .UserAvatar { UserAvatar }
 import from "@jac/runtime" { jacLogout, useNavigate }
 
-def HeaderComponent(isDarkMode: bool, onToggleTheme: any, onToggleAnalytics: any = None) -> any {
+def HeaderComponent(isDarkMode: bool, onToggleTheme: any, onToggleAnalytics: any = None) -> JsxElement {
     navigate = useNavigate();
 
     def handleLogout(e: any) -> None {

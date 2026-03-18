@@ -15,7 +15,7 @@ def:pub MessageInput(
     onHideControlBar: any = None,
     suggestions: list = [],
     onSelectSuggestion: any = None,
-) -> any {
+) -> JsxElement {
 
     # Compute connection state
     isConnected = sessionStatus == "CONNECTED";
