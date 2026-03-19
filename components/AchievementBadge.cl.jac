@@ -5,7 +5,7 @@ import from react { Fragment }
 
 import from ..utils.mergeCls { cn }
 
-def AchievementBadgeComponent(achievement: dict = {}) -> dict | JsxElement {
+def AchievementBadgeComponent(achievement: dict = {}) -> JsxElement {
     has showTooltip: bool = False;
 
     hasUnlocked = False;
@@ -97,7 +97,7 @@ def AchievementBadgeComponent(achievement: dict = {}) -> dict | JsxElement {
     unlockedDateText = <Fragment/>;
     if hasUnlocked {
         unlockedDateText = <p className="text-xs text-green-500 mt-1">
-            Unlocked{achievement.unlocked_at or ""}
+            Unlocked {achievement.unlocked_at or ""}
         </p>;
     }
 

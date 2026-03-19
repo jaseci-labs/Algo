@@ -25,7 +25,6 @@ def AnalyticsPanelComponent(onClose: any = None) -> JsxElement {
     # Use the analytics hook with React state
     analytics = useAnalytics();
 
-    has activeTab: str = "overview";
     has currentTab: str = "overview";
     has showGoalDialog: bool = False;
 
@@ -60,9 +59,7 @@ def AnalyticsPanelComponent(onClose: any = None) -> JsxElement {
             <div className="glass-panel rounded-xl h-full flex flex-col p-6">
                 <div className="flex items-center justify-center h-full">
                     <div className="text-center">
-                        <RefreshCw
-                            className="w-8 h-8 animate-spin text-primary mx-auto mb-2"
-                        />
+                        <RefreshCw className="w-8 h-8 animate-spin text-primary mx-auto mb-2"/>
                         <p className="text-muted-foreground">
                             Loading analytics...
                         </p>
@@ -266,12 +263,8 @@ def AnalyticsPanelComponent(onClose: any = None) -> JsxElement {
                             )}%
                         </p>
                     </div>
-                    <div
-                        className="bg-gradient-to-br from-orange-500/20 to-red-500/20 rounded-lg p-3 border border-orange-500/30"
-                    >
-                        <p
-                            className="text-xs text-muted-foreground flex items-center gap-1"
-                        >
+                    <div className="bg-gradient-to-br from-orange-500/20 to-red-500/20 rounded-lg p-3 border border-orange-500/30">
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
                             <Flame className="w-3 h-3 text-orange-500"/>
                             Current Streak
                         </p>
@@ -299,7 +292,7 @@ def AnalyticsPanelComponent(onClose: any = None) -> JsxElement {
             urgencyText = "";
             if insight.urgency {
                 urgencyText = <p className="text-xs text-muted-foreground mt-1">
-                    Urgency:{insight.urgency or "low"}
+                    Urgency: {insight.urgency or "low"}
                 </p>;
             }
 
@@ -319,9 +312,7 @@ def AnalyticsPanelComponent(onClose: any = None) -> JsxElement {
 
     if analytics.proactiveInsights and analytics.proactiveInsights.length > 0 {
         overviewBlocks.push(
-            <div
-                className="glass-panel rounded-xl p-4 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20"
-            >
+            <div className="glass-panel rounded-xl p-4 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
                 <h3 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-primary"/>
                     Proactive Insights
@@ -393,7 +384,7 @@ def AnalyticsPanelComponent(onClose: any = None) -> JsxElement {
             taskListElement = <Fragment/>;
             if hasTaskList {
                 taskListElement = <p className="text-xs text-muted-foreground mt-2">
-                    Tasks:{taskList}
+                    Tasks: {taskList}
                 </p>;
             }
 
@@ -539,7 +530,7 @@ def AnalyticsPanelComponent(onClose: any = None) -> JsxElement {
                         />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                        {String(currentVal)} /{String(targetVal)}
+                        {String(currentVal)} / {String(targetVal)}
                     </p>
                 </div>
             );
@@ -555,9 +546,7 @@ def AnalyticsPanelComponent(onClose: any = None) -> JsxElement {
     # Goal dialog content
     goalDialogContent = <Fragment/>;
     if showGoalDialog {
-        goalDialogContent = <div
-            className="glass-panel rounded-xl p-4 border border-dashed border-border"
-        >
+        goalDialogContent = <div className="glass-panel rounded-xl p-4 border border-dashed border-border">
             <h3 className="text-sm font-medium text-foreground mb-2">
                 Quick Goal Templates
             </h3>

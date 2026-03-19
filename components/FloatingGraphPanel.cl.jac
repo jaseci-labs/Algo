@@ -1,4 +1,4 @@
-import  from ".GraphPanel" { GraphPanel }
+import from ".GraphPanel" { GraphPanel }
 import from "react" { Fragment }
 import from "lucide-react" { BarChart3, XIcon }
 
@@ -8,26 +8,26 @@ def:pub FloatingGraphPanel(
     onToggleGraphPanel: any,
     isGraphPanelVisible: bool,
 ) -> JsxElement {
-    return <div>
-        <div className="floating-panel fixed inset-0 z-10" ></div>
-         <div className=" absolute inset-0 flex md:hidden items-center justify-center z-20">
-            <div className="w-full max-w-lg md:max-w-2xl h-[85vh] glass-panel shadow-xl border border-border/30 overflow-hidden relative animate-fadeIn">
-                <GraphPanel
-                    graphEdges={graphEdges}
-                    onClearGraph={onClearGraph}
-                />
+    return
+        <div>
+            <div className="floating-panel fixed inset-0 z-10"></div>
+            <div className=" absolute inset-0 flex md:hidden items-center justify-center z-20">
+                <div className="w-full max-w-lg md:max-w-2xl h-[85vh] glass-panel shadow-xl border border-border/30 overflow-hidden relative animate-fadeIn">
+                    <GraphPanel graphEdges={graphEdges} onClearGraph={onClearGraph}/>
+                </div>
             </div>
-        </div>
-        <GraphPanelButton onClick={onToggleGraphPanel} isVisible={isGraphPanelVisible} />
-    </div>;
+            <GraphPanelButton
+                onClick={onToggleGraphPanel}
+                isVisible={isGraphPanelVisible}
+            />
+        </div>;
 }
 
 def GraphPanelButton(onClick: any, isVisible: bool) -> JsxElement {
-
-    return <div  className="absolute md:hidden flex justify-center items-center bottom-2 left-2 p-2 rounded-full border-2 border-white h cursor-pointer z-20">
-    {
-        (<BarChart3 onClick={onClick} className="w-6 h-6 text-primary" />) if not isVisible else
-        (<XIcon onClick={onClick} className="w-6 h-6 text-primary" />)
-    }
-    </div>;
+    return
+        <div className="absolute md:hidden flex justify-center items-center bottom-2 left-2 p-2 rounded-full border-2 border-white h cursor-pointer z-20">
+            {(<BarChart3 onClick={onClick} className="w-6 h-6 text-primary"/>)
+                if not isVisible
+                else (<XIcon onClick={onClick} className="w-6 h-6 text-primary"/>)}
+        </div>;
 }
