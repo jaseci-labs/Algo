@@ -1,13 +1,8 @@
 # useGraph Hook
 # Custom hook for managing task graph state and operations
+import from ..api.api { getTaskGraph, clearTaskGraph, getUsernameFromToken }
 
-import from ..api.api {
-    getTaskGraph,
-    clearTaskGraph,
-    getUsernameFromToken
-}
-
-def:pub useGraph(addMessage: any) -> any {
+def:pub useGraph(addMessage: any) -> dict {
     # Reactive state using has variables
     has graphDotCode: str = "";
     has graphEdges: list = [];

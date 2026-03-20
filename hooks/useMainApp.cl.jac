@@ -1,7 +1,6 @@
 # useMainApp Hook
 # Main orchestrator hook that composes all sub-hooks
 # Provides a unified interface for the MainApp component
-
 import from react { useRef }
 import from "@jac/runtime" { useNavigate }
 
@@ -20,7 +19,7 @@ import from ..api.api {
     getUsernameFromToken
 }
 
-def:pub useMainApp() -> any {
+def:pub useMainApp() -> dict {
     navigate = useNavigate();
 
     # ========== Local State ==========
@@ -97,7 +96,9 @@ def:pub useMainApp() -> any {
     }
 
     # Realtime session management (pass updateGraphFromState for voice mode)
-    sessionHook = useRealtimeSession(transcriptHelpers, refreshGraphState, updateGraphFromState, updateSuggestions);
+    sessionHook = useRealtimeSession(
+        transcriptHelpers, refreshGraphState, updateGraphFromState, updateSuggestions
+    );
     sessionStatus = sessionHook.sessionStatus;
     sessionRef = sessionHook.sessionRef;
     isConnected = sessionHook.isConnected;
@@ -129,7 +130,6 @@ def:pub useMainApp() -> any {
     }
 
     # ========== Connection Handlers ==========
-
     def onToggleConnection() -> None {
         sessionHook.onToggleConnection(resetPTTState);
     }
@@ -180,7 +180,9 @@ def:pub useMainApp() -> any {
                     suggestions = [];
                 }
             } else {
-                updateTranscriptItem(assistantItemId, "Error: " + (result.error or "Unknown error"));
+                updateTranscriptItem(
+                    assistantItemId, "Error: " + (result.error or "Unknown error")
+                );
                 suggestions = [];
             }
         } except Exception as e {
@@ -229,7 +231,9 @@ def:pub useMainApp() -> any {
                     suggestions = [];
                 }
             } else {
-                updateTranscriptItem(assistantItemId, "Error: " + (result.error or "Unknown error"));
+                updateTranscriptItem(
+                    assistantItemId, "Error: " + (result.error or "Unknown error")
+                );
                 suggestions = [];
             }
         } except Exception as e {
@@ -254,7 +258,9 @@ def:pub useMainApp() -> any {
             addMessage("system", "Routine saved! Starting fresh session...");
             handleClearGraph();
         } else {
-            addMessage("error", "Failed to save routine: " + (result.error or "Unknown error"));
+            addMessage(
+                "error", "Failed to save routine: " + (result.error or "Unknown error")
+            );
         }
     }
 
@@ -268,7 +274,6 @@ def:pub useMainApp() -> any {
     }
 
     # ========== Return Hook Interface ==========
-
     return {
         # State
         "sessionStatus": sessionStatus,
@@ -285,14 +290,11 @@ def:pub useMainApp() -> any {
         "graphEdges": graphEdges,
         "lastTask": lastTask,
         "suggestions": suggestions,
-
         # Refs
         "transcriptEndRef": transcriptEndRef,
-
         # Computed
         "isConnected": isConnected,
         "isConnecting": isConnecting,
-
         # Handlers
         "onToggleConnection": onToggleConnection,
         "toggleMicMute": toggleMicMute,
