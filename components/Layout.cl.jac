@@ -1,12 +1,8 @@
 # Layout Component
 # Simple shared layout wrapper for all pages
-
 import from ..hooks.useHead { useHead, DEFAULT_META }
 
-def:pub Layout(
-    children: any,
-    meta: any = None
-) -> any {
+def:pub Layout(children: any, meta: any = None) -> JsxElement {
     activeMeta = meta or DEFAULT_META;
 
     # Merge with defaults
@@ -21,7 +17,8 @@ def:pub Layout(
     # Apply head configuration
     useHead(finalMeta);
 
-    return <div className="min-h-screen bg-background text-text-primary font-sans">
-        {children}
-    </div>;
+    return
+        <div className="min-h-screen bg-background text-text-primary font-sans">
+            {children}
+        </div>;
 }

@@ -1,34 +1,27 @@
 # InsightCard Component
 # Displays a single insight with actions to view, act upon, or dismiss
-
 import from "lucide-react" { Lightbulb, CheckCircle, X, ThumbsUp, Eye }
-import from react { useState, Fragment }
+import from react { Fragment }
 
 import from ..utils.mergeCls { cn }
 
-def InsightCardComponent(insight: dict = {}, onView: any = None, onAct: any = None, onDismiss: any = None) -> any {
-    [isExpanded, setIsExpanded] = useState(False);
+def InsightCardComponent(
+    insight: dict = {}, onView: any = None, onAct: any = None, onDismiss: any = None
+) -> JsxElement {
+    has isExpanded: bool = False;
 
     # Determine category color
-    getCategoryColor = lambda -> str {
-        category = insight.category or "general";
-        if category == "productivity" {
-            return "bg-blue-500/20 text-blue-500 border-blue-500/30";
-        }
-        if category == "behavioral" {
-            return "bg-purple-500/20 text-purple-500 border-purple-500/30";
-        }
-        if category == "predictive" {
-            return "bg-green-500/20 text-green-500 border-green-500/30";
-        }
-        if category == "celebratory" {
-            return "bg-yellow-500/20 text-yellow-500 border-yellow-500/30";
-        }
-        if category == "proactive" {
-            return "bg-orange-500/20 text-orange-500 border-orange-500/30";
-        }
-        return "bg-muted/50 text-muted-foreground border-border/50";
-    };
+    getCategoryColor = lambda -> str { category = insight.category or "general";if category == "productivity" {
+        return "bg-blue-500/20 text-blue-500 border-blue-500/30";
+    }if category == "behavioral" {
+        return "bg-purple-500/20 text-purple-500 border-purple-500/30";
+    }if category == "predictive" {
+        return "bg-green-500/20 text-green-500 border-green-500/30";
+    }if category == "celebratory" {
+        return "bg-yellow-500/20 text-yellow-500 border-yellow-500/30";
+    }if category == "proactive" {
+        return "bg-orange-500/20 text-orange-500 border-orange-500/30";
+    }return "bg-muted/50 text-muted-foreground border-border/50"; };
 
     categoryColor = getCategoryColor();
 
@@ -85,7 +78,7 @@ def InsightCardComponent(insight: dict = {}, onView: any = None, onAct: any = No
 
     # ========== Pre-compute all conditional JSX elements ==========
     # Acted on badge
-    actedOnBadge = <Fragment />;
+    actedOnBadge = <Fragment/>;
     if insight.acted_upon {
         actedOnBadge = <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-500">
             Acted on
@@ -93,7 +86,7 @@ def InsightCardComponent(insight: dict = {}, onView: any = None, onAct: any = No
     }
 
     # Actionable recommendation
-    actionableRec = <Fragment />;
+    actionableRec = <Fragment/>;
     if isExpanded and insight.actionable_recommendation {
         actionableRec = <p className="text-xs text-muted-foreground mb-3">
             {insight.actionable_recommendation or ""}
@@ -101,86 +94,86 @@ def InsightCardComponent(insight: dict = {}, onView: any = None, onAct: any = No
     }
 
     # View button
-    viewButton = <Fragment />;
+    viewButton = <Fragment/>;
     if showViewBtn {
         viewButton = <button
-            onClick={lambda -> any {
-                if onView { onView(); }
-                newExpanded = not isExpanded;
-                setIsExpanded(newExpanded);
-            }}
+            onClick={lambda -> any { if onView {
+                onView();
+            }newExpanded = not isExpanded;isExpanded = newExpanded;}}
             className="text-xs px-2 py-1 rounded bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
         >
-            <Eye className="w-3 h-3" />
+            <Eye className="w-3 h-3"/>
             {moreLessText}
         </button>;
     }
 
     # Action button
-    actionButton = <Fragment />;
+    actionButton = <Fragment/>;
     if showActionBtn {
         actionButton = <button
-            onClick={lambda -> any {
-                if onAct { onAct(); }
-            }}
+            onClick={lambda -> any { if onAct {
+                onAct();
+            }}}
             disabled={insight.acted_upon}
-            className={cn("text-xs px-2 py-1 rounded transition-colors flex items-center gap-1", btnClass)}
+            className={cn(
+                "text-xs px-2 py-1 rounded transition-colors flex items-center gap-1",
+                btnClass
+            )}
         >
-            <ThumbsUp className="w-3 h-3" />
+            <ThumbsUp className="w-3 h-3"/>
             {btnText}
         </button>;
     }
 
     # Category tag
-    categoryTag = <Fragment />;
+    categoryTag = <Fragment/>;
     if insight.category {
         categoryTag = <div className="mt-2 pt-2 border-t border-border/50">
             <span className="text-xs text-muted-foreground">
-                Category: {insight.category or "General"}
+                Category:{insight.category or "General"}
             </span>
         </div>;
     }
 
-    return <div className={cn(
-        "p-3 rounded-lg border transition-all",
-        categoryColor,
-        opacityClass,
-        ringClass
-    )}>
-        <div className="flex items-start justify-between mb-2">
-            <div className="flex items-center gap-2 flex-1">
-                <Lightbulb className={cn("w-4 h-4", iconColor)} />
-                <h4 className="text-sm font-medium text-foreground flex-1">
-                    {insight.title or "Insight"}
-                </h4>
+    return
+        <div
+            className={cn(
+                "p-3 rounded-lg border transition-all",
+                categoryColor,
+                opacityClass,
+                ringClass
+            )}
+        >
+            <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2 flex-1">
+                    <Lightbulb className={cn("w-4 h-4", iconColor)}/>
+                    <h4 className="text-sm font-medium text-foreground flex-1">
+                        {insight.title or "Insight"}
+                    </h4>
+                </div>
+                {actedOnBadge}
             </div>
-            {actedOnBadge}
-        </div>
-
-        <p className="text-xs text-muted-foreground mb-2">
-            {insight.description or insight.message or ""}
-        </p>
-
-        {actionableRec}
-
-        # Action buttons
-        <div className="flex items-center gap-2">
-            {viewButton}
-            {actionButton}
-            <button
-                onClick={lambda -> any {
-                    if onDismiss { onDismiss(); }
-                }}
-                className="text-xs px-2 py-1 rounded bg-destructive/10 hover:bg-destructive/20 text-destructive transition-colors flex items-center gap-1"
-            >
-                <X className="w-3 h-3" />
-                Dismiss
-            </button>
-        </div>
-
-        # Category tag
-        {categoryTag}
-    </div>;
+            <p className="text-xs text-muted-foreground mb-2">
+                {insight.description or insight.message or ""}
+            </p>
+            {actionableRec}
+            # Action buttons
+            <div className="flex items-center gap-2">
+                {viewButton}
+                {actionButton}
+                <button
+                    onClick={lambda -> any { if onDismiss {
+                        onDismiss();
+                    }}}
+                    className="text-xs px-2 py-1 rounded bg-destructive/10 hover:bg-destructive/20 text-destructive transition-colors flex items-center gap-1"
+                >
+                    <X className="w-3 h-3"/>
+                    Dismiss
+                </button>
+            </div>
+            # Category tag
+            {categoryTag}
+        </div>;
 }
 
 glob:pub InsightCard = InsightCardComponent;

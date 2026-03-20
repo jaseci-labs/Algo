@@ -1,9 +1,8 @@
 # TranscriptItem Component
 # Renders a single transcript message with role-based styling
-
 import from ..utils.mergeCls { cn }
 
-def:pub TranscriptItem(item: any, showThinking: bool = True) -> any {
+def:pub TranscriptItem(item: any, showThinking: bool = True) -> JsxElement {
     role = item.role;
     content = item.content;
     thinking = item.thinking;
@@ -18,8 +17,7 @@ def:pub TranscriptItem(item: any, showThinking: bool = True) -> any {
 
     # Container alignment based on role
     containerClass = cn(
-        "flex flex-col gap-1",
-        ("items-end" if isUser else "items-start")
+        "flex flex-col gap-1", ("items-end" if isUser else "items-start")
     );
 
     # Message bubble styling based on role
@@ -31,12 +29,19 @@ def:pub TranscriptItem(item: any, showThinking: bool = True) -> any {
     #     ))
     # );
     bubbleClass = cn(
-    "max-w-[80%] text-[14px] leading-[1] animate-fade-in",
-    (("chat-bubble-user") if isUser else (
-        ("bg-warning/20 text-text-primary  px-4 py-3 rounded-2xl border border-border/30") if isSystem else
-        "chat-bubble-assistant"
-    ))
-);
+        "max-w-[80%] text-[14px] leading-[1] animate-fade-in",
+        (
+            ("chat-bubble-user")
+                if isUser
+                else (
+                    (
+                        "bg-warning/20 text-text-primary  px-4 py-3 rounded-2xl border border-border/30"
+                    )
+                        if isSystem
+                        else "chat-bubble-assistant"
+                )
+        )
+    );
 
     # Role label styling
     labelClass = cn(
@@ -57,29 +62,45 @@ def:pub TranscriptItem(item: any, showThinking: bool = True) -> any {
         hasThinking = emotional != "" or intent != "" or tasks != "" or pattern != "";
     }
 
-    return <div className={containerClass}>
-        {hasThinking and (
-            <div className="flex flex-col gap-1 max-w-lg w-full">
-                {thinking.emotional and thinking.emotional != "" and (
-                    <div className={thinkingBubbleClass}>💭 {thinking.emotional}</div>
-                )}
-                {thinking.intent and thinking.intent != "" and (
-                    <div className={thinkingBubbleClass}>💭 {thinking.intent}</div>
-                )}
-                {thinking.tasks and thinking.tasks != "" and (
-                    <div className={thinkingBubbleClass}>💭 {thinking.tasks}</div>
-                )}
-                {thinking.pattern and thinking.pattern != "" and (
-                    <div className={thinkingBubbleClass}>💭 {thinking.pattern}</div>
-                )}
+    return
+        <div className={containerClass}>
+            {hasThinking
+            and (
+                <div className="flex flex-col gap-1 max-w-lg w-full">
+                    {thinking.emotional
+                    and thinking.emotional != ""
+                    and (
+                        <div className={thinkingBubbleClass}>
+                            💭{thinking.emotional}
+                        </div>
+                    )}{thinking.intent
+                    and thinking.intent != ""
+                    and (
+                        <div className={thinkingBubbleClass}>
+                            💭{thinking.intent}
+                        </div>
+                    )}{thinking.tasks
+                    and thinking.tasks != ""
+                    and (
+                        <div className={thinkingBubbleClass}>
+                            💭{thinking.tasks}
+                        </div>
+                    )}{thinking.pattern
+                    and thinking.pattern != ""
+                    and (
+                        <div className={thinkingBubbleClass}>
+                            💭{thinking.pattern}
+                        </div>
+                    )}
+                </div>
+            )}
+            <div>
+                <div className={labelClass}>
+                    {role}
+                </div>
+                <div className={bubbleClass}>
+                    {content}
+                </div>
             </div>
-        )}
-
-        <div>
-            <div className={labelClass}>
-                {role}
-            </div>
-            <div className={bubbleClass}>{content}</div>
-        </div>
-    </div>;
+        </div>;
 }
