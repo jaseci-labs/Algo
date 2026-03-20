@@ -65,54 +65,47 @@ def TemporalHeatmapComponent(data: dict = {}) -> JsxElement {
                   # Spacer for day labels
                 <div className="flex-1 grid grid-cols-9 gap-1">
                     {(
-                        hours.map(
-                            lambda hour: any , idx: int  -> any { return
-                                <div
-                                    key={idx}
-                                    className="text-xs text-muted-foreground text-center"
-                                >
-                                    {hour}
-                                </div>; }
-                        )
+                        [
+                            <div
+                                key={idx}
+                                className="text-xs text-muted-foreground text-center"
+                            >
+                                {hour}
+                            </div> for (idx, hour) in enumerate(hours)
+                        ]
                     )}
                 </div>
             </div>
             # Heatmap grid
             <div className="flex flex-col gap-1">
                 {(
-                    heatmapData.map(
-                        lambda row: any , rowIdx: int  -> any { return
-                            <div key={rowIdx} className="flex items-center gap-1">
-                                # Day label
-                                <div className="w-8 text-xs text-muted-foreground text-right">
-                                    {days[rowIdx]}
-                                </div>
-                                # Activity cells
-                                <div className="flex-1 grid grid-cols-9 gap-1">
-                                    {(
-                                        row.map(
-                                            lambda cell: any , cellIdx: int  -> any { dayLabel = days[
-                                                cell.day
-                                            ];activityRounded = Math.round(
-                                                cell.activity, 0
-                                            );return
-                                                <div
-                                                    key={cellIdx}
-                                                    className={cn(
-                                                        "aspect-square rounded-sm transition-all hover:ring-1 hover:ring-primary/50 cursor-pointer",
-                                                        getCellColor(cell.activity)
-                                                    )}
-                                                    title={dayLabel + " at " + String(
-                                                        cell.hour
-                                                    ) + ":00 - " + String(
-                                                        activityRounded
-                                                    ) + " activities"}
-                                                />; }
-                                        )
-                                    )}
-                                </div>
-                            </div>; }
-                    )
+                    [
+                        <div key={rowIdx} className="flex items-center gap-1">
+                            # Day label
+                            <div className="w-8 text-xs text-muted-foreground text-right">
+                                {days[rowIdx]}
+                            </div>
+                            # Activity cells
+                            <div className="flex-1 grid grid-cols-9 gap-1">
+                                {(
+                                    [
+                                        <div
+                                            key={cellIdx}
+                                            className={cn(
+                                                "aspect-square rounded-sm transition-all hover:ring-1 hover:ring-primary/50 cursor-pointer",
+                                                getCellColor(cell.activity)
+                                            )}
+                                            title={days[cell.day] + " at " + String(
+                                                cell.hour
+                                            ) + ":00 - " + String(
+                                                Math.round(cell.activity, 0)
+                                            ) + " activities"}
+                                        /> for (cellIdx, cell) in enumerate(row)
+                                    ]
+                                )}
+                            </div>
+                        </div> for (rowIdx, row) in enumerate(heatmapData)                        
+                    ]
                 )}
             </div>
             # Legend

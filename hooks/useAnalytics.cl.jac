@@ -276,11 +276,15 @@ def:pub useAnalytics() -> dict {
         try {
             result = await markInsightViewed(insightId);
             # Update local insight state
-            insights = insights.map(
-                lambda insight: any  -> any { if insight.id == insightId {
-                    insight.viewed = True;
-                }return insight; }
-            );
+            insights = [
+                (
+                    lambda insight: any  -> any { 
+                        if insight.id == insightId {
+                            insight.viewed = True;
+                        }return insight; 
+                    }
+                )(insight) for insight in insights
+            ];
             return result;
         } except Exception as e {
             return {"success": False, "error": String(e)};
@@ -291,11 +295,15 @@ def:pub useAnalytics() -> dict {
         try {
             result = await markInsightActedUpon(insightId);
             # Update local insight state
-            insights = insights.map(
-                lambda insight: any  -> any { if insight.id == insightId {
-                    insight.acted_upon = True;
-                }return insight; }
-            );
+            insights = [
+                (
+                    lambda insight: any  -> any { 
+                        if insight.id == insightId {
+                            insight.actedUpon = True;
+                        }return insight; 
+                    }
+                )(insight) for insight in insights
+            ];
             return result;
         } except Exception as e {
             return {"success": False, "error": String(e)};
@@ -306,9 +314,7 @@ def:pub useAnalytics() -> dict {
         try {
             result = await dismissInsight(insightId, reason);
             # Remove from local insights
-            insights = insights.filter(
-                lambda insight: any  -> bool { return insight.id != insightId; }
-            );
+            insights = [insight for insight in insights if insight.id != insightId];
             return result;
         } except Exception as e {
             return {"success": False, "error": String(e)};

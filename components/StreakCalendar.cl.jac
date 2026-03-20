@@ -151,11 +151,11 @@ def StreakCalendarComponent(activityData: dict = {}, weeks: int = 12) -> JsxElem
             <div className="w-6" />  # Spacer
             <div className="flex-1 grid grid-cols-7 gap-0.5 mb-1">
                 {
-                    (["M", "T", "W", "T", "F", "S", "S"].map(lambda day: any, idx: int -> any {
-                        return <div key={idx} className="text-xs text-muted-foreground text-center">
+                    [
+                        <div key={idx} className="text-xs text-muted-foreground text-center">
                             {day}
-                        </div>;
-                    }))
+                        </div> for (idx, day) in enumerate(["M", "T", "W", "T", "F", "S", "S"])
+                    ]
                 }
             </div>
         </div>
@@ -165,52 +165,42 @@ def StreakCalendarComponent(activityData: dict = {}, weeks: int = 12) -> JsxElem
             # Month labels (left side)
             <div className="w-6 flex flex-col">
                 {
-                    (monthLabels.map(lambda label: any, idx: int -> any {
-                        return <div
+                    [
+                        <div
                             key={idx}
                             className="text-xs text-muted-foreground"
                             style={{"height": "12px", "marginTop": String(label.week * 7) + "px"}}
                         >
                             {label.month}
-                        </div>;
-                    }))
+                        </div> for (idx, label) in enumerate(monthLabels)
+                    ]
                 }
             </div>
 
             # Activity cells
             <div className="flex-1 flex flex-col gap-0.5">
                 {
-                    (calendarData.map(lambda week: any, weekIdx: int -> any {
-                        return <div key={weekIdx} className="grid grid-cols-7 gap-0.5">
+                    [
+                        <div key={weekIdx} className="grid grid-cols-7 gap-0.5">
                             {
-                                (week.map(lambda day: any, dayIdx: int -> any {
-                                    isSelected = False;
-                                    ringClass = "hover:ring-1 hover:ring-primary/50";
-                                    if selectedDay == day.date {
-                                        isSelected = True;
-                                        ringClass = "ring-2 ring-primary";
-                                    }
-
-                                    return <div
+                                [
+                            <div
                                         key={dayIdx}
                                         className={cn(
                                             "aspect-square rounded-sm transition-all cursor-pointer",
                                             getCellColor(day.activity),
-                                            ringClass
+                                            "ring-2 ring-primary" if selectedDay == day.date else "hover:ring-1 hover:ring-primary/50"
                                         )}
                                         onClick={lambda -> any {
-                                            newSelection = day.date;
-                                            if selectedDay == day.date {
-                                                newSelection = None;
-                                            }
-                                            selectedDay = newSelection;
+                                            selectedDay = None if selectedDay == day.date else day.date;
                                         }}
                                         title={day.date + ": " + String(day.activity) + " activities"}
-                                    />;
-                                }))
+                                    />
+                                    for (dayIdx, day) in enumerate(week)
+                                ]
                             }
-                        </div>;
-                    }))
+                        </div> for (weekIdx, week) in enumerate(calendarData)
+                    ]
                 }
             </div>
         </div>

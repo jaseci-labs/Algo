@@ -76,10 +76,7 @@ def:pub useRealtimeSession(
         context = input.relevantContextFromLastUserMessage or "";
         history = details.context.history or [];
 
-        filteredHistory = history.filter(
-            lambda log: any  -> bool { return log.type == "message"; }
-        );
-
+        filteredHistory = [log for log in history if log.type == "message"];
         username = getUsernameFromToken();
         result = await callManager(context, filteredHistory, username);
 

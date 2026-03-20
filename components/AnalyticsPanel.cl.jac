@@ -99,33 +99,25 @@ def AnalyticsPanelComponent(onClose: any = None) -> JsxElement {
     ];
 
     # Render tab buttons
-    tabButtons = tabs.map(
-        lambda tab: any , idx: int  -> any { Icon = tab.icon;isActive = currentTab == tab.id;
-        # Determine button class using if/else
-        buttonClass = "flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors";
-        if isActive {
-            buttonClass = buttonClass + " bg-primary text-primary-foreground";
-        } else {
-            buttonClass = buttonClass + " text-muted-foreground hover:bg-muted/50 hover:text-foreground";
-        }
-        # Determine icon class
-        iconClass = "w-4 h-4";
-        if isActive {
-            iconClass = iconClass + " text-primary-foreground";
-        }
-        return
-            <button
-                key={idx}
-                onClick={lambda -> any { currentTab = tab.id;}}
-                className={buttonClass}
-            >
-                <Icon className={iconClass}/>
-                <span className="hidden sm:inline">
-                    {tab.label}
-                </span>
-            </button>; }
-    );
-
+    tabButtons = [
+        <button
+            key={idx}
+            onClick={lambda -> any { setCurrentTab(tab.id);}}
+            className={"flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors" + (
+                " bg-primary text-primary-foreground"
+                    if currentTab == tab.id
+                    else " text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            )}
+        >
+            <(tab.icon) className=
+            {"w-4 h-4" + (" text-primary-foreground" if currentTab == tab.id else "")}
+             />
+            <span className="hidden sm:inline">
+                {tab.label}
+            </span>
+        </button> for (idx, tab) in enumerate(tabs)
+    ];
+    
     # ========== Pre-compute conditional JSX blocks ==========
     # Header close button
     headerCloseButton = <Fragment/>;
