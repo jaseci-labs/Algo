@@ -1,6 +1,6 @@
 import from "@jac/runtime" { jacLogin, jacSignup, useNavigate }
 
-def:pub useAuth() -> any {
+def:pub useAuth() -> dict {
     navigate = useNavigate();
 
     # Reactive state using has variables
@@ -14,7 +14,6 @@ def:pub useAuth() -> any {
     has confirmPassword: str = "";
 
     # Shared Input Handlers
-
     def handleUsernameChange(e: any) -> None {
         username = e.target.value;
     }
@@ -114,13 +113,10 @@ def:pub useAuth() -> any {
         "password": password,
         "error": error,
         "loading": loading,
-
         "confirmPassword": confirmPassword,
-
         "handleUsernameChange": handleUsernameChange,
         "handlePasswordChange": handlePasswordChange,
         "handleConfirmPasswordChange": handleConfirmPasswordChange,
-
         "handleLogin": handleLogin,
         "handleRegister": handleRegister
     };
