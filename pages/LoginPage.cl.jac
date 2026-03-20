@@ -1,12 +1,11 @@
 # LoginPage Component
 # Login form with username and password
-
 import from "@jac/runtime" { Link }
 import from ..hooks.useAuth { useAuth }
 import from ..utils.mergeCls { cn }
 import from ..components.Layout { Layout }
 
-def:pub LoginPage() -> any {
+def:pub LoginPage() -> JsxElement {
     hook = useAuth();
 
     username = hook.username;
@@ -28,7 +27,11 @@ def:pub LoginPage() -> any {
     # Input classes with conditional styling
     inputClass = cn(
         "w-full px-4 py-3.5 border-2 rounded-xl text-base transition-all box-border outline-none font-sans",
-        ("bg-background-hover border-border/80" if loading else "bg-background border-border"),
+        (
+            "bg-background-hover border-border/80"
+                if loading
+                else "bg-background border-border"
+        ),
         "text-text-primary placeholder:text-text-secondary",
         "focus:border-primary focus:ring-2 focus:ring-primary/20"
     );
@@ -36,74 +39,78 @@ def:pub LoginPage() -> any {
     # Button classes with conditional styling
     buttonClass = cn(
         "auth-button w-full py-4  border-none rounded-xl text-base font-semibold transition-all flex items-center justify-center gap-2 tracking-wide",
-        (" opacity-70 cursor-not-allowed" if loading else "cursor-pointer hover:opacity-90")
+        (
+            " opacity-70 cursor-not-allowed"
+                if loading
+                else "cursor-pointer hover:opacity-90"
+        )
     );
 
     buttonText = "Logging in..." if loading else "Login";
 
-    return <Layout meta={{"title": "Login | Algo", "description": "Login to your Algo AI assistant account"}}>
-        <div className="flex items-center justify-center min-h-screen p-5  overflow-hidden">
-
-            <div className="glass-panel p-12 rounded-3xl w-full max-w-md shadow-2">
-                <div className="text-center mb-10">
-                    <h1 className="text-4xl font-bold text-text-primary mb-2 tracking-tight">
-                        {"Algo"}
-                    </h1>
-                    <p className="text-text-secondary text-base font-normal">
-                        {"Sign in to your account"}
-                    </p>
-                </div>
-
-                <form onSubmit={handleLogin}>
-                    <div className="mb-6">
-                        <label className="block mb-2.5 text-sm font-semibold text-text-primary tracking-wide">
-                            {"Username"}
-                        </label>
-                        <input
-                            type="text"
-                            value={username}
-                            onChange={handleUsernameChange}
-                            placeholder="Enter your username"
-                            disabled={loading}
-                            className={inputClass}
-                        />
+    return
+        <Layout
+            meta={{
+                "title": "Login | Algo",
+                "description": "Login to your Algo AI assistant account"
+            }}
+        >
+            <div className="flex items-center justify-center min-h-screen p-5  overflow-hidden">
+                <div className="glass-panel p-12 rounded-3xl w-full max-w-md shadow-2">
+                    <div className="text-center mb-10">
+                        <h1 className="text-4xl font-bold text-text-primary mb-2 tracking-tight">
+                            {"Algo"}
+                        </h1>
+                        <p className="text-text-secondary text-base font-normal">
+                            {"Sign in to your account"}
+                        </p>
                     </div>
-
-                    <div className="mb-8">
-                        <label className="block mb-2.5 text-sm font-semibold text-text-primary tracking-wide">
-                            {"Password"}
-                        </label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={handlePasswordChange}
-                            placeholder="Enter your password"
+                    <form onSubmit={handleLogin}>
+                        <div className="mb-6">
+                            <label className="block mb-2.5 text-sm font-semibold text-text-primary tracking-wide">
+                                {"Username"}
+                            </label>
+                            <input
+                                type="text"
+                                value={username}
+                                onChange={handleUsernameChange}
+                                placeholder="Enter your username"
+                                disabled={loading}
+                                className={inputClass}
+                            />
+                        </div>
+                        <div className="mb-8">
+                            <label className="block mb-2.5 text-sm font-semibold text-text-primary tracking-wide">
+                                {"Password"}
+                            </label>
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={handlePasswordChange}
+                                placeholder="Enter your password"
+                                disabled={loading}
+                                className={inputClass}
+                            />
+                        </div>
+                        {errorDisplay}
+                        <button
+                            type="submit"
                             disabled={loading}
-                            className={inputClass}
-                        />
+                            className={buttonClass}
+                        >
+                            {buttonText}
+                        </button>
+                    </form>
+                    <div className="mt-8 text-center text-sm text-text-secondary">
+                        {"Don't have an account?"}
+                        <Link
+                            to="/register"
+                            className="ml-1.5 text-primary font-semibold no-underline transition-opacity hover:opacity-80"
+                        >
+                            {"Sign up"}
+                        </Link>
                     </div>
-
-                    {errorDisplay}
-
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className={buttonClass}
-                    >
-                        {buttonText}
-                    </button>
-                </form>
-
-                <div className="mt-8 text-center text-sm text-text-secondary">
-                    {"Don't have an account?"}
-                    <Link
-                        to="/register"
-                        className="ml-1.5 text-primary font-semibold no-underline transition-opacity hover:opacity-80"
-                    >
-                        {"Sign up"}
-                    </Link>
                 </div>
             </div>
-        </div>
-    </Layout>;
+        </Layout>;
 }

@@ -1,6 +1,6 @@
 import from "@jac/runtime" { jacIsLoggedIn, Navigate }
 
-def:pub HomePage() -> any {
+def:pub HomePage() -> JsxElement {
     if jacIsLoggedIn() {
         return <Navigate to="/app" />;
     }
