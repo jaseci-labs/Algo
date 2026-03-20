@@ -4,7 +4,7 @@
 import from react { memo, useMemo }
 import from "@xyflow/react" { Handle, Position }
 
-def StartNodeComponent(props: any) -> any {
+def StartNodeComponent(props: any) -> dict | JsxElement {
     data = props.data;
 
     # Memoize the handle props to prevent unnecessary re-renders
