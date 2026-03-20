@@ -112,10 +112,10 @@ def:pub MainApp() -> JsxElement {
         setIsAudioPlaybackEnabled(not isAudioPlaybackEnabled);
     }
     # Build transcript items
-    transcriptItems = transcript.map(
-        lambda item: any , idx: int  -> any { 
-            return <TranscriptItem key={idx} item={item} showThinking={showThinking}/>; }
-    );
+    transcriptItems = [
+        <TranscriptItem key={idx} item={item} showThinking={showThinking}/>
+        for (idx, item) in enumerate(transcript)
+    ];
 
     # ========== Render ==========
     return

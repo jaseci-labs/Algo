@@ -1,7 +1,7 @@
 # useAnalytics Hook
 # Enhanced analytics state management hook for behavioral insights, trends, patterns, and goals
 # Uses local hook state variables for analytics reactivity
-import from react { useEffect, useRef }
+import from react { useRef }
 import from ..api.analytics {
     getActivityReport,
     getTrendAnalysis,
@@ -43,9 +43,6 @@ def:pub useAnalytics() -> dict {
     has userGoals: list = [];
     has userAchievements: list = [];
     has proactiveInsights: list = [];
-
-    # Track if initial fetch has been done
-    hasInitializedRef = useRef(False);
 
     # ========== Fetch All Analytics Data ==========
     async def fetchAllAnalytics() -> None {

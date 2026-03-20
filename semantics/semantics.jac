@@ -7,10 +7,13 @@ glob llm = Model(model_name="gpt-4.1");
 #===========================================================
 #                     ENUMS
 #===========================================================
-
 """Emotional state values"""
 enum Emotion {
-    STRESSED, EXCITED, INDECISIVE, FATIGUED, NEUTRAL
+    STRESSED,
+    EXCITED,
+    INDECISIVE,
+    FATIGUED,
+    NEUTRAL
 }
 
 sem Emotion = "User's emotional state: STRESSED (frustration/overwhelm), EXCITED (enthusiastic), INDECISIVE (uncertain), FATIGUED (tired/exhausted), NEUTRAL (calm/normal)";
@@ -28,8 +31,15 @@ sem ConversationIntent = "User's intent: COMMIT_ACTION (task mentioned), CORRECT
 
 """Correction type for graph modifications"""
 enum CorrectionType {
-    NONE, RENAME, INSERT_BEFORE, INSERT_AFTER, INSERT_FIRST,
-    REORDER, REPLACE, ATTACHMENT_POINT, SEQUENCE_ORDER
+    NONE,
+    RENAME,
+    INSERT_BEFORE,
+    INSERT_AFTER,
+    INSERT_FIRST,
+    REORDER,
+    REPLACE,
+    ATTACHMENT_POINT,
+    SEQUENCE_ORDER
 }
 
 sem CorrectionType = "NONE (no correction - default for new task additions), RENAME (change task name), INSERT_BEFORE (add before existing task), INSERT_AFTER (add after existing task), INSERT_FIRST (add at beginning), REORDER (change task order), REPLACE (swap tasks), ATTACHMENT_POINT (specify where to connect), SEQUENCE_ORDER (specify execution order)";
@@ -47,7 +57,6 @@ sem ConnectionType = "SEQUENTIAL ('then', 'after'), PARALLEL ('while', 'at same 
 #===========================================================
 #                     CORE OBJECTS
 #===========================================================
-
 """Emotional state detected from user message"""
 obj EmotionalState {
     has emotion: Emotion;
@@ -135,11 +144,9 @@ obj ThinkingSummary {
 #===========================================================
 #                     CORE FUNCTIONS
 #===========================================================
-
 """Detect user's emotional state"""
 def detect_emotional_state(
-    user_message: str,
-    conversation_history: list[dict[str, str]]
+    user_message: str, conversation_history: list[dict[str, str]]
 ) -> EmotionalState by llm();
 
 sem detect_emotional_state = """
@@ -198,9 +205,7 @@ Return should_create_tasks=true for all intents except pure uncertainty.
 
 """Extract task names from user message"""
 def extract_raw_task_names(
-    user_message: str,
-    context: ConversationContext,
-    existing_nodes: list[str]
+    user_message: str, context: ConversationContext, existing_nodes: list[str]
 ) -> ExtractedTasks by llm();
 
 sem extract_raw_task_names = """
@@ -275,9 +280,7 @@ Default: [last_task] unless user specifies 'after X', 'before Y', 'from Z'.
 
 """Detect if user intends to converge parallel branches"""
 def detect_convergence_intent(
-    user_message: str,
-    last_task: str,
-    current_edges: list[dict[str, str]]
+    user_message: str, last_task: str, current_edges: list[dict[str, str]]
 ) -> ConvergenceIntent by llm();
 
 sem detect_convergence_intent = """
@@ -431,7 +434,6 @@ Keep under 10 words each.
 #===========================================================
 #                  VALIDATION OBJECTS
 #===========================================================
-
 """Task validation result"""
 obj TaskValidationResult {
     has is_valid: bool;
@@ -514,9 +516,7 @@ sem EdgeLabelValidationResult.incorrect_labels = "Descriptions for incorrect lab
 
 """Validate task extraction"""
 def validate_task_extraction(
-    user_message: str,
-    extracted_tasks: list[str],
-    existing_nodes: list[str]
+    user_message: str, extracted_tasks: list[str], existing_nodes: list[str]
 ) -> TaskValidationResult by llm();
 
 sem validate_task_extraction = """
@@ -533,9 +533,7 @@ If rename needed: is_valid=false, incorrect_task=existing name, correct_task_nam
 
 """Validate graph structure"""
 def validate_graph_structure(
-    user_message: str,
-    graph_nodes: list[str],
-    graph_edges: list[dict[str, str]]
+    user_message: str, graph_nodes: list[str], graph_edges: list[dict[str, str]]
 ) -> GraphValidationResult by llm();
 
 sem validate_graph_structure = """
@@ -616,8 +614,7 @@ CRITICAL CHECKS:
 
 """Validate edge labels"""
 def validate_edge_labels(
-    user_message: str,
-    new_edges: list[dict[str, str]]
+    user_message: str, new_edges: list[dict[str, str]]
 ) -> EdgeLabelValidationResult by llm();
 
 sem validate_edge_labels = """
@@ -638,7 +635,6 @@ COMMON MISTAKES:
 #===========================================================
 #                  ANALYTICS FUNCTIONS
 #===========================================================
-
 """Personalized insight"""
 obj PersonalizedInsight {
     has title: str;
@@ -707,8 +703,7 @@ obj TemporalInsight {
 
 """Analyze temporal patterns"""
 def analyze_temporal_patterns(
-    activity_events: list[dict],
-    lookback_days: int = 30
+    activity_events: list[dict], lookback_days: int = 30
 ) -> list[TemporalInsight] by llm();
 
 sem analyze_temporal_patterns = """
@@ -733,9 +728,7 @@ obj ComparisonInsight {
 
 """Generate comparative insights"""
 def generate_comparative_insights(
-    current_events: list[dict],
-    previous_events: list[dict],
-    period_type: str = "week"
+    current_events: list[dict], previous_events: list[dict], period_type: str = "week"
 ) -> list[ComparisonInsight] by llm();
 
 sem generate_comparative_insights = """
