@@ -6,7 +6,7 @@ import from react { useMemo, Fragment }
 
 import from ..utils.mergeCls { cn }
 
-def StreakCalendarComponent(activityData: dict = {}, weeks: int = 12) -> JsxElement | str | int | list {
+def StreakCalendarComponent(activityData: dict = {}, weeks: int = 12) -> JsxElement {
     has selectedDay: str | None = None;
 
     # Generate calendar data

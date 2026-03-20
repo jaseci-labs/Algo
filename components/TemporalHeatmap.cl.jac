@@ -3,7 +3,7 @@
 import from react { useMemo }
 import from ..utils.mergeCls { cn }
 
-def TemporalHeatmapComponent(data: dict = {}) -> JsxElement | str | list {
+def TemporalHeatmapComponent(data: dict = {}) -> JsxElement {
     # Days of week
     days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     hours = ["6a", "8a", "10a", "12p", "2p", "4p", "6p", "8p", "10p"];

@@ -7,7 +7,7 @@ import from ..utils.mergeCls { cn }
 
 def InsightCardComponent(
     insight: dict = {}, onView: any = None, onAct: any = None, onDismiss: any = None
-) -> JsxElement | str {
+) -> JsxElement {
     has isExpanded: bool = False;
 
     # Determine category color

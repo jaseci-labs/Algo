@@ -11,7 +11,7 @@ def GoalProgressRingComponent(
     strokeWidth: int = 4,
     goalType: str = "",
     showLabel: bool = True
-) -> JsxElement | str {
+) -> JsxElement {
     svgRef = useRef(None);
     has animatedProgress: int = 0;
 
