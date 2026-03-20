@@ -6,25 +6,23 @@ import from .pages.HomePage { HomePage }
 import from .pages.LoginPage { LoginPage }
 import from .pages.RegisterPage { RegisterPage }
 
-
 import from .utils.ProtectedRoute { ProtectedRoute }
 import ".global.css";
 
 # Main App with Router
-def:pub app() -> any {
-    return <Router>
-        <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route
-                path="/app"
-                element={
-                    <ProtectedRoute>
-                        <MainApp />
-                    </ProtectedRoute>
-                }
-            />
-        </Routes>
-    </Router>;
+def:pub app() -> JsxElement {
+    return
+        <Router>
+            <Routes>
+                <Route path="/" element={<HomePage/>}/>
+                <Route path="/login" element={<LoginPage/>}/>
+                <Route path="/register" element={<RegisterPage/>}/>
+                <Route
+                    path="/app"
+                    element={<ProtectedRoute>
+                        <MainApp/>
+                    </ProtectedRoute>}
+                />
+            </Routes>
+        </Router>;
 }
