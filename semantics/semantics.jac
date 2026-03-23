@@ -703,8 +703,7 @@ obj TemporalInsight {
 
 """Analyze temporal patterns"""
 def analyze_temporal_patterns(
-    activity_events: list[dict[str, str]],
-    lookback_days: int = 30
+    activity_events: list[dict[str, str]], lookback_days: int = 30
 ) -> list[TemporalInsight] by llm();
 
 sem analyze_temporal_patterns = """
@@ -729,9 +728,7 @@ obj ComparisonInsight {
 
 """Generate comparative insights"""
 def generate_comparative_insights(
-    current_events: list[dict[str, str]],
-    previous_events: list[dict[str, str]],
-    period_type: str = "week"
+    current_events: list[dict[str, str]], previous_events: list[dict[str, str]], period_type: str = "week"
 ) -> list[ComparisonInsight] by llm();
 
 sem generate_comparative_insights = """
