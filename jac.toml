@@ -12,7 +12,6 @@ base_route_app = "app"
 plugins = ["tailwindcss()"]
 lib_imports = ["import tailwindcss from '@tailwindcss/vite'"]
 
-
 [plugins.scale.kubernetes]
 app_name = "algo-test"
 namespace = "algo-test"
@@ -46,6 +45,7 @@ tailwindcss = "^4.1.17"
 "@xyflow/react" = "12.10.0"
 lucide-react = "^0.562.0"
 elkjs = "latest"
+jac-client-node = "1.0.7"
 
 [dependencies.npm.dev]
 vite = "^6.4.1"
@@ -57,6 +57,7 @@ vite = "^6.4.1"
 typescript = "^5.3.3"
 "@types/react" = "^18.2.0"
 "@types/react-dom" = "^18.2.0"
+"@jac-client/dev-deps" = "2.0.0"
 
 [jacpack]
 name = "algo"

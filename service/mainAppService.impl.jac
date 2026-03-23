@@ -2543,13 +2543,13 @@ impl get_proactive_insights.generate_proactive{
         user_context={}
     );
 
-    if trigger_result and trigger_result["should_trigger"] {
+    if trigger_result and trigger_result.should_trigger {
         report {
             "success": True,
             "has_proactive": True,
-            "insight_type": trigger_result["insight_type"],
-            "urgency": trigger_result["urgency"],
-            "message": trigger_result["message"]
+            "insight_type": trigger_result.insight_type,
+            "urgency": trigger_result.urgency,
+            "message": trigger_result.message
         };
     } else {
         report {"success": True, "has_proactive": False};

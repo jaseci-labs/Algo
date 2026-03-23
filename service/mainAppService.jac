@@ -26,6 +26,7 @@ import from semantics.semantics {
     RoutinePattern,
     TemporalInsight,
     ComparisonInsight,
+    ProactiveTriggerResult,
     detect_emotional_state,
     analyze_conversation_intent,
     extract_raw_task_names,

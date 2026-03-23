@@ -677,9 +677,9 @@ obj RoutinePattern {
 
 """Discover repeated task sequences"""
 def discover_routine_patterns(
-    activity_events: list[dict],
+    activity_events: list[dict[str, str]],
     task_graph_nodes: list[str],
-    task_graph_edges: list[dict],
+    task_graph_edges: list[dict[str, str]],
     time_window_days: int = 30
 ) -> list[RoutinePattern] by llm();
 
@@ -698,12 +698,13 @@ obj TemporalInsight {
     has peak_hours: list[int];
     has peak_days: list[str];
     has confidence: float;
-    has recommendation: str;
+    has actionable_recommendation: str;
 }
 
 """Analyze temporal patterns"""
 def analyze_temporal_patterns(
-    activity_events: list[dict], lookback_days: int = 30
+    activity_events: list[dict[str, str]],
+    lookback_days: int = 30
 ) -> list[TemporalInsight] by llm();
 
 sem analyze_temporal_patterns = """
@@ -728,7 +729,9 @@ obj ComparisonInsight {
 
 """Generate comparative insights"""
 def generate_comparative_insights(
-    current_events: list[dict], previous_events: list[dict], period_type: str = "week"
+    current_events: list[dict[str, str]],
+    previous_events: list[dict[str, str]],
+    period_type: str = "week"
 ) -> list[ComparisonInsight] by llm();
 
 sem generate_comparative_insights = """
@@ -738,14 +741,22 @@ Count events, calculate percentage change, determine trend (improving/declining/
 Small fluctuations (<10%) = stable.
 """;
 
+"""Proactive insight trigger result"""
+obj ProactiveTriggerResult {
+    has should_trigger: bool;
+    has insight_type: str;
+    has urgency: str;
+    has message: str;
+}
+
 """Check if proactive insight should trigger"""
 def should_trigger_proactive_insight(
-    recent_events: list[dict],
-    user_goals: list[dict],
+    recent_events: list[dict[str, str]],
+    user_goals: list[dict[str, str]],
     current_streak: int,
     last_insight_time: str,
-    user_context: dict
-) -> dict by llm();
+    user_context: dict[str, str]
+) -> ProactiveTriggerResult by llm();
 
 sem should_trigger_proactive_insight = """
 Determine if proactive insight should trigger.
@@ -753,6 +764,6 @@ Determine if proactive insight should trigger.
 Triggers: STREAK_AT_RISK, ACHIEVEMENT_UNLOCKED, GOAL_MILESTONE,
 PATTERN_DETECTED, ENCOURAGEMENT_NEEDED, RETURNING_USER
 
-Return dict with should_trigger, insight_type, urgency (low/medium/high), message.
+Return ProactiveTriggerResult with should_trigger (bool), insight_type, urgency (low/medium/high), message.
 Only trigger if valuable. Avoid spam.
 """;
