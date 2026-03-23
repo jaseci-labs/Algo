@@ -1,6 +1,5 @@
 # Graph Layout Utilities
 # Transforms edge data to React Flow format and applies ELK layout
-
 import from "elkjs/lib/elk.bundled.js" { default as ELK }
 
 
@@ -10,21 +9,19 @@ glob NODE_HEIGHT = 50;
 glob START_NODE_SIZE = 70;
 
 # Helper function to add spaces before capital letters in camelCase strings
+def addSpacesToCamelCase(word: str) -> str {
+    result = '';
 
-def addSpacesToCamelCase(word:str) -> str{
+    for i = 0 to i < word.length by i += 1 {
+        char = word[i];
+        if (i > 0 && char == char.toUpperCase() && char != char.toLowerCase()) {
+            result += ' ';
+        }
 
-   result = '';
-
-  for i = 0 to i < word.length by i+=1{
-    char = word[i];
-    if (i > 0 && char == char.toUpperCase() && char != char.toLowerCase()) {
-      result += ' ';
+        result += char;
     }
 
-    result += char;
-  }
-
-  return result;
+    return result;
 }
 
 # Transform raw edge data to React Flow nodes and edges format
@@ -48,29 +45,33 @@ def:pub transformGraphData(graphEdges: list) -> dict {
     nodes = [];
     for nodeId in nodeSet {
         displayLabel = addSpacesToCamelCase(nodeId) or nodeId;
-        nodes.push({
-            "id": nodeId,
-            "type": "startNode" if nodeId == "Start" else "taskNode",
-            "data": { "label": displayLabel },
-            "position": { "x": 0, "y": 0 }
-        });
+        nodes.push(
+            {
+                "id": nodeId,
+                "type": "startNode" if nodeId == "Start" else "taskNode",
+                "data": {"label": displayLabel},
+                "position": {"x": 0, "y": 0}
+            }
+        );
     }
 
     # Create edges array
     edges = [];
     idx = 0;
     for item in graphEdges {
-        edges.push({
-            "id": f"edge-{idx}",
-            "source": item["from"],
-            "target": item["to"],
-            "label": item["label"] or "",
-            "type": "bezier"
-        });
+        edges.push(
+            {
+                "id": f"edge-{idx}",
+                "source": item["from"],
+                "target": item["to"],
+                "label": item["label"] or "",
+                "type": "bezier"
+            }
+        );
         idx = idx + 1;
     }
 
-    return { "nodes": nodes, "edges": edges };
+    return {"nodes": nodes, "edges": edges};
 }
 
 # Apply ELK layout to position nodes hierarchically
@@ -93,34 +94,31 @@ async def:pub getLayoutedElements(nodes: list, edges: list) -> dict {
         width = START_NODE_SIZE if node.type == "startNode" else NODE_WIDTH;
         height = START_NODE_SIZE if node.type == "startNode" else NODE_HEIGHT;
 
-        elkGraph.children.push({
-            "id": node.id,
-            "width": width,
-            "height": height
-        });
+        elkGraph.children.push({"id": node.id, "width": width, "height": height});
     }
 
     for edge in edges {
-        elkGraph.edges.push({
-            "id": edge["id"],
-            "sources": Array.of(edge["source"]),
-            "targets": Array.of(edge["target"])
-        });
+        elkGraph.edges.push(
+            {
+                "id": edge["id"],
+                "sources": Array.of(edge["source"]),
+                "targets": Array.of(edge["target"])
+            }
+        );
     }
 
     layout = await elk.layout(elkGraph);
 
     layoutedNodes = [];
     for node in nodes {
-        lnode = layout.children.find(lambda n:any -> None { return n["id"] == node["id"]; });
+        lnode = layout.children.find(
+            lambda n: any  -> None { return n["id"] == node["id"]; }
+        );
 
-        layoutedNodes.push(Object.assign({}, node, {
-            "position": {
-                "x": lnode["x"],
-                "y": lnode["y"]
-            }
-        }));
+        layoutedNodes.push(
+            Object.assign({}, node, {"position": {"x": lnode["x"], "y": lnode["y"]}})
+        );
     }
 
-    return { "nodes": layoutedNodes, "edges": edges };
+    return {"nodes": layoutedNodes, "edges": edges};
 }

@@ -3,12 +3,12 @@
 
 # Default meta configuration
 glob:pub DEFAULT_META = {
-    "title": "Algo",
-    "description": "Your Personal AI Assistant with Voice Interface",
-    "favicon": "/static/assets/favicon.ico",
-    "themeColor": "#ff7743",
-    "ogImage": "/static/assets/og-image.png"
-};
+         "title": "Algo",
+         "description": "Your Personal AI Assistant with Voice Interface",
+         "favicon": "/static/assets/favicon.ico",
+         "themeColor": "#ff7743",
+         "ogImage": "/static/assets/og-image.png"
+     };
 
 def:pub useHead(config: any) -> None {
     # Using new can with [dep] entry syntax
@@ -50,7 +50,11 @@ def:pub useHead(config: any) -> None {
         }
 
         # Viewport (mobile support)
-        setMeta("viewport", "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no", False);
+        setMeta(
+            "viewport",
+            "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no",
+            False
+        );
 
         # Description
         if config and config.description {

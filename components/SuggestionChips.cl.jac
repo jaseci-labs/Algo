@@ -15,15 +15,14 @@ def:pub SuggestionChips(
             <span className="text-xs text-text-secondary font-medium">
                 {"Quick replies:"}
             </span>
-            {suggestions.map(
-                lambda suggestion: any , idx: int  -> any { return
-                    <button
-                        key={idx}
-                        onClick={lambda -> None { onSelectSuggestion(suggestion);}}
-                        className="px-3 py-1.5 bg-surface-elevated text-text-primary text-sm rounded-full border border-border cursor-pointer transition-all hover:bg-primary hover:text-primary-foreground hover:border-primary hover:-translate-y-0.5 active:translate-y-0 font-medium"
-                    >
-                        {suggestion}
-                    </button>; }
-            )}
+            {[
+                <button
+                    key={idx}
+                    onClick={lambda -> None { onSelectSuggestion(suggestion);}}
+                    className="px-3 py-1.5 bg-surface-elevated text-text-primary text-sm rounded-full border border-border cursor-pointer transition-all hover:bg-primary hover:text-primary-foreground hover:border-primary hover:-translate-y-0.5 active:translate-y-0 font-medium"
+                >
+                    {suggestion}
+                </button> for (idx, suggestion) in enumerate(suggestions)
+            ]}
         </div>;
 }

@@ -1,8 +1,7 @@
 # useAnalytics Hook
 # Enhanced analytics state management hook for behavioral insights, trends, patterns, and goals
-# Uses React useState for proper reactivity
-
-import from react { useState, useEffect, useRef }
+# Uses local hook state variables for analytics reactivity
+import from react { useRef }
 import from ..api.analytics {
     getActivityReport,
     getTrendAnalysis,
@@ -25,187 +24,173 @@ import from ..api.analytics {
     dismissInsight
 }
 
-def:pub useAnalytics() -> any {
+def:pub useAnalytics() -> dict {
     # React state for analytics data
-    [activityReport, setActivityReport] = useState(None);
-    [trendData, setTrendData] = useState(None);
-    [behavioralPatterns, setBehavioralPatterns] = useState(None);
-    [productivityMetrics, setProductivityMetrics] = useState(None);
-    [insights, setInsights] = useState([]);
-    [isLoading, setIsLoading] = useState(False);
-    [error, setError] = useState("");
-    [selectedPeriod, setSelectedPeriod] = useState("week");
-    [selectedCategory, setSelectedCategory] = useState("all");
+    has activityReport: dict | None = None;
+    has trendData: dict | None = None;
+    has behavioralPatterns: dict | None = None;
+    has productivityMetrics: dict | None = None;
+    has insights: list = [];
+    has isLoading: bool = False;
+    has error: str = "";
+    has selectedPeriod: str = "week";
+    has selectedCategory: str = "all";
 
     # NEW: Enhanced analytics state
-    [discoveredPatterns, setDiscoveredPatterns] = useState([]);
-    [temporalInsights, setTemporalInsights] = useState(None);
-    [comparativeInsights, setComparativeInsights] = useState(None);
-    [userGoals, setUserGoals] = useState([]);
-    [userAchievements, setUserAchievements] = useState([]);
-    [proactiveInsights, setProactiveInsights] = useState([]);
-
-    # Track if initial fetch has been done
-    hasInitializedRef = useRef(False);
+    has discoveredPatterns: list = [];
+    has temporalInsights: dict | None = None;
+    has comparativeInsights: dict | None = None;
+    has userGoals: list = [];
+    has userAchievements: list = [];
+    has proactiveInsights: list = [];
 
     # ========== Fetch All Analytics Data ==========
     async def fetchAllAnalytics() -> None {
-        setIsLoading(True);
-        setError("");
+        isLoading = True;
+        error = "";
 
         # Log analytics view event
         try {
             await logActivityEvent("insights_requested", {}, "", "", "", 0);
-        } except Exception as e {
-        }
+        } except Exception as e { }
 
         # Fetch each independently and handle errors
         activityResult = {"success": False};
         try {
             activityResult = await getActivityReport({});
-        } except Exception as e {
-        }
+        } except Exception as e { }
 
         trendResult = {"success": False};
         try {
             trendResult = await getTrendAnalysis(selectedPeriod);
-        } except Exception as e {
-        }
+        } except Exception as e { }
 
         patternsResult = {"success": False};
         try {
             patternsResult = await getBehavioralPatterns();
-        } except Exception as e {
-        }
+        } except Exception as e { }
 
         productivityResult = {"success": False};
         try {
             productivityResult = await getProductivityMetrics();
-        } except Exception as e {
-        }
+        } except Exception as e { }
 
         insightsResult = {"success": False};
         try {
             insightsResult = await getInsights(selectedCategory);
-        } except Exception as e {
-        }
+        } except Exception as e { }
 
         # NEW: Fetch enhanced analytics
         discoveredResult = {"success": False};
         try {
             discoveredResult = await discoverPatterns(30);
-        } except Exception as e {
-        }
+        } except Exception as e { }
 
         temporalResult = {"success": False};
         try {
             temporalResult = await getTemporalInsights(30);
-        } except Exception as e {
-        }
+        } except Exception as e { }
 
         goalsResult = {"success": False};
         try {
             goalsResult = await getGoals();
-        } except Exception as e {
-        }
+        } except Exception as e { }
 
         achievementsResult = {"success": False};
         try {
             achievementsResult = await getAchievements();
-        } except Exception as e {
-        }
+        } except Exception as e { }
 
         proactiveResult = {"success": False};
         try {
             proactiveResult = await getProactiveInsights();
-        } except Exception as e {
-        }
+        } except Exception as e { }
 
         # Process successful results
         if activityResult.success {
-            setActivityReport(activityResult.data);
+            activityReport = activityResult.data;
         }
         if trendResult.success {
-            setTrendData(trendResult.data);
+            trendData = trendResult.data;
         }
         if patternsResult.success {
-            setBehavioralPatterns(patternsResult.data);
+            behavioralPatterns = patternsResult.data;
         }
         if productivityResult.success {
-            setProductivityMetrics(productivityResult.data);
+            productivityMetrics = productivityResult.data;
         }
         if insightsResult.success {
             if insightsResult.data.insights {
-                setInsights(insightsResult.data.insights);
+                insights = insightsResult.data.insights;
             } else {
-                setInsights(insightsResult.data);
+                insights = insightsResult.data;
             }
         }
         if discoveredResult.success {
-            setDiscoveredPatterns(discoveredResult.data.patterns or []);
+            discoveredPatterns = discoveredResult.data.patterns or [];
         }
         if temporalResult.success {
-            setTemporalInsights(temporalResult.data);
+            temporalInsights = temporalResult.data;
         }
         if goalsResult.success {
-            setUserGoals(goalsResult.data.goals or []);
+            userGoals = goalsResult.data.goals or [];
         }
         if achievementsResult.success {
-            setUserAchievements(achievementsResult.data.achievements or []);
+            userAchievements = achievementsResult.data.achievements or [];
         }
         if proactiveResult.success {
-            setProactiveInsights(proactiveResult.data.insights or []);
+            proactiveInsights = proactiveResult.data.insights or [];
         }
 
-        setIsLoading(False);
+        isLoading = False;
     }
 
     # ========== Pattern Discovery ==========
     async def fetchDiscoveredPatterns(timeWindowDays: int = 30) -> None {
-        setIsLoading(True);
+        isLoading = True;
         try {
             result = await discoverPatterns(timeWindowDays);
             if result.success {
-                setDiscoveredPatterns(result.data.patterns or []);
+                discoveredPatterns = result.data.patterns or [];
             } else {
-                setError(result.error or "Failed to discover patterns");
+                error = result.error or "Failed to discover patterns";
             }
         } except Exception as e {
-            setError(String(e));
+            error = String(e);
         }
-        setIsLoading(False);
+        isLoading = False;
     }
 
     # ========== Temporal Insights ==========
     async def fetchTemporalInsights(lookbackDays: int = 30) -> None {
-        setIsLoading(True);
+        isLoading = True;
         try {
             result = await getTemporalInsights(lookbackDays);
             if result.success {
-                setTemporalInsights(result.data);
+                temporalInsights = result.data;
             } else {
-                setError(result.error or "Failed to get temporal insights");
+                error = result.error or "Failed to get temporal insights";
             }
         } except Exception as e {
-            setError(String(e));
+            error = String(e);
         }
-        setIsLoading(False);
+        isLoading = False;
     }
 
     # ========== Comparative Insights ==========
     async def fetchComparativeInsights(periodType: str = "week") -> None {
-        setIsLoading(True);
+        isLoading = True;
         try {
             result = await getComparativeInsights(periodType);
             if result.success {
-                setComparativeInsights(result.data);
+                comparativeInsights = result.data;
             } else {
-                setError(result.error or "Failed to get comparative insights");
+                error = result.error or "Failed to get comparative insights";
             }
         } except Exception as e {
-            setError(String(e));
+            error = String(e);
         }
-        setIsLoading(False);
+        isLoading = False;
     }
 
     # ========== Goal Management ==========
@@ -213,42 +198,41 @@ def:pub useAnalytics() -> any {
         try {
             result = await getGoals();
             if result.success {
-                setUserGoals(result.data.goals or []);
+                userGoals = result.data.goals or [];
             }
-        } except Exception as e {
-        }
+        } except Exception as e { }
     }
 
     async def createNewGoal(goalType: str, targetValue: int) -> dict {
-        setIsLoading(True);
+        isLoading = True;
         try {
             result = await createGoal(goalType, targetValue);
-            setIsLoading(False);
+            isLoading = False;
             if result.success {
                 # Refresh goals after creating
                 await fetchGoals();
             }
             return result;
         } except Exception as e {
-            setError(String(e));
-            setIsLoading(False);
+            error = String(e);
+            isLoading = False;
             return {"success": False, "error": String(e)};
         }
     }
 
     async def updateGoal(goalType: str, progress: int) -> dict {
-        setIsLoading(True);
+        isLoading = True;
         try {
             result = await updateGoalProgress(goalType, progress);
-            setIsLoading(False);
+            isLoading = False;
             if result.success {
                 # Refresh goals after updating
                 await fetchGoals();
             }
             return result;
         } except Exception as e {
-            setError(String(e));
-            setIsLoading(False);
+            error = String(e);
+            isLoading = False;
             return {"success": False, "error": String(e)};
         }
     }
@@ -258,10 +242,9 @@ def:pub useAnalytics() -> any {
         try {
             result = await getAchievements();
             if result.success {
-                setUserAchievements(result.data.achievements or []);
+                userAchievements = result.data.achievements or [];
             }
-        } except Exception as e {
-        }
+        } except Exception as e { }
     }
 
     async def checkForAchievements() -> dict {
@@ -283,10 +266,9 @@ def:pub useAnalytics() -> any {
         try {
             result = await getProactiveInsights();
             if result.success {
-                setProactiveInsights(result.data.insights or []);
+                proactiveInsights = result.data.insights or [];
             }
-        } except Exception as e {
-        }
+        } except Exception as e { }
     }
 
     # ========== Insight Feedback ==========
@@ -294,12 +276,15 @@ def:pub useAnalytics() -> any {
         try {
             result = await markInsightViewed(insightId);
             # Update local insight state
-            setInsights(insights.map(lambda insight: any -> any {
-                if insight.id == insightId {
-                    insight.viewed = True;
-                }
-                return insight;
-            }));
+            insights = [
+                (
+                    lambda insight: any  -> any { 
+                        if insight.id == insightId {
+                            insight.viewed = True;
+                        }return insight; 
+                    }
+                )(insight) for insight in insights
+            ];
             return result;
         } except Exception as e {
             return {"success": False, "error": String(e)};
@@ -310,12 +295,15 @@ def:pub useAnalytics() -> any {
         try {
             result = await markInsightActedUpon(insightId);
             # Update local insight state
-            setInsights(insights.map(lambda insight: any -> any {
-                if insight.id == insightId {
-                    insight.acted_upon = True;
-                }
-                return insight;
-            }));
+            insights = [
+                (
+                    lambda insight: any  -> any { 
+                        if insight.id == insightId {
+                            insight.actedUpon = True;
+                        }return insight; 
+                    }
+                )(insight) for insight in insights
+            ];
             return result;
         } except Exception as e {
             return {"success": False, "error": String(e)};
@@ -326,9 +314,7 @@ def:pub useAnalytics() -> any {
         try {
             result = await dismissInsight(insightId, reason);
             # Remove from local insights
-            setInsights(insights.filter(lambda insight: any -> bool {
-                return insight.id != insightId;
-            }));
+            insights = [insight for insight in insights if insight.id != insightId];
             return result;
         } except Exception as e {
             return {"success": False, "error": String(e)};
@@ -337,80 +323,80 @@ def:pub useAnalytics() -> any {
 
     # ========== Existing Fetch Functions ==========
     async def fetchActivityReport(dateRange: dict = {}) -> None {
-        setIsLoading(True);
+        isLoading = True;
         try {
             result = await getActivityReport(dateRange);
             if result.success {
-                setActivityReport(result.data);
+                activityReport = result.data;
             } else {
-                setError(result.error or "Failed to fetch activity report");
+                error = result.error or "Failed to fetch activity report";
             }
         } except Exception as e {
-            setError(String(e));
+            error = String(e);
         }
-        setIsLoading(False);
+        isLoading = False;
     }
 
     async def fetchTrendAnalysis(period: str) -> None {
-        setIsLoading(True);
+        isLoading = True;
         try {
             result = await getTrendAnalysis(period);
             if result.success {
-                setTrendData(result.data);
-                setSelectedPeriod(period);
+                trendData = result.data;
+                selectedPeriod = period;
             } else {
-                setError(result.error or "Failed to fetch trend analysis");
+                error = result.error or "Failed to fetch trend analysis";
             }
         } except Exception as e {
-            setError(String(e));
+            error = String(e);
         }
-        setIsLoading(False);
+        isLoading = False;
     }
 
     async def fetchBehavioralPatterns() -> None {
-        setIsLoading(True);
+        isLoading = True;
         try {
             result = await getBehavioralPatterns();
             if result.success {
-                setBehavioralPatterns(result.data);
+                behavioralPatterns = result.data;
             } else {
-                setError(result.error or "Failed to fetch behavioral patterns");
+                error = result.error or "Failed to fetch behavioral patterns";
             }
         } except Exception as e {
-            setError(String(e));
+            error = String(e);
         }
-        setIsLoading(False);
+        isLoading = False;
     }
 
     async def fetchProductivityMetrics() -> None {
-        setIsLoading(True);
+        isLoading = True;
         try {
             result = await getProductivityMetrics();
             if result.success {
-                setProductivityMetrics(result.data);
+                productivityMetrics = result.data;
             } else {
-                setError(result.error or "Failed to fetch productivity metrics");
+                error = result.error or "Failed to fetch productivity metrics";
             }
         } except Exception as e {
-            setError(String(e));
+            error = String(e);
         }
-        setIsLoading(False);
+        isLoading = False;
     }
 
     async def fetchInsights(category: str) -> None {
-        setIsLoading(True);
+        isLoading = True;
         try {
             result = await getInsights(category);
             if result.success {
-                setInsights(result.data.insights or []);
-                setSelectedCategory(category);
+                insights = result.data.insights or [];
+                selectedCategory = category;
             } else {
-                setError(result.error or "Failed to fetch insights");
+                error = result.error or "Failed to fetch insights";
             }
         } except Exception as e {
-            setError(String(e));
+            error = String(e);
         }
-        setIsLoading(False);
+        isLoading = False;
     }
 
     # ========== Refresh ==========
@@ -419,20 +405,33 @@ def:pub useAnalytics() -> any {
     }
 
     # ========== Event Logging ==========
-    async def logEvent(eventType: str, eventData: dict = {}, sessionId: str = "", taskContext: str = "", emotionalContext: str = "", durationMs: int = 0) -> None {
+    async def logEvent(
+        eventType: str,
+        eventData: dict = {},
+        sessionId: str = "",
+        taskContext: str = "",
+        emotionalContext: str = "",
+        durationMs: int = 0
+    ) -> None {
         try {
-            await logActivityEvent(eventType, eventData, sessionId, taskContext, emotionalContext, durationMs);
-        } except Exception as e {
-        }
+            await logActivityEvent(
+                eventType,
+                eventData,
+                sessionId,
+                taskContext,
+                emotionalContext,
+                durationMs
+            );
+        } except Exception as e { }
     }
 
     # ========== Export ==========
     async def exportData(format: str) -> None {
-        setIsLoading(True);
+        isLoading = True;
         try {
             # Use the exportAnalyticsData from API
             result = await exportAnalyticsData(format);
-            setIsLoading(False);
+            isLoading = False;
 
             if result.success and result.data {
                 if format == "json" {
@@ -451,8 +450,8 @@ def:pub useAnalytics() -> any {
             }
             return {"success": False};
         } except Exception as e {
-            setError(String(e));
-            setIsLoading(False);
+            error = String(e);
+            isLoading = False;
             return {"success": False};
         }
     }
@@ -469,7 +468,6 @@ def:pub useAnalytics() -> any {
         "error": error,
         "selectedPeriod": selectedPeriod,
         "selectedCategory": selectedCategory,
-
         # NEW: Enhanced state
         "discoveredPatterns": discoveredPatterns,
         "temporalInsights": temporalInsights,
@@ -477,7 +475,6 @@ def:pub useAnalytics() -> any {
         "userGoals": userGoals,
         "userAchievements": userAchievements,
         "proactiveInsights": proactiveInsights,
-
         # Fetch Functions
         "fetchActivityReport": fetchActivityReport,
         "fetchTrendAnalysis": fetchTrendAnalysis,
@@ -486,7 +483,6 @@ def:pub useAnalytics() -> any {
         "fetchInsights": fetchInsights,
         "fetchAllAnalytics": fetchAllAnalytics,
         "refreshAnalytics": refreshAnalytics,
-
         # NEW: Enhanced fetch functions
         "fetchDiscoveredPatterns": fetchDiscoveredPatterns,
         "fetchTemporalInsights": fetchTemporalInsights,
@@ -494,13 +490,9 @@ def:pub useAnalytics() -> any {
         "fetchGoals": fetchGoals,
         "fetchAchievements": fetchAchievements,
         "fetchProactiveInsights": fetchProactiveInsights,
-
         # Action Functions
         "exportData": exportData,
         "logEvent": logEvent,
-        "setSelectedPeriod": setSelectedPeriod,
-        "setSelectedCategory": setSelectedCategory,
-
         # NEW: Enhanced action functions
         "createNewGoal": createNewGoal,
         "updateGoal": updateGoal,

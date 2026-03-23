@@ -1,9 +1,8 @@
 # useAudioControls Hook
 # Custom hook for managing audio, microphone, and push-to-talk controls
-
 import from react { useRef }
 
-def:pub useAudioControls(sessionRef: any, sessionStatus: str) -> any {
+def:pub useAudioControls(sessionRef: any, sessionStatus: str) -> dict {
     # Audio element ref
     audioElementRef = useRef(None);
 
@@ -91,10 +90,8 @@ def:pub useAudioControls(sessionRef: any, sessionStatus: str) -> any {
         "isAudioPlaybackEnabled": isAudioPlaybackEnabled,
         "setIsAudioPlaybackEnabled": updateAudioPlaybackEnabled,
         "isMicMuted": isMicMuted,
-
         # Refs
         "audioElementRef": audioElementRef,
-
         # Handlers
         "toggleMicMute": toggleMicMute,
         "handleTalkButtonDown": handleTalkButtonDown,
