@@ -1,6 +1,6 @@
 """Semantic objects and AI-powered functions for Algo's natural language understanding."""
 
-import from byllm.lib { Model }
+import from jaclang.byllm.lib { Model }
 
 glob llm = Model(model_name="gpt-4.1");
 
